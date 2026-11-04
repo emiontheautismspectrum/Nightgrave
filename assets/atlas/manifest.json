@@ -269,18 +269,18 @@
    },
    {
     "name": "iron_fence_segment",
-    "x": 6,
-    "y": 238
+    "x": 34,
+    "y": 226
    },
    {
     "name": "iron_fence_segment",
-    "x": 442,
-    "y": 238
+    "x": 412,
+    "y": 226
    },
    {
     "name": "dead_tree_a",
-    "x": 10,
-    "y": 58
+    "x": 26,
+    "y": 66
    },
    {
     "name": "dead_tree_b",

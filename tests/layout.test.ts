@@ -7,7 +7,8 @@ describe('sim arena matches the generated art', () => {
     expect([TUNING.arena.centerX, TUNING.arena.centerY]).toEqual(manifest.layout.ritualCenter);
   });
   it('play circle (plus hero size) stays on the platform, spawns happen outside it', () => {
-    expect(TUNING.arena.playRadius + 8).toBeLessThanOrEqual(manifest.layout.platformRadius);
+    // the hero sprite extends 12 px above its sim position (drawn at y-4, 16 px tall)
+    expect(TUNING.arena.playRadius + 12).toBeLessThanOrEqual(manifest.layout.platformRadius);
     expect(TUNING.arena.spawnRadius).toBeGreaterThan(manifest.layout.platformRadius);
   });
 });

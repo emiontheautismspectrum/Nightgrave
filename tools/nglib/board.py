@@ -86,21 +86,27 @@ def stress_board(bg, sp, title, count=80, seed=4242):
     rng = np.random.default_rng(seed)
     a = compose_ground(bg, sp, telegraph=False)
     cx, cy = RITUAL_CENTER
+    # one hero on the central dais, one at the bottom edge of the play circle (worst case for warning time)
+    heroes = [(cx, cy), (cx + 20, cy + 100)]
     kinds = ["orb_small"] * 30 + ["orb_large"] * 12 + ["rune_shard"] * 20 + ["blade"] * 9 + ["wraith"] * 9
     kinds = kinds[:count]
     for i, k in enumerate(kinds):
         while True:
             ang = rng.uniform(0, 2 * np.pi)
-            r = 108 * np.sqrt(rng.uniform(0, 1))
+            r = 104 * np.sqrt(rng.uniform(0, 1))
             x, y = cx + np.cos(ang) * r, cy + np.sin(ang) * r
-            if (x - cx) ** 2 + (y - cy) ** 2 > 18 ** 2:  # keep the hero itself visible
+            if all((x - hx) ** 2 + (y - hy) ** 2 > 10 ** 2 for hx, hy in heroes):
                 break
         f = sp[k][int(rng.integers(0, len(sp[k])))]
         C.paste(a, f, int(x - f.shape[1] / 2), int(y - f.shape[0] / 2))
-    C.paste(a, sp["hero_shadow"][0], cx - 6, cy + 5)
-    C.paste(a, sp["knight_idle"][0], cx - 8, cy - 7)
+    # blades right next to the edge hero: red-vs-hero contrast check
+    C.paste(a, sp["blade"][1], cx + 20 + 9, cy + 100 - 12)
+    C.paste(a, sp["blade"][3], cx + 20 - 26, cy + 100 - 6)
+    for hx, hy in heroes:  # same offsets as GameScene: sprite centre at y-4, shadow centre at y+5
+        C.paste(a, sp["hero_shadow"][0], hx - 6, hy + 5 - 3)
+        C.paste(a, sp["knight_idle"][0], hx - 8, hy - 4 - 8)
     C.paste(a, bg["vignette"], 0, 0)
     header = np.full((11, W), C.ci("bg0"), dtype=np.int16)
-    font.text(header, 4, 3, f"{title} - STRESS BOARD - HERO + {len(kinds)} PROJECTILES - 3X", "amber")
+    font.text(header, 4, 3, f"{title} - STRESS BOARD - 2 HEROES + {len(kinds) + 2} PROJECTILES - 3X", "amber")
     board = np.vstack([header, a])
     return np.repeat(np.repeat(board, SCALE, axis=0), SCALE, axis=1)

@@ -83,9 +83,8 @@ def ground_ritual():
     a[(np.abs(r - 81) < 0.6) & ~lit] = C.ci("fog")
     a[(np.abs(r - 103) < 0.6) & lit] = C.ci("fog")
     # central dais
-    a[r <= 20.5] = C.ci("stone_dark")
-    a[(r <= 20.5) & (r > 19.4) & lit] = C.ci("stone")
-    a[(np.abs(r - 8) < 0.55)] = C.ci("fog")
+    a[(r <= 20.5) & (r > 19.4)] = C.ci("stone_dark")  # dais edge seam; the dais itself stays light stone
+    a[(np.abs(r - 8) < 0.55)] = C.ci("stone_dark")
     # rim: raised edge, lit top-left, shaded bottom-right
     rim = (r > 113) & plat
     a[rim] = C.ci("stone_dark")
@@ -336,7 +335,7 @@ def _forest_layer(w, h, seed, col, band_col, count, tree_h):
 
     for i in range(count):
         x = pad + (i + rng.uniform(0.1, 0.9)) * w / count
-        th = rng.uniform(tree_h * 0.6, tree_h)
+        th = rng.uniform(tree_h * 0.45, tree_h * 0.7)  # headroom: crowns never touch row 0
         branch(x, h - 4, -math.pi / 2 + rng.uniform(-0.12, 0.12), th * 0.45, 3, 4)
     out = C.new(w, h)
     for x in range(w + 2 * pad):  # fold the padding back so the band tiles seamlessly
@@ -379,9 +378,11 @@ def fog_overlay():
 
 
 def vignette():
+    """Centred on the play circle and fully clear inside it: it only darkens the setting around it."""
     xx, yy = C.grid(W, H)
-    d = np.sqrt(((xx - W / 2) / (W / 2)) ** 2 + ((yy - H / 2) / (H / 2)) ** 2) / math.sqrt(2)
-    level = np.clip((d - 0.5) / 0.4, 0, 1)
+    cx, cy = RITUAL_CENTER
+    d = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
+    level = np.clip((d - (PLATFORM_RADIUS + 8)) / 200, 0, 0.7)
     a = C.new(W, H)
     a[C.BAYER4[(yy - 0.5).astype(int) % 4, (xx - 0.5).astype(int) % 4] < level * 16] = C.ci("bg0")
     return a
@@ -394,8 +395,8 @@ FOREST_LAYOUT = [("bg_forest_far", 0, 0, 0.02), ("bg_forest_mid", 0, 8, 0.05), (
 PROP_LAYOUT = [
     ("crypt_door", 220, 0),
     ("iron_fence_segment", 176, 13), ("iron_fence_segment", 264, 13),
-    ("iron_fence_segment", 6, 238), ("iron_fence_segment", 442, 238),
-    ("dead_tree_a", 10, 58), ("dead_tree_b", 446, 66), ("dead_tree_b", 66, 196), ("dead_tree_a", 392, 190),
+    ("iron_fence_segment", 34, 226), ("iron_fence_segment", 412, 226),
+    ("dead_tree_a", 26, 66), ("dead_tree_b", 446, 66), ("dead_tree_b", 66, 196), ("dead_tree_a", 392, 190),
     ("gravestone_a", 78, 98), ("gravestone_b", 92, 140), ("gravestone_c", 50, 168),
     ("gravestone_a", 384, 126), ("gravestone_c", 404, 96), ("gravestone_b", 372, 166),
 ]

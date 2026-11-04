@@ -220,7 +220,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       if (pr.parryable && dx * dx + dy * dy <= r * r) {
         const points = p.parryBase * s.multiplier; // hundredths of a point
         s.parryScoreHundredths += points;
-        s.events.push({ type: 'parry_hit', x: pr.x, y: pr.y, points: points / 100, multiplier: s.multiplier / 100 });
+        s.events.push({ type: 'parry_hit', id: pr.id, x: pr.x, y: pr.y, points: points / 100, multiplier: s.multiplier / 100 });
         s.multiplier = Math.min(p.multCap, s.multiplier + p.multStep);
         s.lastParryTick = t;
         s.parryCount++;

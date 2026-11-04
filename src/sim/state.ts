@@ -40,7 +40,7 @@ export interface Hero {
 
 export type SimEvent =
   | { type: 'parry_start' }
-  | { type: 'parry_hit'; x: number; y: number; points: number; multiplier: number }
+  | { type: 'parry_hit'; id: number; x: number; y: number; points: number; multiplier: number }
   | { type: 'dash_start'; dirX: number; dirY: number }
   | { type: 'spawn'; id: number }
   | { type: 'death'; x: number; y: number; by: number };

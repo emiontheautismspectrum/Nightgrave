@@ -12,7 +12,7 @@ export const TUNING = {
    * a test enforces this. playRadius = how far the hero's centre may go; projectiles enter at spawnRadius
    * (outside the platform rim) and are removed beyond despawnRadius.
    */
-  arena: { width: 480, height: 270, centerX: 240, centerY: 150, playRadius: 108, spawnRadius: 128, despawnRadius: 150 },
+  arena: { width: 480, height: 270, centerX: 240, centerY: 150, playRadius: 104, spawnRadius: 120, despawnRadius: 150 },
   hero: { speed: 150, radius: 3 },
   /**
    * cooldownSeconds applies after a parry that destroyed something; a whiff (hit nothing) costs

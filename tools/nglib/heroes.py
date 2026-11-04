@@ -82,7 +82,7 @@ def _shield(a, flash):
     C.disc(a, cx, cy, 2.6, "bone")
     for x, y in ((14, 9), (14, 10), (13, 11), (12, 11)):
         C.put(a, x, y, "stone")  # shaded lower-right rim
-    C.put(a, 12, 9, "gold" if flash else "stone_dark")  # boss
+    C.put(a, 12, 9, "bone" if flash else "stone_dark")  # boss
 
 
 def knight_parry():
@@ -92,9 +92,9 @@ def knight_parry():
         _shield(a, flash=(i == 1))
         a = _finish(a)
         if i == 1:
-            C.ring(a, 12.5, 9.5, 4.0, 5.2, "gold", mask=C.bayer_mask(16, 16, 0.5) & (a == C.T))
+            C.ring(a, 12.5, 9.5, 4.0, 5.2, "bone", mask=C.bayer_mask(16, 16, 0.5) & (a == C.T))
         if i == 2:
-            C.ring(a, 12.5, 9.5, 4.5, 5.5, "amber", mask=C.bayer_mask(16, 16, 0.25) & (a == C.T))
+            C.ring(a, 12.5, 9.5, 4.5, 5.5, "bone", mask=C.bayer_mask(16, 16, 0.25) & (a == C.T))
         frames.append(a)
     return frames
 

@@ -14,6 +14,7 @@ import { InputCollector } from './input';
 const STEP_MS = 1000 / TICK_RATE;
 const MAX_STEPS_PER_FRAME = 5;
 const RESTART_LOCKOUT_MS = 300;
+const FADE_MS = 120;
 const FONT = '"Press Start 2P", monospace';
 
 export type HeroKind = 'knight' | 'wisp';
@@ -43,6 +44,8 @@ export class GameScene extends Phaser.Scene {
   private parallax: { sprite: Phaser.GameObjects.TileSprite; k: number }[] = [];
   private actors!: Phaser.GameObjects.Layer;
   private orbs = new Map<number, Phaser.GameObjects.Sprite>();
+  /** Ids destroyed by a parry this frame: removed instantly (the spark replaces them), others fade out. */
+  private parried = new Set<number>();
   private hudScore!: Phaser.GameObjects.Text;
   private hudMult!: Phaser.GameObjects.Text;
   private hudDash!: Phaser.GameObjects.Text;
@@ -64,12 +67,13 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     createAnimations(this);
     this.buildArena();
+    // vignette is clear inside the play circle and sits below the actors, so it never dims threats
+    this.add.image(0, 0, bgKey('vignette')).setOrigin(0);
     this.actors = this.add.layer();
     this.shadow = this.add.image(0, 0, ATLAS, frame('hero_shadow'));
     this.hero = this.add.sprite(0, 0, ATLAS, frame(`${this.cfg.hero}_idle`));
     this.pulse = this.add.sprite(0, 0, ATLAS, frame('parry_pulse')).setVisible(false);
     this.actors.add([this.shadow, this.hero, this.pulse]);
-    this.add.image(0, 0, bgKey('vignette')).setOrigin(0);
     this.reticle = this.add.image(0, 0, ATLAS, frame('cursor_reticle'));
     this.buildHud();
     this.input2 = new InputCollector(this);
@@ -146,6 +150,7 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'parry_hit':
+        this.parried.add(e.id);
         this.burst('parry_spark', e.x, e.y);
         break;
       case 'dash_start': {
@@ -214,7 +219,8 @@ export class GameScene extends Phaser.Scene {
       seen.add(pr.id);
       let s = this.orbs.get(pr.id);
       if (!s) {
-        s = this.add.sprite(0, 0, ATLAS, frame(pr.kind)).play(pr.kind);
+        s = this.add.sprite(0, 0, ATLAS, frame(pr.kind)).play(pr.kind).setAlpha(0);
+        this.tweens.add({ targets: s, alpha: 1, duration: FADE_MS }); // render-only fade-in at the rim
         this.actors.add(s);
         this.orbs.set(pr.id, s);
       }
@@ -222,10 +228,12 @@ export class GameScene extends Phaser.Scene {
     }
     for (const [id, s] of this.orbs) {
       if (!seen.has(id)) {
-        s.destroy();
         this.orbs.delete(id);
+        if (this.parried.has(id) || !st.alive) s.destroy();
+        else this.tweens.add({ targets: s, alpha: 0, duration: FADE_MS, onComplete: () => s.destroy() });
       }
     }
+    this.parried.clear();
 
     const ptr = this.input.activePointer;
     this.reticle.setVisible(this.input2.mode === 'cursor' && st.alive).setPosition(Math.round(ptr.worldX), Math.round(ptr.worldY));
