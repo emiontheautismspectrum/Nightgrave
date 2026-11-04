@@ -13,13 +13,18 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import gen_arena  # noqa: E402
 from nglib import spec  # noqa: E402
-from nglib.palette import RGB  # noqa: E402
+from nglib.palette import NAMES, RESERVED, RGB  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
 PAL = np.array(RGB, dtype=np.int32)
 errors = []
+# Previews that intentionally show a render-side alpha blend (not game art): exempt from the palette check.
+PALETTE_EXEMPT = {"translucency_demo.png"}
+# Reserved gameplay colors allowed per sprite group (decor: none; telegraphs/casters: violet only; never red).
+ALLOWED_RESERVED = {"arena": set(), "telegraph": {"violet", "violet_dark"}, "caster": {"violet", "violet_dark"}}
 
 
 def err(msg):
@@ -50,35 +55,63 @@ def check_pixels(path, px):
         err(f"{os.path.relpath(path, ROOT)}: {int(off.sum())} off-palette px, first #{key[y, x]:06x} at ({x},{y})")
 
 
-def check_board(images, bp):
-    """A preview board must exist and be an exact 3x nearest-neighbour upscale."""
+def check_board(images, bp, scale=3):
+    """A preview board must exist and be an exact nearest-neighbour upscale."""
     name = os.path.relpath(bp, ASSETS)
     if bp not in images:
         err(f"missing {name}")
         return
     b = images[bp]
-    if b.shape[0] % 3 or b.shape[1] % 3:
-        err(f"{name} size is not a multiple of 3")
+    if b.shape[0] % scale or b.shape[1] % scale:
+        err(f"{name} size is not a multiple of {scale}")
         return
-    base = b[::3, ::3]
-    if not np.array_equal(np.repeat(np.repeat(base, 3, 0), 3, 1), b):
-        err(f"{name} is not a clean 3x nearest-neighbour upscale")
+    base = b[::scale, ::scale]
+    if not np.array_equal(np.repeat(np.repeat(base, scale, 0), scale, 1), b):
+        err(f"{name} is not a clean {scale}x nearest-neighbour upscale")
 
 
 def main():
+    if len(NAMES) != 19:
+        err(f"palette has {len(NAMES)} colors, expected 19")
     pngs = sorted(glob.glob(os.path.join(ASSETS, "**", "*.png"), recursive=True))
     if not pngs:
         err("no PNGs under assets/ - run tools/gen_assets.py first")
     images = {}
     for p in pngs:
         images[p] = load(p)
-        check_pixels(p, images[p])
+        if os.path.basename(p) not in PALETTE_EXEMPT:
+            check_pixels(p, images[p])
+
+    # expected sprite table: gameplay sprites (spec.py) + arena sprites (layout-dependent, from the generator)
+    art = gen_arena.build()
+    expected = dict(spec.SPRITES)
+    for n, frames in art["sprites"].items():
+        expected[n] = (frames[0].shape[1], frames[0].shape[0], len(frames))
+    groups = art["groups"]
+
+    def reserved_used(px):
+        rgb = px[..., :3][px[..., 3] == 255]
+        used = {tuple(c) for c in np.unique(rgb.reshape(-1, 3), axis=0)} if len(rgb) else set()
+        return {NAMES[RGB.index(c)] for c in used if c in RGB} & RESERVED
+
+    for n, g in sorted(groups.items()):
+        p = os.path.join(ASSETS, "sprites", f"{n}.png")
+        if p in images and g in ALLOWED_RESERVED:
+            bad = reserved_used(images[p]) - ALLOWED_RESERVED[g]
+            if bad:
+                err(f"sprites/{n}.png ({g}) uses reserved gameplay colors {sorted(bad)}")
+    for n in spec.BACKGROUNDS:  # every arena background is decor
+        p = os.path.join(ASSETS, "backgrounds", f"{n}.png")
+        if p in images:
+            bad = reserved_used(images[p])
+            if bad:
+                err(f"backgrounds/{n}.png uses reserved gameplay colors {sorted(bad)}")
 
     # sprite sheet size rules
     found = {os.path.splitext(os.path.basename(p))[0] for p in glob.glob(os.path.join(ASSETS, "sprites", "*.png"))}
-    for name in sorted(found - set(spec.SPRITES)):
-        err(f"sprites/{name}.png is not listed in tools/nglib/spec.py")
-    for name, (fw, fh, n) in spec.SPRITES.items():
+    for name in sorted(found - set(expected)):
+        err(f"sprites/{name}.png is not produced by the generators")
+    for name, (fw, fh, n) in expected.items():
         p = os.path.join(ASSETS, "sprites", f"{name}.png")
         if p not in images:
             err(f"missing sprite sheet sprites/{name}.png")
@@ -101,7 +134,7 @@ def main():
     if ap in images and os.path.exists(jp):
         atlas = images[ap]
         frames = json.load(open(jp, encoding="utf-8"))["frames"]
-        for name, (fw, fh, n) in spec.SPRITES.items():
+        for name, (fw, fh, n) in expected.items():
             sheet = images.get(os.path.join(ASSETS, "sprites", f"{name}.png"))
             for i in range(n):
                 fr = frames.get(f"{name}_{i}")
@@ -118,15 +151,23 @@ def main():
         err("missing atlas/nightgrave.png or atlas/nightgrave.json")
 
     # style board: exact 3x nearest-neighbour upscale
-    for board in ("style_board", "stress_board"):
-        check_board(images, os.path.join(ASSETS, "preview", f"{board}.png"))
+    for board, scale in (("style_board", 3), ("stress_board", 3), ("arena_board", 3), ("variation_board", 3),
+                         ("animation_strips", 4), ("translucency_demo", 3)):
+        check_board(images, os.path.join(ASSETS, "preview", f"{board}.png"), scale)
+    pj = os.path.join(ASSETS, "data", "arena_props.json")
+    if not os.path.exists(pj):
+        err("missing data/arena_props.json")
+    else:
+        for p in json.load(open(pj, encoding="utf-8"))["props"]:
+            if p["sprite"] not in expected or p["frame"] >= expected[p["sprite"]][2]:
+                err(f"arena_props.json references missing sprite/frame {p['sprite']}:{p['frame']}")
 
     if errors:
         print(f"PALETTE/SIZE VALIDATION FAILED ({len(errors)} problems):")
         for e in errors:
             print("  -", e)
         return 1
-    print(f"OK: {len(pngs)} PNGs, all pixels on the 16-color palette, sizes match spec")
+    print(f"OK: {len(pngs)} PNGs on the {len(NAMES)}-color palette, sizes match, no reserved colors in decor")
     return 0
 
 

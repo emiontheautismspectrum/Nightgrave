@@ -48,7 +48,7 @@ Pickups
 
 Arena (480x270; layout + seeds in `tools/arena_layout.py`, composed by `tools/gen_arena.py`)
 - Backgrounds: forest_far, forest_mid (tileable, parallax), forest_near (overhang ring), arena_ground (ground, curb,
-  decals, ritual inlay, baked prop shadows), ground_ritual, fog_overlay 256x256, vignette. Placed props: `assets/data/arena_props.json`.
+  decals, the ritual rune inlay, baked prop shadows), fog_overlay 256x256, vignette. Placed props: `assets/data/arena_props.json`.
 - rune_glow_0..7 11x11 4f: frame 0 dim carved stone (rest, never violet); frames 1-3 violet telegraph.
 - Decor variants (2 frames = 2 shade swaps; flips per instance): gravestones 5 intact + 3 broken + 3 crosses + 2 slabs;
   trees 4 + 2 large; bone piles 4, skulls 2, grass 4, brambles 3, stones 4, roots 3, leaves 3, mushrooms 2;

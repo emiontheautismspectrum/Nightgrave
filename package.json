@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "assets": "python3 tools/gen_assets.py && python3 tools/validate_palette.py",
+    "assets": "python3 tools/gen_assets.py && python3 tools/validate_palette.py && python3 tools/check_readability.py",
     "bot": "vite-node scripts/botsim.ts"
   },
   "dependencies": {

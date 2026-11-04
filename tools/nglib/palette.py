@@ -17,7 +17,14 @@ PALETTE = [
     ("violet", "#9b6bff"),
     ("violet_dark", "#3d2a78"),
     ("teal", "#4fd1c5"),
+    # decor-only colors (never used for gameplay meaning)
+    ("moon", "#7f93b8"),
+    ("earth", "#2b221d"),
+    ("dry", "#5e4b34"),
 ]
+
+# Gameplay colors that arena decor must never use (see ASSETS_SPEC.md).
+RESERVED = {"amber", "ember", "gold", "blood", "blood_dark", "violet", "violet_dark", "teal"}
 
 NAMES = [n for n, _ in PALETTE]
 IDX = {n: i for i, n in enumerate(NAMES)}
@@ -36,6 +43,6 @@ _DARKER = {
     "bg0": "bg0", "bg1": "bg0", "fog": "bg1", "stone_dark": "bg1", "stone": "stone_dark",
     "moss": "forest", "forest": "bg0", "bone": "stone", "amber": "ember", "ember": "blood_dark",
     "gold": "amber", "blood": "blood_dark", "blood_dark": "bg0", "violet": "violet_dark",
-    "violet_dark": "bg0", "teal": "stone_dark",
+    "violet_dark": "bg0", "teal": "stone_dark", "moon": "stone", "earth": "bg0", "dry": "earth",
 }
 DARKER = [IDX[_DARKER[n]] for n in NAMES]

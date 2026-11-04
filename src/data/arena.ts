@@ -3,12 +3,12 @@
  * (assets/atlas/manifest.json -> layout.runes); tests/layout.test.ts keeps them in sync.
  */
 export const RUNES: readonly { readonly x: number; readonly y: number }[] = [
-  { x: 326, y: 186 },
-  { x: 276, y: 236 },
-  { x: 204, y: 236 },
-  { x: 154, y: 186 },
-  { x: 154, y: 114 },
-  { x: 204, y: 64 },
-  { x: 276, y: 64 },
-  { x: 326, y: 114 },
+  { x: 299, y: 159 },
+  { x: 264, y: 194 },
+  { x: 216, y: 194 },
+  { x: 181, y: 159 },
+  { x: 181, y: 111 },
+  { x: 216, y: 76 },
+  { x: 264, y: 76 },
+  { x: 299, y: 111 },
 ];

@@ -161,6 +161,23 @@ def recolor(a, mapping):
     return out
 
 
+def moonlit(a, body_outline="bg0", rim="moon"):
+    """Outline a decor silhouette: 1 px cold `moon` rim on its top-left edges, dark outline elsewhere."""
+    out = a.copy()
+    empty = a == T
+    left, up, right, down = neighbors4(a)
+    # an empty pixel whose body neighbour is to the right / below sits on the top-left edge -> rim light
+    lit = empty & ((right != T) | (down != T))
+    dark = empty & ((left != T) | (up != T)) & ~lit
+    out[dark] = ci(body_outline)
+    out[lit] = ci(rim)
+    return out
+
+
+def flip(a):
+    return a[:, ::-1].copy()
+
+
 def to_image(a):
     return Image.fromarray(_RGBA[a + 1], "RGBA")
 

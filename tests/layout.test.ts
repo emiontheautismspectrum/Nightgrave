@@ -3,12 +3,15 @@ import manifest from '../assets/atlas/manifest.json';
 import { TUNING } from '../src/data/tuning';
 
 describe('sim arena matches the generated art', () => {
-  it('play circle centre equals the ritual platform centre', () => {
-    expect([TUNING.arena.centerX, TUNING.arena.centerY]).toEqual(manifest.layout.ritualCenter);
+  it('play centre equals the hero spawn of the arena layout', () => {
+    expect([TUNING.arena.centerX, TUNING.arena.centerY]).toEqual(manifest.layout.heroSpawn);
   });
-  it('play circle (plus hero size) stays on the platform, spawns happen outside it', () => {
-    // the hero sprite extends 12 px above its sim position (drawn at y-4, 16 px tall)
-    expect(TUNING.arena.playRadius + 12).toBeLessThanOrEqual(manifest.layout.platformRadius);
-    expect(TUNING.arena.spawnRadius).toBeGreaterThan(manifest.layout.platformRadius);
+  it('the (interim) play circle stays inside the arena rectangle', () => {
+    const [x0, y0, x1, y1] = manifest.layout.arena as [number, number, number, number];
+    const { centerX: cx, centerY: cy, playRadius: r } = TUNING.arena;
+    expect(cx - r).toBeGreaterThanOrEqual(x0);
+    expect(cx + r).toBeLessThanOrEqual(x1);
+    expect(cy - r).toBeGreaterThanOrEqual(y0);
+    expect(cy + r).toBeLessThanOrEqual(y1);
   });
 });

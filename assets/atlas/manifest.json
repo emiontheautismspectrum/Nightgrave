@@ -1,386 +1,1228 @@
 {
- "sprites": {
-  "knight_idle": {
-   "w": 16,
-   "h": 16,
-   "frames": 4
-  },
-  "knight_run": {
-   "w": 16,
-   "h": 16,
-   "frames": 6
-  },
-  "knight_parry": {
-   "w": 16,
-   "h": 16,
-   "frames": 3
-  },
-  "knight_dash": {
-   "w": 16,
-   "h": 16,
-   "frames": 2
-  },
-  "knight_death": {
-   "w": 16,
-   "h": 16,
-   "frames": 6
-  },
-  "wisp_idle": {
-   "w": 16,
-   "h": 16,
-   "frames": 4
-  },
-  "wisp_pulse": {
-   "w": 16,
-   "h": 16,
-   "frames": 3
-  },
-  "wisp_dash": {
-   "w": 16,
-   "h": 16,
-   "frames": 2
-  },
-  "wisp_death": {
-   "w": 16,
-   "h": 16,
-   "frames": 6
-  },
-  "hero_shadow": {
-   "w": 12,
-   "h": 6,
-   "frames": 1
-  },
-  "orb_small": {
-   "w": 6,
-   "h": 6,
-   "frames": 2
-  },
-  "orb_large": {
-   "w": 10,
-   "h": 10,
-   "frames": 2
-  },
-  "rune_shard": {
-   "w": 8,
-   "h": 8,
-   "frames": 2
-  },
-  "blade": {
-   "w": 16,
-   "h": 16,
-   "frames": 4
-  },
-  "wraith": {
-   "w": 16,
-   "h": 16,
-   "frames": 4
-  },
-  "wraith_fade": {
-   "w": 16,
-   "h": 16,
-   "frames": 4
-  },
-  "parry_pulse": {
-   "w": 24,
-   "h": 24,
-   "frames": 4
-  },
-  "parry_spark": {
-   "w": 4,
-   "h": 4,
-   "frames": 8
-  },
-  "dash_trail": {
-   "w": 16,
-   "h": 16,
-   "frames": 3
-  },
-  "hit_flash": {
-   "w": 16,
-   "h": 16,
-   "frames": 2
-  },
-  "death_burst": {
-   "w": 32,
-   "h": 32,
-   "frames": 6
-  },
-  "ember_particle": {
-   "w": 2,
-   "h": 2,
-   "frames": 4
-  },
-  "cursor_reticle": {
-   "w": 9,
-   "h": 9,
-   "frames": 1
-  },
-  "icon_parry": {
-   "w": 16,
-   "h": 16,
-   "frames": 2
-  },
-  "icon_dash": {
-   "w": 16,
-   "h": 16,
-   "frames": 2
-  },
-  "icon_ring": {
-   "w": 20,
-   "h": 20,
-   "frames": 13
-  },
-  "parry_fizzle": {
-   "w": 12,
-   "h": 12,
-   "frames": 4
-  },
-  "gravestone_a": {
-   "w": 16,
-   "h": 22,
-   "frames": 1
-  },
-  "gravestone_b": {
-   "w": 18,
-   "h": 26,
-   "frames": 1
-  },
-  "gravestone_c": {
-   "w": 14,
-   "h": 18,
-   "frames": 1
-  },
-  "iron_fence_segment": {
-   "w": 32,
-   "h": 16,
-   "frames": 1
-  },
-  "crypt_door": {
-   "w": 40,
-   "h": 30,
-   "frames": 1
-  },
-  "dead_tree_a": {
-   "w": 32,
-   "h": 40,
-   "frames": 1
-  },
-  "dead_tree_b": {
-   "w": 24,
-   "h": 36,
-   "frames": 1
-  },
-  "rune_glow_0": {
-   "w": 11,
-   "h": 11,
-   "frames": 4
-  },
-  "rune_glow_1": {
-   "w": 11,
-   "h": 11,
-   "frames": 4
-  },
-  "rune_glow_2": {
-   "w": 11,
-   "h": 11,
-   "frames": 4
-  },
-  "rune_glow_3": {
-   "w": 11,
-   "h": 11,
-   "frames": 4
-  },
-  "rune_glow_4": {
-   "w": 11,
-   "h": 11,
-   "frames": 4
-  },
-  "rune_glow_5": {
-   "w": 11,
-   "h": 11,
-   "frames": 4
-  },
-  "rune_glow_6": {
-   "w": 11,
-   "h": 11,
-   "frames": 4
-  },
-  "rune_glow_7": {
-   "w": 11,
-   "h": 11,
-   "frames": 4
-  }
- },
  "backgrounds": {
-  "floor": {
-   "w": 480,
-   "h": 270
-  },
-  "ground_ritual": {
-   "w": 240,
-   "h": 240
-  },
-  "bg_forest_far": {
-   "w": 480,
-   "h": 64
-  },
-  "bg_forest_mid": {
-   "w": 480,
-   "h": 56
-  },
-  "bg_forest_near": {
-   "w": 480,
-   "h": 44
+  "arena_ground": {
+   "h": 270,
+   "w": 480
   },
   "fog_overlay": {
-   "w": 256,
-   "h": 256
+   "h": 256,
+   "w": 256
+  },
+  "forest_far": {
+   "h": 270,
+   "w": 480
+  },
+  "forest_mid": {
+   "h": 270,
+   "w": 480
+  },
+  "forest_near": {
+   "h": 270,
+   "w": 480
   },
   "vignette": {
-   "w": 480,
-   "h": 270
+   "h": 270,
+   "w": 480
   }
  },
  "layout": {
-  "ritualOrigin": [
-   120,
-   30
+  "arena": [
+   48,
+   27,
+   432,
+   243
   ],
-  "ritualCenter": [
-   240,
-   150
+  "bossBar": [
+   48,
+   250,
+   432,
+   262
   ],
-  "platformRadius": 116,
+  "calmZone": [
+   140,
+   75,
+   340,
+   195
+  ],
+  "fence": [
+   [
+    86,
+    94
+   ],
+   [
+    86,
+    81
+   ],
+   [
+    82,
+    65
+   ],
+   [
+    82,
+    54
+   ],
+   [
+    93,
+    53
+   ],
+   [
+    106,
+    57
+   ],
+   [
+    110,
+    51
+   ],
+   [
+    132,
+    50
+   ],
+   [
+    142,
+    50
+   ],
+   [
+    158,
+    51
+   ],
+   [
+    158,
+    62
+   ],
+   [
+    163,
+    78
+   ],
+   [
+    158,
+    92
+   ],
+   [
+    158,
+    100
+   ],
+   [
+    154,
+    113
+   ],
+   [
+    158,
+    132
+   ],
+   [
+    149,
+    127
+   ],
+   [
+    144,
+    138
+   ],
+   [
+    134,
+    132
+   ],
+   [
+    125,
+    127
+   ],
+   [
+    120,
+    140
+   ],
+   [
+    101,
+    140
+   ],
+   [
+    96,
+    132
+   ],
+   [
+    106,
+    116
+   ],
+   [
+    101,
+    122
+   ],
+   [
+    84,
+    119
+   ],
+   [
+    86,
+    108
+   ]
+  ],
   "forest": [
    {
-    "name": "bg_forest_far",
-    "x": 0,
-    "y": 0,
+    "name": "forest_far",
     "parallax": 0.02
    },
    {
-    "name": "bg_forest_mid",
-    "x": 0,
-    "y": 8,
+    "name": "forest_mid",
     "parallax": 0.05
    },
    {
-    "name": "bg_forest_near",
-    "x": 0,
-    "y": 18,
-    "parallax": 0.1
+    "name": "forest_near",
+    "parallax": 0.0
    }
   ],
-  "props": [
+  "gate": [
+   110,
+   140
+  ],
+  "heroSpawn": [
+   240,
+   135
+  ],
+  "hollows": [
    {
-    "name": "crypt_door",
-    "x": 220,
-    "y": 0
+    "side": "top",
+    "x": 262,
+    "y": 27
    },
    {
-    "name": "iron_fence_segment",
-    "x": 176,
-    "y": 13
+    "side": "top",
+    "x": 344,
+    "y": 27
    },
    {
-    "name": "iron_fence_segment",
-    "x": 264,
-    "y": 13
+    "side": "bottom",
+    "x": 148,
+    "y": 243
    },
    {
-    "name": "iron_fence_segment",
-    "x": 34,
-    "y": 226
+    "side": "bottom",
+    "x": 268,
+    "y": 243
    },
    {
-    "name": "iron_fence_segment",
-    "x": 412,
-    "y": 226
+    "side": "left",
+    "x": 48,
+    "y": 46
    },
    {
-    "name": "dead_tree_a",
-    "x": 26,
-    "y": 66
+    "side": "left",
+    "x": 48,
+    "y": 118
    },
    {
-    "name": "dead_tree_b",
-    "x": 446,
-    "y": 66
+    "side": "right",
+    "x": 432,
+    "y": 132
    },
    {
-    "name": "dead_tree_b",
-    "x": 66,
-    "y": 196
-   },
-   {
-    "name": "dead_tree_a",
-    "x": 392,
-    "y": 190
-   },
-   {
-    "name": "gravestone_a",
-    "x": 78,
-    "y": 98
-   },
-   {
-    "name": "gravestone_b",
-    "x": 92,
-    "y": 140
-   },
-   {
-    "name": "gravestone_c",
-    "x": 50,
-    "y": 168
-   },
-   {
-    "name": "gravestone_a",
-    "x": 384,
-    "y": 126
-   },
-   {
-    "name": "gravestone_c",
-    "x": 404,
-    "y": 96
-   },
-   {
-    "name": "gravestone_b",
-    "x": 372,
-    "y": 166
+    "side": "right",
+    "x": 432,
+    "y": 214
    }
   ],
+  "portal": [
+   120,
+   78
+  ],
+  "portalClearRadius": 28,
+  "ritualCenter": [
+   240,
+   135
+  ],
+  "ritualRadius": 76,
   "runes": [
    {
-    "x": 326,
-    "y": 186
+    "x": 299,
+    "y": 159
    },
    {
-    "x": 276,
-    "y": 236
+    "x": 264,
+    "y": 194
    },
    {
-    "x": 204,
-    "y": 236
+    "x": 216,
+    "y": 194
    },
    {
-    "x": 154,
-    "y": 186
+    "x": 181,
+    "y": 159
    },
    {
-    "x": 154,
-    "y": 114
+    "x": 181,
+    "y": 111
    },
    {
-    "x": 204,
-    "y": 64
+    "x": 216,
+    "y": 76
    },
    {
-    "x": 276,
-    "y": 64
+    "x": 264,
+    "y": 76
    },
    {
-    "x": 326,
-    "y": 114
+    "x": 299,
+    "y": 111
    }
   ]
+ },
+ "sprites": {
+  "altar_chain": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 5
+  },
+  "altar_flame": {
+   "frames": 4,
+   "group": "arena",
+   "h": 8,
+   "w": 6
+  },
+  "altar_flame_tele": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 8,
+   "w": 6
+  },
+  "beast_ribcage": {
+   "frames": 1,
+   "group": "arena",
+   "h": 40,
+   "w": 56
+  },
+  "blade": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "bone_pile_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 10
+  },
+  "bone_pile_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 10
+  },
+  "bone_pile_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 10
+  },
+  "bone_pile_3": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 10
+  },
+  "boss_bar": {
+   "frames": 1,
+   "group": "ui",
+   "h": 10,
+   "w": 384
+  },
+  "bramble_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 8,
+   "w": 14
+  },
+  "bramble_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 8,
+   "w": 14
+  },
+  "bramble_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 8,
+   "w": 14
+  },
+  "cabin_smoke": {
+   "frames": 6,
+   "group": "arena",
+   "h": 20,
+   "w": 12
+  },
+  "cabin_window": {
+   "frames": 3,
+   "group": "arena",
+   "h": 5,
+   "w": 7
+  },
+  "candle_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 3
+  },
+  "candle_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 4,
+   "w": 4
+  },
+  "crate_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 10,
+   "w": 10
+  },
+  "crate_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 10,
+   "w": 10
+  },
+  "crow": {
+   "frames": 4,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "cursed_well": {
+   "frames": 1,
+   "group": "arena",
+   "h": 24,
+   "w": 24
+  },
+  "cursor_reticle": {
+   "frames": 1,
+   "group": "gameplay",
+   "h": 9,
+   "w": 9
+  },
+  "dash_trail": {
+   "frames": 3,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "death_burst": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 32,
+   "w": 32
+  },
+  "ember_particle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 2,
+   "w": 2
+  },
+  "fence_broken_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 16,
+   "w": 24
+  },
+  "fence_broken_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 16,
+   "w": 24
+  },
+  "fence_corner_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 16
+  },
+  "fence_corner_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 16
+  },
+  "fence_gate_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 20,
+   "w": 20
+  },
+  "fence_leaning_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 16,
+   "w": 24
+  },
+  "fence_post_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 15,
+   "w": 6
+  },
+  "fence_post_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 15,
+   "w": 6
+  },
+  "fence_run_00": {
+   "frames": 1,
+   "group": "arena",
+   "h": 30,
+   "w": 5
+  },
+  "fence_run_01": {
+   "frames": 1,
+   "group": "arena",
+   "h": 33,
+   "w": 9
+  },
+  "fence_run_02": {
+   "frames": 1,
+   "group": "arena",
+   "h": 28,
+   "w": 5
+  },
+  "fence_run_03": {
+   "frames": 1,
+   "group": "arena",
+   "h": 18,
+   "w": 16
+  },
+  "fence_run_04": {
+   "frames": 1,
+   "group": "arena",
+   "h": 21,
+   "w": 18
+  },
+  "fence_run_05": {
+   "frames": 1,
+   "group": "arena",
+   "h": 23,
+   "w": 9
+  },
+  "fence_run_06": {
+   "frames": 1,
+   "group": "arena",
+   "h": 18,
+   "w": 27
+  },
+  "fence_run_07": {
+   "frames": 1,
+   "group": "arena",
+   "h": 17,
+   "w": 15
+  },
+  "fence_run_08": {
+   "frames": 1,
+   "group": "arena",
+   "h": 18,
+   "w": 21
+  },
+  "fence_run_09": {
+   "frames": 1,
+   "group": "arena",
+   "h": 28,
+   "w": 5
+  },
+  "fence_run_10": {
+   "frames": 1,
+   "group": "arena",
+   "h": 33,
+   "w": 10
+  },
+  "fence_run_11": {
+   "frames": 1,
+   "group": "arena",
+   "h": 31,
+   "w": 10
+  },
+  "fence_run_12": {
+   "frames": 1,
+   "group": "arena",
+   "h": 25,
+   "w": 5
+  },
+  "fence_run_13": {
+   "frames": 1,
+   "group": "arena",
+   "h": 30,
+   "w": 9
+  },
+  "fence_run_14": {
+   "frames": 1,
+   "group": "arena",
+   "h": 36,
+   "w": 9
+  },
+  "fence_run_15": {
+   "frames": 1,
+   "group": "arena",
+   "h": 22,
+   "w": 14
+  },
+  "fence_run_16": {
+   "frames": 1,
+   "group": "arena",
+   "h": 28,
+   "w": 10
+  },
+  "fence_run_17": {
+   "frames": 1,
+   "group": "arena",
+   "h": 23,
+   "w": 15
+  },
+  "fence_run_18": {
+   "frames": 1,
+   "group": "arena",
+   "h": 22,
+   "w": 14
+  },
+  "fence_run_19": {
+   "frames": 1,
+   "group": "arena",
+   "h": 30,
+   "w": 10
+  },
+  "fence_run_20": {
+   "frames": 1,
+   "group": "arena",
+   "h": 25,
+   "w": 10
+  },
+  "fence_run_21": {
+   "frames": 1,
+   "group": "arena",
+   "h": 33,
+   "w": 15
+  },
+  "fence_run_22": {
+   "frames": 1,
+   "group": "arena",
+   "h": 23,
+   "w": 10
+  },
+  "fence_run_23": {
+   "frames": 1,
+   "group": "arena",
+   "h": 20,
+   "w": 22
+  },
+  "fence_run_24": {
+   "frames": 1,
+   "group": "arena",
+   "h": 28,
+   "w": 7
+  },
+  "fence_run_25": {
+   "frames": 1,
+   "group": "arena",
+   "h": 31,
+   "w": 5
+  },
+  "fence_straight_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 16,
+   "w": 24
+  },
+  "fence_straight_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 16,
+   "w": 24
+  },
+  "fence_straight_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 16,
+   "w": 24
+  },
+  "forest_eyes": {
+   "frames": 3,
+   "group": "telegraph",
+   "h": 4,
+   "w": 8
+  },
+  "forest_leaf_ash": {
+   "frames": 6,
+   "group": "caster",
+   "h": 16,
+   "w": 16
+  },
+  "gallows_cage": {
+   "frames": 4,
+   "group": "arena",
+   "h": 26,
+   "w": 14
+  },
+  "gallows_tree": {
+   "frames": 1,
+   "group": "arena",
+   "h": 56,
+   "w": 48
+  },
+  "gas_lamp_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 28,
+   "w": 12
+  },
+  "gas_lamp_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 28,
+   "w": 12
+  },
+  "grass_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "grass_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "grass_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "grass_3": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "grave_broken_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 14,
+   "w": 12
+  },
+  "grave_broken_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 12,
+   "w": 14
+  },
+  "grave_broken_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 12
+  },
+  "grave_cross_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 20,
+   "w": 12
+  },
+  "grave_cross_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 20,
+   "w": 14
+  },
+  "grave_cross_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 12
+  },
+  "grave_intact_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 20,
+   "w": 14
+  },
+  "grave_intact_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 12
+  },
+  "grave_intact_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 16
+  },
+  "grave_intact_3": {
+   "frames": 2,
+   "group": "arena",
+   "h": 22,
+   "w": 10
+  },
+  "grave_intact_4": {
+   "frames": 2,
+   "group": "arena",
+   "h": 20,
+   "w": 16
+  },
+  "grave_slab_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 10,
+   "w": 18
+  },
+  "grave_slab_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 12,
+   "w": 20
+  },
+  "helmet_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 7,
+   "w": 10
+  },
+  "hero_shadow": {
+   "frames": 1,
+   "group": "gameplay",
+   "h": 6,
+   "w": 12
+  },
+  "hit_flash": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "horse_skeleton": {
+   "frames": 1,
+   "group": "arena",
+   "h": 14,
+   "w": 32
+  },
+  "hunter_cabin": {
+   "frames": 1,
+   "group": "arena",
+   "h": 56,
+   "w": 64
+  },
+  "hunter_wagon": {
+   "frames": 3,
+   "group": "arena",
+   "h": 32,
+   "w": 48
+  },
+  "icon_dash": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "icon_parry": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "icon_ring": {
+   "frames": 13,
+   "group": "gameplay",
+   "h": 20,
+   "w": 20
+  },
+  "knight_dash": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "knight_death": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "knight_idle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "knight_parry": {
+   "frames": 3,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "knight_run": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "leaves_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "leaves_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "leaves_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "mushroom_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 6
+  },
+  "mushroom_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 7
+  },
+  "orb_large": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 10,
+   "w": 10
+  },
+  "orb_small": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 6,
+   "w": 6
+  },
+  "parry_fizzle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 12,
+   "w": 12
+  },
+  "parry_pulse": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 24,
+   "w": 24
+  },
+  "parry_spark": {
+   "frames": 8,
+   "group": "gameplay",
+   "h": 4,
+   "w": 4
+  },
+  "portal_altar": {
+   "frames": 1,
+   "group": "arena",
+   "h": 44,
+   "w": 56
+  },
+  "portal_ignite": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 40,
+   "w": 40
+  },
+  "portal_smoke": {
+   "frames": 6,
+   "group": "caster",
+   "h": 32,
+   "w": 24
+  },
+  "root_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 8,
+   "w": 16
+  },
+  "root_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 8,
+   "w": 16
+  },
+  "root_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 8,
+   "w": 16
+  },
+  "rune_glow_0": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_1": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_2": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_3": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_4": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_5": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_6": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_7": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_shard": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 8,
+   "w": 8
+  },
+  "rune_sword": {
+   "frames": 4,
+   "group": "arena",
+   "h": 64,
+   "w": 40
+  },
+  "rune_sword_base": {
+   "frames": 1,
+   "group": "arena",
+   "h": 20,
+   "w": 48
+  },
+  "shade_cast": {
+   "frames": 3,
+   "group": "caster",
+   "h": 20,
+   "w": 16
+  },
+  "shade_dissolve": {
+   "frames": 6,
+   "group": "caster",
+   "h": 20,
+   "w": 16
+  },
+  "shade_idle": {
+   "frames": 4,
+   "group": "caster",
+   "h": 20,
+   "w": 16
+  },
+  "shade_rise": {
+   "frames": 6,
+   "group": "caster",
+   "h": 20,
+   "w": 16
+  },
+  "skull_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 7
+  },
+  "skull_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 7
+  },
+  "stalker_cast": {
+   "frames": 3,
+   "group": "caster",
+   "h": 24,
+   "w": 20
+  },
+  "stalker_emerge": {
+   "frames": 6,
+   "group": "caster",
+   "h": 24,
+   "w": 20
+  },
+  "stalker_idle": {
+   "frames": 4,
+   "group": "caster",
+   "h": 24,
+   "w": 20
+  },
+  "stalker_vanish": {
+   "frames": 6,
+   "group": "caster",
+   "h": 24,
+   "w": 20
+  },
+  "stone_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 4,
+   "w": 6
+  },
+  "stone_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 7
+  },
+  "stone_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 8
+  },
+  "stone_3": {
+   "frames": 2,
+   "group": "arena",
+   "h": 3,
+   "w": 4
+  },
+  "tree_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 32,
+   "w": 26
+  },
+  "tree_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 36,
+   "w": 30
+  },
+  "tree_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 40,
+   "w": 34
+  },
+  "tree_3": {
+   "frames": 2,
+   "group": "arena",
+   "h": 34,
+   "w": 28
+  },
+  "tree_large_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 64,
+   "w": 56
+  },
+  "tree_large_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 64,
+   "w": 56
+  },
+  "weapon_halberd_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 15,
+   "w": 7
+  },
+  "weapon_rack_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 12,
+   "w": 16
+  },
+  "weapon_spear_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 15,
+   "w": 5
+  },
+  "weapon_spear_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 10,
+   "w": 5
+  },
+  "weapon_sword_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 14,
+   "w": 5
+  },
+  "weapon_sword_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 9,
+   "w": 4
+  },
+  "well_wisp": {
+   "frames": 6,
+   "group": "arena",
+   "h": 20,
+   "w": 12
+  },
+  "wisp_dash": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "wisp_death": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "wisp_idle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "wisp_pulse": {
+   "frames": 3,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "workbench_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 10,
+   "w": 20
+  },
+  "wraith": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "wraith_fade": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  }
  }
 }

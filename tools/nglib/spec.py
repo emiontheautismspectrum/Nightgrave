@@ -15,14 +15,10 @@ SPRITES = {
     "cursor_reticle": (9, 9, 1),
     # UI
     "icon_parry": (16, 16, 2), "icon_dash": (16, 16, 2), "icon_ring": (20, 20, 13), "parry_fizzle": (12, 12, 4),
-    # props
-    "gravestone_a": (16, 22, 1), "gravestone_b": (18, 26, 1), "gravestone_c": (14, 18, 1),
-    "iron_fence_segment": (32, 16, 1), "crypt_door": (40, 30, 1),
-    "dead_tree_a": (32, 40, 1), "dead_tree_b": (24, 36, 1),
 }
-SPRITES.update({f"rune_glow_{g}": (11, 11, 4) for g in range(8)})
 
+# Gameplay sprites above; arena decor/landmark/caster sprites are defined by tools/gen_arena.py (layout-dependent).
 BACKGROUNDS = {
-    "floor": (480, 270), "ground_ritual": (240, 240), "bg_forest_far": (480, 64),
-    "bg_forest_mid": (480, 56), "bg_forest_near": (480, 44), "fog_overlay": (256, 256), "vignette": (480, 270),
+    "arena_ground": (480, 270), "forest_far": (480, 270), "forest_mid": (480, 270), "forest_near": (480, 270),
+    "fog_overlay": (256, 256), "vignette": (480, 270),
 }

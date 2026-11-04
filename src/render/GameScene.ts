@@ -9,7 +9,7 @@ import { encodeReplay, type Replay } from '../sim/replay';
 import { dashCooldownLeft, isDashing, isFading, isParryActive, parryCooldownLeft, parryCooldownOf, Sim } from '../sim/sim';
 import { playCue } from './sfx';
 import type { SimEvent } from '../sim/state';
-import { ATLAS, MANIFEST, bgKey, type BgName, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
+import { ARENA_PROPS, ATLAS, MANIFEST, bgKey, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
 import { InputCollector } from './input';
 
 const STEP_MS = 1000 / TICK_RATE;
@@ -75,13 +75,15 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     createAnimations(this);
     this.buildArena();
-    // vignette is clear inside the play circle and sits below the actors, so it never dims threats
-    this.add.image(0, 0, bgKey('vignette')).setOrigin(0);
     this.actors = this.add.layer();
     this.shadow = this.add.image(0, 0, ATLAS, frame('hero_shadow'));
     this.hero = this.add.sprite(0, 0, ATLAS, frame(`${this.cfg.hero}_idle`));
     this.pulse = this.add.sprite(0, 0, ATLAS, frame('parry_pulse')).setVisible(false);
     this.actors.add([this.shadow, this.hero, this.pulse]);
+    // fog and vignette above the actors (both are light / clear inside the arena), then the thin near-forest overhang
+    this.fog = this.add.tileSprite(0, 0, VIEW_WIDTH, VIEW_HEIGHT, bgKey('fog_overlay')).setOrigin(0);
+    this.add.image(0, 0, bgKey('vignette')).setOrigin(0);
+    this.add.image(0, 0, bgKey('forest_near')).setOrigin(0);
     this.buildTelegraphOverlay();
     this.reticle = this.add.image(0, 0, ATLAS, frame('cursor_reticle'));
     this.buildHud();
@@ -91,18 +93,21 @@ export class GameScene extends Phaser.Scene {
 
   private buildArena(): void {
     const L = MANIFEST.layout;
-    this.add.image(0, 0, bgKey('floor')).setOrigin(0);
-    // three horizontally tileable tree layers; they drift against the hero for parallax
-    this.parallax = L.forest.map((f) => ({
-      sprite: this.add.tileSprite(f.x, f.y, VIEW_WIDTH, MANIFEST.backgrounds[f.name as BgName].h, bgKey(f.name)).setOrigin(0),
-      k: f.parallax,
-    }));
-    for (const p of L.props) this.add.image(p.x, p.y, ATLAS, frame(p.name as SpriteName)).setOrigin(0);
-    // fog drifts over ground and props but under the raised platform, which stays calm and readable
-    this.fog = this.add.tileSprite(0, 0, VIEW_WIDTH, VIEW_HEIGHT, bgKey('fog_overlay')).setOrigin(0);
-    this.add.image(L.ritualOrigin[0] ?? 0, L.ritualOrigin[1] ?? 0, bgKey('ground_ritual')).setOrigin(0);
+    // far/mid forest: horizontally tileable, drifting slightly against the hero for parallax
+    this.parallax = L.forest
+      .filter((f) => f.parallax > 0)
+      .map((f) => ({
+        sprite: this.add.tileSprite(0, 0, VIEW_WIDTH, VIEW_HEIGHT, bgKey(f.name)).setOrigin(0),
+        k: f.parallax,
+      }));
+    this.add.image(0, 0, bgKey('arena_ground')).setOrigin(0);
     // Runes rest on frame 0 (dim carved stone); they only glow as a rune-burst telegraph.
     this.runes = L.runes.map((r, g) => this.add.sprite(r.x, r.y, ATLAS, frame(`rune_glow_${g}` as SpriteName)));
+    // Placed decor + landmarks, in base-y order. (Y-sorting with actors and translucency arrive in Part C.)
+    for (const p of ARENA_PROPS.props) {
+      const s = this.add.sprite(p.x, p.y, ATLAS, frame(p.sprite as SpriteName, p.frame)).setOrigin(0).setFlipX(p.flip);
+      if (p.anim) s.play({ key: p.anim, startFrame: (p.x + p.y) % MANIFEST.sprites[p.anim as SpriteName].frames });
+    }
   }
 
   /** Telegraph copies drawn ABOVE the actors, so a hero standing on a rune still sees it light up. */

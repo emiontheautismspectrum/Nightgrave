@@ -1,46 +1,18 @@
-"""Style board: the composed arena with sprites in context + a labelled catalogue, scaled 3x."""
+"""Style board and stress board on the revised arena (3x)."""
 import numpy as np
 
 from . import canvas as C
 from . import font
-from .arena import FOREST_LAYOUT, H, PROP_LAYOUT, RITUAL_CENTER, RITUAL_ORIGIN, W, rune_positions
+from .palette import NAMES
+from .scene import W, compose_scene, upscale
 
 SCALE = 3
 
 
-def compose_ground(bg, sp, telegraph=True):
-    a = bg["floor"].copy()
-    for name, x, y, _par in FOREST_LAYOUT:
-        C.paste(a, bg[name], x, y)
-    # fog drifts over the ground and props but under the raised platform, which stays calm and flat
-    fog = bg["fog_overlay"]
-    for name, x, y in PROP_LAYOUT:
-        C.paste(a, sp[name][0], x, y)
-    for ty in range(0, H, 256):
-        for tx in range(0, W, 256):
-            C.paste(a, fog, tx, ty)
-    C.paste(a, bg["ground_ritual"], *RITUAL_ORIGIN)
-    for g, (rx, ry) in enumerate(rune_positions(*RITUAL_CENTER)):
-        C.paste(a, sp[f"rune_glow_{g}"][3 if (telegraph and g == 1) else 0], rx - 5, ry - 5)  # one rune telegraphs
-    return a
-
-
-def compose_arena(bg, sp):
-    a = compose_ground(bg, sp)
-    actors = [
-        ("hero_shadow", 0, 196, 155), ("parry_pulse", 1, 190, 140), ("knight_parry", 1, 194, 144),
-        ("hero_shadow", 0, 298, 167), ("dash_trail", 0, 280, 154), ("wisp_idle", 0, 296, 156),
-        ("orb_small", 0, 214, 136), ("orb_small", 1, 230, 120), ("orb_small", 0, 250, 110),
-        ("orb_large", 0, 170, 120), ("orb_large", 1, 330, 190),
-        ("rune_shard", 0, 262, 196), ("rune_shard", 1, 274, 206),
-        ("blade", 0, 340, 120), ("blade", 2, 150, 196),
-        ("wraith", 0, 230, 216), ("wraith_fade", 1, 300, 90),
-        ("parry_spark", 0, 208, 138), ("ember_particle", 0, 286, 150), ("cursor_reticle", 0, 250, 150),
-    ]
-    for name, f, x, y in actors:
-        C.paste(a, sp[name][f], x, y)
-    C.paste(a, bg["vignette"], 0, 0)
-    return a
+def _header(text):
+    h = np.full((11, W), C.ci("bg0"), dtype=np.int16)
+    font.text(h, 4, 3, text, "amber")
+    return h
 
 
 def catalogue(sp, order):
@@ -59,7 +31,6 @@ def catalogue(sp, order):
         row_h = max(row_h, lab + fh)
     height = y + row_h + margin
     a = np.full((height, W), C.ci("bg1"), dtype=np.int16)
-    a[C.bayer_mask(W, height, 0.06)] = C.ci("fog")
     a[0, :] = C.ci("stone_dark")
     for name, px, py in placements:
         font.text(a, px, py, name.replace("_", " "))
@@ -69,44 +40,45 @@ def catalogue(sp, order):
     return a
 
 
-def style_board(bg, sp, order, title):
-    arena = compose_arena(bg, sp)
-    cat = catalogue(sp, order)
-    header = np.full((11, W), C.ci("bg0"), dtype=np.int16)
-    font.text(header, 4, 3, f"{title} - STYLE BOARD - 16 COLOR PALETTE - 480X270 AT 3X", "amber")
-    from .palette import NAMES
-    for i, n in enumerate(NAMES):  # palette swatches
-        header[2:9, W - 4 - (16 - i) * 8:W - 4 - (16 - i) * 8 + 7] = C.ci(n)
-    board = np.vstack([header, arena, cat])
-    return np.repeat(np.repeat(board, SCALE, axis=0), SCALE, axis=1)
+def style_board(art, game, order, title):
+    """Gameplay sprites in context on the revised arena + a labelled catalogue of every gameplay sprite."""
+    sp = {**art["sprites"], **game}
+    cx, cy = art["layout"]["heroSpawn"]
+    actors = [("hero_shadow", 0, cx - 6, cy + 2, cy + 4, False), ("parry_pulse", 1, cx - 12, cy - 14, cy + 4, False),
+              ("knight_parry", 1, cx - 8, cy - 12, cy + 4, False),
+              ("hero_shadow", 0, cx + 54, cy + 22, cy + 24, False), ("dash_trail", 0, cx + 40, cy + 4, cy + 23, False),
+              ("wisp_idle", 0, cx + 52, cy + 8, cy + 24, False),
+              ("orb_small", 0, cx + 20, cy - 20, cy - 14, False), ("orb_large", 0, cx - 60, cy - 30, cy - 20, False),
+              ("rune_shard", 0, cx + 30, cy + 40, cy + 48, False), ("blade", 0, cx + 90, cy - 30, cy - 14, False),
+              ("wraith", 0, cx - 40, cy + 40, cy + 56, False)]
+    scene = compose_scene(art["backgrounds"], sp, art["props"], actors)
+    sw = np.full((11, W), C.ci("bg0"), dtype=np.int16)
+    head = _header(f"{title} - STYLE BOARD - 19 COLOR PALETTE - 480X270 AT 3X")
+    for i, n in enumerate(NAMES):
+        head[2:9, W - 4 - (len(NAMES) - i) * 8:W - 4 - (len(NAMES) - i) * 8 + 7] = C.ci(n)
+    del sw
+    return upscale(np.vstack([head, scene, catalogue(sp, order)]), SCALE)
 
 
-def stress_board(bg, sp, title, count=80, seed=4242):
-    """Readability check: the hero amid ~80 projectiles of every type, over the real arena, at 3x."""
+def stress_board(art, game, title, count=80, seed=4242):
+    """Readability check: the hero amid ~80 projectiles of every type over the full revised scene, at 3x."""
+    sp = {**art["sprites"], **game}
     rng = np.random.default_rng(seed)
-    a = compose_ground(bg, sp, telegraph=False)
-    cx, cy = RITUAL_CENTER
-    # one hero on the central dais, one at the bottom edge of the play circle (worst case for warning time)
-    heroes = [(cx, cy), (cx + 20, cy + 100)]
-    kinds = ["orb_small"] * 30 + ["orb_large"] * 12 + ["rune_shard"] * 20 + ["blade"] * 9 + ["wraith"] * 9
-    kinds = kinds[:count]
-    for i, k in enumerate(kinds):
+    x0, y0, x1, y1 = art["layout"]["arena"]
+    cx, cy = art["layout"]["heroSpawn"]
+    heroes = [(cx, cy), (x0 + 30, y1 - 14)]
+    kinds = (["orb_small"] * 30 + ["orb_large"] * 12 + ["rune_shard"] * 20 + ["blade"] * 9 + ["wraith"] * 9)[:count]
+    actors = []
+    for hx, hy in heroes:
+        actors += [("hero_shadow", 0, hx - 6, hy + 2, hy + 4, False), ("knight_idle", 0, hx - 8, hy - 12, hy + 4, False)]
+    for k in kinds:
         while True:
-            ang = rng.uniform(0, 2 * np.pi)
-            r = 104 * np.sqrt(rng.uniform(0, 1))
-            x, y = cx + np.cos(ang) * r, cy + np.sin(ang) * r
-            if all((x - hx) ** 2 + (y - hy) ** 2 > 10 ** 2 for hx, hy in heroes):
+            x, y = rng.uniform(x0 + 4, x1 - 4), rng.uniform(y0 + 4, y1 - 4)
+            if all((x - hx) ** 2 + (y - hy) ** 2 > 100 for hx, hy in heroes):
                 break
-        f = sp[k][int(rng.integers(0, len(sp[k])))]
-        C.paste(a, f, int(x - f.shape[1] / 2), int(y - f.shape[0] / 2))
-    # blades right next to the edge hero: red-vs-hero contrast check
-    C.paste(a, sp["blade"][1], cx + 20 + 9, cy + 100 - 12)
-    C.paste(a, sp["blade"][3], cx + 20 - 26, cy + 100 - 6)
-    for hx, hy in heroes:  # same offsets as GameScene: sprite centre at y-4, shadow centre at y+5
-        C.paste(a, sp["hero_shadow"][0], hx - 6, hy + 5 - 3)
-        C.paste(a, sp["knight_idle"][0], hx - 8, hy - 4 - 8)
-    C.paste(a, bg["vignette"], 0, 0)
-    header = np.full((11, W), C.ci("bg0"), dtype=np.int16)
-    font.text(header, 4, 3, f"{title} - STRESS BOARD - 2 HEROES + {len(kinds) + 2} PROJECTILES - 3X", "amber")
-    board = np.vstack([header, a])
-    return np.repeat(np.repeat(board, SCALE, axis=0), SCALE, axis=1)
+        f = int(rng.integers(0, len(sp[k])))
+        h, w = sp[k][f].shape
+        actors.append((k, f, int(x - w / 2), int(y - h / 2), int(y + h / 2), False))
+    scene = compose_scene(art["backgrounds"], sp, art["props"], actors)
+    head = _header(f"{title} - STRESS BOARD - 2 HEROES + {len(kinds)} PROJECTILES - 3X")
+    return upscale(np.vstack([head, scene]), SCALE)
