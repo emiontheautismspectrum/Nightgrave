@@ -40,6 +40,8 @@ const ANIM: Partial<Record<SpriteName, { fps: number; loop: boolean }>> = {
   dash_trail: { fps: 15, loop: false },
   hit_flash: { fps: 20, loop: false },
   death_burst: { fps: 14, loop: false },
+  parry_fizzle: { fps: 16, loop: false },
+  icon_ring: { fps: 1, loop: false },
 };
 
 export function preloadAssets(scene: Phaser.Scene): void {

@@ -27,12 +27,33 @@ export const TUNING = {
   orbs: {
     small: { radius: 2.5, speed: 75 },
     large: { radius: 4.5, speed: 55 },
-    largeChance: 0.2,
     /** Max aim error in radians, uniform in [-spread, +spread]. */
     spread: 0.3,
   },
-  /** Stage 1 placeholder spawner (waves arrive in Stage 2). */
-  spawner: { graceSeconds: 1, startIntervalSeconds: 0.9, minIntervalSeconds: 0.3, rampSeconds: 90 },
+  runeShard: { radius: 3, speed: 62 },
+  /** Unparryable. Curves slightly: up to curveRadPerSecond of turn, sign chosen per blade. */
+  blade: { radius: 5, speed: 80, spread: 0.25, curveRadPerSecond: 0.35 },
+  /** Slow homing shadow, parryable; after lifeSeconds it fades (harmless) for fadeSeconds, then is gone. */
+  wraith: { radius: 5, speed: 30, steer: 0.05, lifeSeconds: 7, fadeSeconds: 0.5 },
+  /**
+   * Fairness: nothing may appear closer than minSpawnDistance to the hero unless it was telegraphed
+   * for at least minTelegraphSeconds (rune bursts are; edge spawns pick a far point instead).
+   */
+  fairness: { minSpawnDistance: 64, minTelegraphSeconds: 0.25 },
+  /** A wave every `seconds`. Per wave: +speedStep speed and +densityStep density, capped. */
+  waves: { seconds: 15, graceSeconds: 1, speedStep: 0.05, densityStep: 0.06, speedCap: 1.6, densityCap: 2.2 },
+  /** Single aimed small orbs trickling in between set pieces (interval is divided by density). */
+  stream: { intervalSeconds: 1.1, largeChance: 0.15 },
+  /** Set pieces. Gap between them is uniform in [gapMin, gapMax] seconds, divided by density. */
+  patterns: {
+    gapMinSeconds: 1.6,
+    gapMaxSeconds: 3.0,
+    orbFan: { weight: 3, unlockWave: 0, count: 3, countPerWave: 0.34, maxCount: 7, arc: 0.7 },
+    runeBurst: { weight: 2, unlockWave: 0, telegraphSeconds: 0.6, shards: 10, shardsPerWave: 1, maxShards: 16 },
+    blades: { weight: 2, unlockWave: 1, count: 1, countPerWave: 0.34, maxCount: 4 },
+    wraiths: { weight: 1.5, unlockWave: 2, count: 1, countPerWave: 0.25, maxCount: 3 },
+    heavyOrbs: { weight: 1, unlockWave: 1, count: 2, countPerWave: 0.2, maxCount: 4 },
+  },
   difficulty: {
     easy: { speed: 0.8, density: 0.7 },
     medium: { speed: 1.0, density: 1.0 },

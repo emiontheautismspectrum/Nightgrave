@@ -13,6 +13,8 @@ SPRITES = {
     "parry_pulse": (24, 24, 4), "parry_spark": (4, 4, 8), "dash_trail": (16, 16, 3),
     "hit_flash": (16, 16, 2), "death_burst": (32, 32, 6), "ember_particle": (2, 2, 4),
     "cursor_reticle": (9, 9, 1),
+    # UI
+    "icon_parry": (16, 16, 2), "icon_dash": (16, 16, 2), "icon_ring": (20, 20, 13), "parry_fizzle": (12, 12, 4),
     # props
     "gravestone_a": (16, 22, 1), "gravestone_b": (18, 26, 1), "gravestone_c": (14, 18, 1),
     "iron_fence_segment": (32, 16, 1), "crypt_door": (40, 30, 1),

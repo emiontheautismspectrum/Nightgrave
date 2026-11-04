@@ -115,6 +115,26 @@
    "h": 9,
    "frames": 1
   },
+  "icon_parry": {
+   "w": 16,
+   "h": 16,
+   "frames": 2
+  },
+  "icon_dash": {
+   "w": 16,
+   "h": 16,
+   "frames": 2
+  },
+  "icon_ring": {
+   "w": 20,
+   "h": 20,
+   "frames": 13
+  },
+  "parry_fizzle": {
+   "w": 12,
+   "h": 12,
+   "frames": 4
+  },
   "gravestone_a": {
    "w": 16,
    "h": 22,

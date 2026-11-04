@@ -27,15 +27,37 @@ export interface SimParams {
   survivalPerSecond: number;
   parryBase: number;
   smallRadius: number;
-  smallSpeed: number; // px per tick, difficulty applied
+  smallSpeed: number; // px per tick, difficulty applied (wave multiplier applied at spawn)
   largeRadius: number;
   largeSpeed: number;
-  largeChance: number;
   spread: number;
+  shardRadius: number;
+  shardSpeed: number;
+  bladeRadius: number;
+  bladeSpeed: number;
+  bladeSpread: number;
+  bladeCurve: number; // rad per tick
+  wraithRadius: number;
+  wraithSpeed: number;
+  wraithSteer: number;
+  wraithLife: number; // ticks
+  wraithFade: number;
+  fairDistance: number;
+  fairTelegraph: number; // ticks
   graceTicks: number;
-  startInterval: number; // ticks between spawns, density applied
-  minInterval: number;
-  rampTicks: number;
+  waveTicks: number;
+  speedStep: number;
+  densityStep: number;
+  speedCap: number;
+  densityCap: number;
+  /** Difficulty density multiplier (more spawns = shorter intervals). */
+  density: number;
+  streamInterval: number; // ticks at density 1
+  streamLargeChance: number;
+  gapMin: number; // ticks at density 1
+  gapMax: number;
+  runeTelegraph: number; // ticks
+  patterns: typeof TUNING.patterns;
 }
 
 export const ticks = (seconds: number): number => Math.max(1, Math.round(seconds * TICK_RATE));
@@ -74,11 +96,32 @@ export function makeParams(difficulty: Difficulty): SimParams {
     smallSpeed: (T.orbs.small.speed * d.speed) / TICK_RATE,
     largeRadius: T.orbs.large.radius,
     largeSpeed: (T.orbs.large.speed * d.speed) / TICK_RATE,
-    largeChance: T.orbs.largeChance,
     spread: T.orbs.spread,
-    graceTicks: ticks(T.spawner.graceSeconds),
-    startInterval: (T.spawner.startIntervalSeconds * TICK_RATE) / d.density,
-    minInterval: (T.spawner.minIntervalSeconds * TICK_RATE) / d.density,
-    rampTicks: ticks(T.spawner.rampSeconds),
+    shardRadius: T.runeShard.radius,
+    shardSpeed: (T.runeShard.speed * d.speed) / TICK_RATE,
+    bladeRadius: T.blade.radius,
+    bladeSpeed: (T.blade.speed * d.speed) / TICK_RATE,
+    bladeSpread: T.blade.spread,
+    bladeCurve: T.blade.curveRadPerSecond / TICK_RATE,
+    wraithRadius: T.wraith.radius,
+    wraithSpeed: (T.wraith.speed * d.speed) / TICK_RATE,
+    wraithSteer: T.wraith.steer,
+    wraithLife: ticks(T.wraith.lifeSeconds),
+    wraithFade: ticks(T.wraith.fadeSeconds),
+    fairDistance: T.fairness.minSpawnDistance,
+    fairTelegraph: ticks(T.fairness.minTelegraphSeconds),
+    graceTicks: ticks(T.waves.graceSeconds),
+    waveTicks: ticks(T.waves.seconds),
+    speedStep: T.waves.speedStep,
+    densityStep: T.waves.densityStep,
+    speedCap: T.waves.speedCap,
+    densityCap: T.waves.densityCap,
+    density: d.density,
+    streamInterval: T.stream.intervalSeconds * TICK_RATE,
+    streamLargeChance: T.stream.largeChance,
+    gapMin: T.patterns.gapMinSeconds * TICK_RATE,
+    gapMax: T.patterns.gapMaxSeconds * TICK_RATE,
+    runeTelegraph: ticks(T.patterns.runeBurst.telegraphSeconds),
+    patterns: T.patterns,
   };
 }

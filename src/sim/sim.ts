@@ -1,12 +1,14 @@
 import { TICK_RATE, type Difficulty } from '../data/tuning';
-import { dcos, dsin, PI, rotate } from './dmath';
 import { AXIS_MAX, BTN_DASH, BTN_PARRY, sanitizeInput, type InputFrame } from './input';
 import { makeParams, type SimParams } from './params';
-import { nextFloat, range, toSeed } from './rng';
-import { NEVER, type Projectile, type ProjectileKind, type SimState } from './state';
+import { toSeed } from './rng';
+import { NEVER, type Projectile, type SimState } from './state';
+import { isFading, moveProjectile, runDirector, type DirectorOptions } from './waves';
 
-export interface SimOptions {
-  /** Disable the automatic spawner (tests place projectiles by hand). Default true. */
+export { spawnProjectile } from './waves';
+
+export interface SimOptions extends DirectorOptions {
+  /** Disable the wave director (tests place projectiles by hand). Default true. */
   spawner?: boolean;
 }
 
@@ -40,7 +42,10 @@ export function createState(seed: number, difficulty: Difficulty, p: SimParams =
     multiplier: p.multStart,
     lastParryTick: -1,
     parryCount: 0,
-    spawnTimer: 0,
+    wave: -1,
+    streamTimer: 0,
+    patternAt: p.graceTicks + Math.round(p.gapMin),
+    telegraphs: [],
     events: [],
   };
 }
@@ -57,8 +62,9 @@ export const parryCooldownLeft = (s: SimState, p: SimParams): number =>
   Math.max(0, parryCooldownOf(s, p) - (s.tick - s.hero.parryStart));
 export const dashCooldownLeft = (s: SimState, p: SimParams): number =>
   Math.max(0, p.dashCooldown - (s.tick - s.hero.dashStart));
+export { isFading };
 
-/** Total score as an integer. */
+/** Total score as an integer: survival points + parry points (pickups and bosses arrive in Stage 4). */
 export function score(s: SimState, p: SimParams): number {
   return Math.floor((s.survivalTicks * p.survivalPerSecond) / TICK_RATE) + Math.floor(s.parryScoreHundredths / 100);
 }
@@ -73,65 +79,12 @@ export function clampToCircle(x: number, y: number, cx: number, cy: number, r: n
   return [cx + (dx / d) * r, cy + (dy / d) * r];
 }
 
-// ------------------------------------------------------------------ spawning
-
-export function spawnProjectile(
-  s: SimState,
-  p: SimParams,
-  kind: ProjectileKind,
-  x: number,
-  y: number,
-  vx: number,
-  vy: number,
-): Projectile {
-  const pr: Projectile = {
-    id: s.nextId++,
-    kind,
-    x,
-    y,
-    vx,
-    vy,
-    radius: kind === 'orb_large' ? p.largeRadius : p.smallRadius,
-    parryable: true,
-    born: s.tick,
-  };
-  s.projectiles.push(pr);
-  s.events.push({ type: 'spawn', id: pr.id });
-  return pr;
-}
-
-function spawnAimedOrb(s: SimState, p: SimParams): void {
-  const ang = nextFloat(s) * 2 * PI;
-  const x = p.cx + dcos(ang) * p.spawnRadius;
-  const y = p.cy + dsin(ang) * p.spawnRadius;
-  const large = nextFloat(s) < p.largeChance;
-  const err = range(s, -p.spread, p.spread);
-  let dx = s.hero.x - x;
-  let dy = s.hero.y - y;
-  const d = Math.sqrt(dx * dx + dy * dy) || 1;
-  [dx, dy] = rotate(dx / d, dy / d, err);
-  const speed = large ? p.largeSpeed : p.smallSpeed;
-  spawnProjectile(s, p, large ? 'orb_large' : 'orb_small', x, y, dx * speed, dy * speed);
-}
-
-function runSpawner(s: SimState, p: SimParams): void {
-  if (s.tick < p.graceTicks) return;
-  const t = Math.min(1, (s.tick - p.graceTicks) / p.rampTicks);
-  const interval = p.startInterval + (p.minInterval - p.startInterval) * t;
-  s.spawnTimer -= 1;
-  let guard = 0;
-  while (s.spawnTimer <= 0 && guard++ < 16) {
-    spawnAimedOrb(s, p);
-    s.spawnTimer += interval;
-  }
-}
-
 // ------------------------------------------------------------------ the tick
 
 /**
- * Advance the simulation by exactly one tick. Pure function of (state, input, params): no clocks,
- * no Math.random. Order: input -> abilities -> hero move -> spawn -> projectile move ->
- * parry -> hits -> despawn. Does nothing once the hero is dead.
+ * Advance the simulation by exactly one tick. Pure function of (state, input, params, options): no
+ * clocks, no Math.random. Order: input -> abilities -> hero move -> director (spawns) ->
+ * projectile move -> parry -> hits -> expiry/despawn. Does nothing once the hero is dead.
  */
 export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimOptions = {}): void {
   s.events = [];
@@ -203,13 +156,10 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   else if (mx < -0.01) h.facing = -1;
 
   // 5. spawn + move projectiles
-  if (opts.spawner !== false) runSpawner(s, p);
-  for (const pr of s.projectiles) {
-    pr.x += pr.vx;
-    pr.y += pr.vy;
-  }
+  if (opts.spawner !== false) runDirector(s, p, opts);
+  for (const pr of s.projectiles) moveProjectile(s, pr);
 
-  // 6. multiplier decay, then parry (parry is resolved before hits, so it always wins)
+  // 6. multiplier decay, then parry (parry is resolved before hits, so it always wins vs parryables)
   if (s.lastParryTick >= 0 && t - s.lastParryTick >= p.multReset) s.multiplier = p.multStart;
   if (isParryActive(s, p)) {
     const keep: Projectile[] = [];
@@ -217,7 +167,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       const dx = pr.x - h.x;
       const dy = pr.y - h.y;
       const r = p.parryRadius + pr.radius;
-      if (pr.parryable && dx * dx + dy * dy <= r * r) {
+      if (pr.parryable && !isFading(s, pr) && dx * dx + dy * dy <= r * r) {
         const points = p.parryBase * s.multiplier; // hundredths of a point
         s.parryScoreHundredths += points;
         s.events.push({ type: 'parry_hit', id: pr.id, x: pr.x, y: pr.y, points: points / 100, multiplier: s.multiplier / 100 });
@@ -228,11 +178,14 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       } else keep.push(pr);
     }
     s.projectiles = keep;
+    // the last active tick of a parry that hit nothing: tell the renderer it was a whiff
+    if (t - h.parryStart === p.parryActive - 1 && !h.parryHit) s.events.push({ type: 'parry_whiff', x: h.x, y: h.y });
   }
 
-  // 7. hits: one hit = death
+  // 7. hits: one hit = death (fading projectiles are harmless)
   if (!isInvulnerable(s, p)) {
     for (const pr of s.projectiles) {
+      if (isFading(s, pr)) continue;
       const dx = pr.x - h.x;
       const dy = pr.y - h.y;
       const r = p.heroRadius + pr.radius;
@@ -245,9 +198,13 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
     }
   }
 
-  // 8. despawn off-arena projectiles
+  // 8. remove faded and far-away projectiles
   const dr2 = p.despawnRadius * p.despawnRadius;
-  s.projectiles = s.projectiles.filter((pr) => (pr.x - p.cx) * (pr.x - p.cx) + (pr.y - p.cy) * (pr.y - p.cy) < dr2);
+  s.projectiles = s.projectiles.filter(
+    (pr) =>
+      (pr.fadeEnd < 0 || t < pr.fadeEnd) &&
+      (pr.x - p.cx) * (pr.x - p.cx) + (pr.y - p.cy) * (pr.y - p.cy) < dr2,
+  );
 
   if (s.alive) s.survivalTicks++;
   s.tick++;

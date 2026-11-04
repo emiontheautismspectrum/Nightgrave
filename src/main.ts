@@ -2,6 +2,7 @@ import '@fontsource/press-start-2p/400.css';
 import Phaser from 'phaser';
 import { TITLE, VIEW_HEIGHT, VIEW_WIDTH } from './config';
 import type { Difficulty } from './data/tuning';
+import { dailySeed, utcDateKey } from './daily';
 import { GameScene, type HeroKind, type RunConfig } from './render/GameScene';
 
 document.title = TITLE;
@@ -20,10 +21,16 @@ async function boot(): Promise<void> {
     /* fall back to monospace */
   }
   const q = new URLSearchParams(location.search);
+  const difficulty = pick<Difficulty>(q.get('d'), ['easy', 'medium', 'hard'], 'medium');
   const run: RunConfig = {
-    difficulty: pick<Difficulty>(q.get('d'), ['easy', 'medium', 'hard'], 'medium'),
+    difficulty,
     hero: pick<HeroKind>(q.get('hero'), ['knight', 'wisp'], 'knight'),
-    makeSeed: () => crypto.getRandomValues(new Uint32Array(1))[0] ?? 1,
+    // Hard: the same daily seed for everyone (UTC date), re-read at every restart so midnight rolls over.
+    makeSeed:
+      difficulty === 'hard'
+        ? () => dailySeed(utcDateKey(new Date()))
+        : () => crypto.getRandomValues(new Uint32Array(1))[0] ?? 1,
+    dateKey: difficulty === 'hard' ? () => utcDateKey(new Date()) : undefined,
   };
   const game = new Phaser.Game({
     type: Phaser.AUTO,

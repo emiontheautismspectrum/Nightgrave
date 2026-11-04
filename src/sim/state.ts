@@ -3,7 +3,7 @@ import type { Difficulty } from '../data/tuning';
 /** Sentinel start tick meaning "never happened" (JSON-safe, unlike -Infinity). */
 export const NEVER = -1_000_000_000;
 
-export type ProjectileKind = 'orb_small' | 'orb_large';
+export type ProjectileKind = 'orb_small' | 'orb_large' | 'rune_shard' | 'blade' | 'wraith';
 
 export interface Projectile {
   id: number;
@@ -16,6 +16,30 @@ export interface Projectile {
   parryable: boolean;
   /** Tick on which it was spawned (render uses it for animation phase). */
   born: number;
+  /** Speed in px/tick (homing renormalises to it). */
+  speed: number;
+  /** Homing steer factor per tick (0 = straight). */
+  homing: number;
+  /** Per-tick velocity rotation (cos, sin); (1, 0) = no curve. */
+  turnC: number;
+  turnS: number;
+  /** Tick at which it starts fading (harmless from then on); -1 = never. */
+  expires: number;
+  /** Tick at which a fading projectile is removed; -1 = never. */
+  fadeEnd: number;
+}
+
+/** A rune lighting up before it fires a radial ring of rune shards. */
+export interface Telegraph {
+  id: number;
+  rune: number;
+  x: number;
+  y: number;
+  start: number;
+  fire: number;
+  shards: number;
+  /** Shard speed in px/tick, fixed when the telegraph starts. */
+  speed: number;
 }
 
 export interface Hero {
@@ -42,7 +66,10 @@ export type SimEvent =
   | { type: 'parry_start' }
   | { type: 'parry_hit'; id: number; x: number; y: number; points: number; multiplier: number }
   | { type: 'dash_start'; dirX: number; dirY: number }
-  | { type: 'spawn'; id: number }
+  | { type: 'parry_whiff'; x: number; y: number }
+  | { type: 'spawn'; id: number; kind: ProjectileKind; dist: number; telegraphTicks: number }
+  | { type: 'telegraph'; id: number; rune: number }
+  | { type: 'wave'; wave: number }
   | { type: 'death'; x: number; y: number; by: number };
 
 export interface SimState {
@@ -66,8 +93,13 @@ export interface SimState {
   /** Tick of the last successful parry (-1 = never). */
   lastParryTick: number;
   parryCount: number;
-  /** Fractional spawn timer in ticks. */
-  spawnTimer: number;
+  /** Current wave (-1 before the first one starts). */
+  wave: number;
+  /** Fractional timer (ticks) until the next stream orb. */
+  streamTimer: number;
+  /** Tick of the next set piece. */
+  patternAt: number;
+  telegraphs: Telegraph[];
   /** Events emitted during the most recent tick only (render reads them). */
   events: SimEvent[];
 }

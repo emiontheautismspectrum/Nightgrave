@@ -6,7 +6,8 @@ import Phaser from 'phaser';
 import { VIEW_HEIGHT, VIEW_WIDTH } from '../config';
 import { TICK_RATE, type Difficulty } from '../data/tuning';
 import { encodeReplay, type Replay } from '../sim/replay';
-import { dashCooldownLeft, isDashing, isParryActive, Sim } from '../sim/sim';
+import { dashCooldownLeft, isDashing, isFading, isParryActive, parryCooldownLeft, parryCooldownOf, Sim } from '../sim/sim';
+import { playCue } from './sfx';
 import type { SimEvent } from '../sim/state';
 import { ATLAS, MANIFEST, bgKey, type BgName, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
 import { InputCollector } from './input';
@@ -24,6 +25,8 @@ export interface RunConfig {
   hero: HeroKind;
   /** Seed source lives on the render side (Math.random/crypto is fine here, never in src/sim). */
   makeSeed: () => number;
+  /** UTC date of the daily seed (Hard only), shown in the HUD; read at each restart. */
+  dateKey?: () => string;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -48,7 +51,10 @@ export class GameScene extends Phaser.Scene {
   private parried = new Set<number>();
   private hudScore!: Phaser.GameObjects.Text;
   private hudMult!: Phaser.GameObjects.Text;
-  private hudDash!: Phaser.GameObjects.Text;
+  private hudWave!: Phaser.GameObjects.Text;
+  private hudDaily!: Phaser.GameObjects.Text;
+  private banner!: Phaser.GameObjects.Text;
+  private icons!: { parry: Phaser.GameObjects.Image; parryRing: Phaser.GameObjects.Image; dash: Phaser.GameObjects.Image; dashRing: Phaser.GameObjects.Image };
   private panel!: Phaser.GameObjects.Container;
   private panelText!: Phaser.GameObjects.Text;
 
@@ -100,7 +106,18 @@ export class GameScene extends Phaser.Scene {
     const style = { fontFamily: FONT, fontSize: '8px', color: '#d9d2c0' };
     this.hudScore = this.add.text(6, 6, '', style);
     this.hudMult = this.add.text(6, 18, '', { ...style, color: '#ffb347' });
-    this.hudDash = this.add.text(VIEW_WIDTH - 6, 6, '', style).setOrigin(1, 0);
+    this.hudWave = this.add.text(6, 30, '', { ...style, color: '#3a4558' });
+    this.banner = this.add.text(VIEW_WIDTH / 2, 70, '', { ...style, color: '#d9d2c0' }).setOrigin(0.5).setAlpha(0);
+    // ability icons (top-right) with a pixel cooldown ring that fills clockwise
+    const ix = VIEW_WIDTH - 40;
+    const dx = VIEW_WIDTH - 16;
+    this.icons = {
+      parry: this.add.image(ix, 16, ATLAS, frame('icon_parry')),
+      parryRing: this.add.image(ix, 16, ATLAS, frame('icon_ring')),
+      dash: this.add.image(dx, 16, ATLAS, frame('icon_dash')),
+      dashRing: this.add.image(dx, 16, ATLAS, frame('icon_ring')),
+    };
+    this.hudDaily = this.add.text(6, VIEW_HEIGHT - 12, '', { ...style, color: '#3a4558' });
     const bg = this.add.rectangle(0, 0, 200, 56, 0x0b0d12).setStrokeStyle(1, 0x3a4558);
     this.panelText = this.add.text(0, 0, '', { ...style, align: 'center', lineSpacing: 6 }).setOrigin(0.5);
     this.panel = this.add.container(VIEW_WIDTH / 2, VIEW_HEIGHT / 2, [bg, this.panelText]).setVisible(false);
@@ -108,8 +125,10 @@ export class GameScene extends Phaser.Scene {
 
   private newRun(): void {
     this.sim = new Sim(this.cfg.makeSeed(), this.cfg.difficulty);
+    this.hudDaily.setText(this.cfg.dateKey ? `HARD - DAILY ${this.cfg.dateKey()}` : '');
     for (const s of this.orbs.values()) s.destroy();
     this.orbs.clear();
+    this.banner.setAlpha(0);
     this.acc = 0;
     this.input2.clear();
     this.panel.setVisible(false);
@@ -151,6 +170,7 @@ export class GameScene extends Phaser.Scene {
       }
       case 'parry_hit':
         this.parried.add(e.id);
+        playCue('parry');
         this.burst('parry_spark', e.x, e.y);
         break;
       case 'dash_start': {
@@ -158,9 +178,26 @@ export class GameScene extends Phaser.Scene {
         this.actors.addAt(t, 0);
         t.play('dash_trail').once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => t.destroy());
         this.hero.play(`${this.cfg.hero}_dash`);
+        playCue('dash');
         break;
       }
+      case 'parry_whiff':
+        // a miss must read as a miss: dim grey puff + soft low cue, no points
+        this.burst('parry_fizzle', e.x, e.y - 2);
+        playCue('whiff');
+        break;
+      case 'telegraph':
+        playCue('telegraph');
+        break;
+      case 'wave':
+        if (e.wave > 0) {
+          this.banner.setText(`WAVE ${e.wave + 1}`).setAlpha(1);
+          this.tweens.add({ targets: this.banner, alpha: 0, delay: 900, duration: 400 });
+          playCue('wave');
+        }
+        break;
       case 'death':
+        playCue('death');
         this.onDeath();
         break;
       default:
@@ -225,7 +262,14 @@ export class GameScene extends Phaser.Scene {
         this.orbs.set(pr.id, s);
       }
       s.setPosition(Math.round(pr.x), Math.round(pr.y));
+      if (pr.kind === 'wraith') s.setFlipX(pr.vx < 0);
+      if (isFading(st, pr) && s.anims.currentAnim?.key !== 'wraith_fade') s.play('wraith_fade');
     }
+
+    // runes: dim at rest, a 3-step violet ramp while a burst is being telegraphed
+    const glow = new Map<number, number>();
+    for (const t of st.telegraphs) glow.set(t.rune, 1 + Math.min(2, Math.floor(((st.tick - t.start) / (t.fire - t.start)) * 3)));
+    this.runes.forEach((r, g) => r.setFrame(frame(`rune_glow_${g}` as SpriteName, glow.get(g) ?? 0)));
     for (const [id, s] of this.orbs) {
       if (!seen.has(id)) {
         this.orbs.delete(id);
@@ -239,8 +283,16 @@ export class GameScene extends Phaser.Scene {
     this.reticle.setVisible(this.input2.mode === 'cursor' && st.alive).setPosition(Math.round(ptr.worldX), Math.round(ptr.worldY));
     this.hudScore.setText(`${this.sim.score}`);
     this.hudMult.setText(`X${(st.multiplier / 100).toFixed(2)}`);
-    const cd = dashCooldownLeft(st, p);
-    this.hudDash.setText(cd > 0 ? `DASH ${(cd / TICK_RATE).toFixed(1)}` : 'DASH READY').setColor(cd > 0 ? '#3a4558' : '#ffb347');
+    this.hudWave.setText(st.wave >= 0 ? `WAVE ${st.wave + 1}` : '');
+    this.cooldownIcon(this.icons.parry, this.icons.parryRing, 'icon_parry', parryCooldownLeft(st, p), parryCooldownOf(st, p));
+    this.cooldownIcon(this.icons.dash, this.icons.dashRing, 'icon_dash', dashCooldownLeft(st, p), p.dashCooldown);
+  }
+
+  private cooldownIcon(icon: Phaser.GameObjects.Image, ring: Phaser.GameObjects.Image, name: SpriteName, left: number, total: number): void {
+    const cooling = left > 0;
+    icon.setFrame(frame(name, cooling ? 1 : 0));
+    ring.setVisible(cooling);
+    if (cooling) ring.setFrame(frame('icon_ring', Math.min(11, Math.floor((1 - left / total) * 12))));
   }
 
   private moving(): boolean {

@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "assets": "python3 tools/gen_assets.py && python3 tools/validate_palette.py"
+    "assets": "python3 tools/gen_assets.py && python3 tools/validate_palette.py",
+    "bot": "vite-node scripts/botsim.ts"
   },
   "dependencies": {
     "@fontsource/press-start-2p": "5.2.7",

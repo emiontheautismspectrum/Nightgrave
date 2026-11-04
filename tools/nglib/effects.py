@@ -110,8 +110,85 @@ def cursor_reticle():
     return [C.from_ascii(rows, {"#": "amber"})]
 
 
+def icon_parry():
+    """HUD icon: round shield. Frame 0 ready (bone + amber rim), frame 1 cooling down (dim stone)."""
+    frames = []
+    for ready in (True, False):
+        a = C.new(16, 16)
+        C.disc(a, 8, 8, 5.5, "bone" if ready else "stone")
+        C.ring(a, 8, 8, 4.4, 5.5, "amber" if ready else "stone_dark")
+        C.disc(a, 8, 8, 1.5, "stone" if ready else "stone_dark")
+        C.put(a, 6, 6, "bone" if ready else "stone")
+        frames.append(C.outline(a, color="bg0"))
+    return frames
+
+
+def icon_dash():
+    """HUD icon: forward chevrons with speed lines. Frame 0 ready, frame 1 cooling down."""
+    rows = [
+        "................",
+        "................",
+        "................",
+        "......#...#.....",
+        ".......#...#....",
+        "........#...#...",
+        "##.......#...#..",
+        "..........#...#.",
+        "##.......#...#..",
+        "........#...#...",
+        ".......#...#....",
+        "......#...#.....",
+        "................",
+        "................",
+        "................",
+        "................",
+    ]
+    frames = []
+    for col in ("amber", "stone"):
+        a = C.from_ascii(rows, {"#": col})
+        frames.append(C.outline(a, color="bg0"))
+    return frames
+
+
+def icon_ring():
+    """20x20 cooldown ring, 13 frames: frame k has k/12 of the ring filled clockwise from the top."""
+    frames = []
+    xx, yy = C.grid(20, 20)
+    dx, dy = xx - 10, yy - 10
+    r = np.sqrt(dx * dx + dy * dy)
+    ang = (np.arctan2(dx, -dy)) % (2 * math.pi)
+    band = (r >= 8.0) & (r <= 9.6)
+    for k in range(13):
+        a = C.new(20, 20)
+        a[band] = C.ci("fog")
+        a[band & (ang < k / 12 * 2 * math.pi - 1e-9)] = C.ci("amber")
+        frames.append(a)
+    return frames
+
+
+def parry_fizzle():
+    """Whiffed parry: a dim grey puff, deliberately not warm, so a miss never reads as a hit."""
+    frames = []
+    pts = [(-3, -1), (2, -3), (3, 2), (-2, 3), (0, -4), (-4, 2), (4, -1), (1, 4)]
+    for i in range(4):
+        a = C.new(12, 12)
+        d = 1 + i
+        for k, (px, py) in enumerate(pts):
+            if i == 3 and k % 2:
+                continue
+            x = 6 + int(round(px * d / 3))
+            y = 6 + int(round(py * d / 3)) - (i // 2)
+            C.put(a, x, y, "stone" if i < 2 else "stone_dark")
+        if i == 0:
+            C.put(a, 6, 6, "stone")
+            C.put(a, 5, 6, "fog")
+        frames.append(a)
+    return frames
+
+
 SPRITES = {
     "parry_pulse": parry_pulse, "parry_spark": parry_spark, "dash_trail": dash_trail,
     "hit_flash": hit_flash, "death_burst": death_burst, "ember_particle": ember_particle,
-    "cursor_reticle": cursor_reticle,
+    "cursor_reticle": cursor_reticle, "icon_parry": icon_parry, "icon_dash": icon_dash,
+    "icon_ring": icon_ring, "parry_fizzle": parry_fizzle,
 }
