@@ -12,6 +12,8 @@ const MOVE_KEYS: Record<string, [number, number]> = {
   KeyA: [-1, 0], ArrowLeft: [-1, 0], KeyD: [1, 0], ArrowRight: [1, 0],
 };
 const STICK_DEADZONE = 0.25;
+/** Internal pixels the mouse must travel to take control back from keyboard / gamepad. */
+const MOUSE_TAKEOVER_PX = 12;
 const PAD_A = 0;
 const PAD_B = 1;
 const PAD_RT = 7;
@@ -24,18 +26,34 @@ export class InputCollector {
   private padPrev = { a: false, b: false, rt: false };
   /** Any "confirm" press since the last call to takeConfirm() (used for instant restart). */
   private confirm = false;
+  /** Until the pointer has moved over the canvas its position is meaningless (Phaser starts at 0,0). */
+  private pointerSeen = false;
+  private axisAnchor = { x: 0, y: 0 };
 
   constructor(private readonly scene: Phaser.Scene) {
     scene.input.mouse?.disableContextMenu();
     scene.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       this.mode = 'cursor';
+      this.pointerSeen = true;
       this.confirm = true;
       if (p.button === 2) this.pending |= BTN_DASH;
       else if (p.button === 0) this.pending |= BTN_PARRY;
     });
-    // Moving the mouse hands control back to the cursor unless movement keys are being held.
-    scene.input.on('pointermove', () => {
-      if (this.axis()[0] === 0 && this.axis()[1] === 0) this.mode = 'cursor';
+    // Moving the mouse hands control back to the cursor, but only a deliberate move (not a bump)
+    // and never while movement keys / the stick are held.
+    scene.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      this.pointerSeen = true;
+      const [ax, ay] = this.axis();
+      if (ax !== 0 || ay !== 0) {
+        this.axisAnchor = { x: p.worldX, y: p.worldY };
+        return;
+      }
+      if (this.mode === 'axis') {
+        const dx = p.worldX - this.axisAnchor.x;
+        const dy = p.worldY - this.axisAnchor.y;
+        if (dx * dx + dy * dy < MOUSE_TAKEOVER_PX * MOUSE_TAKEOVER_PX) return;
+      }
+      this.mode = 'cursor';
     });
     const kb = scene.input.keyboard;
     kb?.on('keydown', (e: KeyboardEvent) => {
@@ -96,10 +114,16 @@ export class InputCollector {
   /** One frame for one sim tick. Consumes latched presses. */
   sample(): InputFrame {
     const [ax, ay] = this.axis();
-    if (ax !== 0 || ay !== 0) this.mode = 'axis';
+    if (ax !== 0 || ay !== 0) {
+      if (this.mode !== 'axis') {
+        const ptr = this.scene.input.activePointer;
+        this.axisAnchor = { x: ptr.worldX, y: ptr.worldY };
+      }
+      this.mode = 'axis';
+    }
     const buttons = this.pending;
     this.pending = 0;
-    if (this.mode === 'axis') {
+    if (this.mode === 'axis' || !this.pointerSeen) {
       return sanitizeInput({ cursor: false, mx: Math.round(ax * AXIS_MAX), my: Math.round(ay * AXIS_MAX), buttons });
     }
     const p = this.scene.input.activePointer;

@@ -24,6 +24,7 @@ export function createState(seed: number, difficulty: Difficulty, p: SimParams =
       dirY: 0,
       facing: 1,
       parryStart: NEVER,
+      parryHit: true,
       parryBufferedUntil: -1,
       dashStart: NEVER,
       dashBufferedUntil: -1,
@@ -49,8 +50,11 @@ export function createState(seed: number, difficulty: Difficulty, p: SimParams =
 export const isParryActive = (s: SimState, p: SimParams): boolean => s.tick - s.hero.parryStart < p.parryActive;
 export const isDashing = (s: SimState, p: SimParams): boolean => s.tick - s.hero.dashStart < p.dashTicks;
 export const isInvulnerable = (s: SimState, p: SimParams): boolean => s.tick - s.hero.dashStart < p.dashInvuln;
+/** Cooldown of the current/last parry: short after a hit, long after a whiff. */
+export const parryCooldownOf = (s: SimState, p: SimParams): number =>
+  s.hero.parryHit ? p.parryCooldown : p.parryWhiffCooldown;
 export const parryCooldownLeft = (s: SimState, p: SimParams): number =>
-  Math.max(0, p.parryCooldown - (s.tick - s.hero.parryStart));
+  Math.max(0, parryCooldownOf(s, p) - (s.tick - s.hero.parryStart));
 export const dashCooldownLeft = (s: SimState, p: SimParams): number =>
   Math.max(0, p.dashCooldown - (s.tick - s.hero.dashStart));
 
@@ -163,8 +167,9 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   }
 
   // 3. abilities (a buffered press fires on the first tick its cooldown allows)
-  if (h.parryBufferedUntil >= t && t - h.parryStart >= p.parryCooldown) {
+  if (h.parryBufferedUntil >= t && t - h.parryStart >= parryCooldownOf(s, p)) {
     h.parryStart = t;
+    h.parryHit = false;
     h.parryBufferedUntil = -1;
     s.events.push({ type: 'parry_start' });
   }
@@ -217,6 +222,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
         s.multiplier = Math.min(p.multCap, s.multiplier + p.multStep);
         s.lastParryTick = t;
         s.parryCount++;
+        h.parryHit = true;
       } else keep.push(pr);
     }
     s.projectiles = keep;

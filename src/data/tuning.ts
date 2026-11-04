@@ -9,7 +9,12 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
 export const TUNING = {
   arena: { width: 480, height: 270, heroMargin: 8, despawnMargin: 24 },
   hero: { speed: 150, radius: 3 },
-  parry: { radius: 28, activeSeconds: 0.15, cooldownSeconds: 0.4, bufferSeconds: 0.1 },
+  /**
+   * cooldownSeconds applies after a parry that destroyed something; a whiff (hit nothing) costs
+   * whiffCooldownSeconds. Without the whiff penalty a fixed-rhythm parry in place is unbeatable:
+   * orbs cannot cross the pulse-to-body gap during the short off-window.
+   */
+  parry: { radius: 28, activeSeconds: 0.15, cooldownSeconds: 0.4, whiffCooldownSeconds: 1.0, bufferSeconds: 0.1 },
   dash: { distance: 80, durationSeconds: 0.2, invulnSeconds: 0.2, cooldownSeconds: 3, bufferSeconds: 0.1 },
   /** Multiplier is stored as integer hundredths inside the sim (100 = x1.00). */
   multiplier: { start: 1, step: 0.25, cap: 5, resetSeconds: 5 },

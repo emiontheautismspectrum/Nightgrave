@@ -51,23 +51,35 @@ describe('parry', () => {
     expect(sim.state.projectiles).toHaveLength(1);
   });
 
-  it('respects the cooldown; a press inside the buffer window fires as soon as it is ready', () => {
-    const sim = quiet();
-    const p = sim.params;
-    sim.step(press(BTN_PARRY)); // tick 0
-    const start0 = sim.state.hero.parryStart;
-    // advance to just before the buffer window opens, press there -> too early, dropped
-    while (sim.state.tick < p.parryCooldown - p.parryBuffer - 1) sim.step(idle());
-    sim.step(press(BTN_PARRY));
-    while (sim.state.tick <= p.parryCooldown) sim.step(idle());
-    expect(sim.state.hero.parryStart).toBe(start0);
-    // press inside the buffer window -> fires exactly when the cooldown ends
-    const sim2 = quiet();
-    sim2.step(press(BTN_PARRY));
-    while (sim2.state.tick < p.parryCooldown - p.parryBuffer) sim2.step(idle());
-    sim2.step(press(BTN_PARRY));
-    while (sim2.state.tick <= p.parryCooldown) sim2.step(idle());
-    expect(sim2.state.hero.parryStart).toBe(p.parryCooldown);
+  for (const hit of [true, false]) {
+    it(`respects the ${hit ? 'hit' : 'whiff'} cooldown; a buffered press fires exactly when ready`, () => {
+      const p = quiet().params;
+      const cd = hit ? p.parryCooldown : p.parryWhiffCooldown;
+      const first = (sim: Sim) => {
+        if (hit) orbAt(sim, 5);
+        sim.step(press(BTN_PARRY)); // tick 0
+        expect(sim.state.hero.parryHit).toBe(hit);
+      };
+      // press just before the buffer window opens -> dropped
+      const a = quiet();
+      first(a);
+      while (a.state.tick < cd - p.parryBuffer - 1) a.step(idle());
+      a.step(press(BTN_PARRY));
+      while (a.state.tick <= cd) a.step(idle());
+      expect(a.state.hero.parryStart).toBe(0);
+      // press inside the buffer window -> fires exactly when the cooldown ends
+      const b = quiet();
+      first(b);
+      while (b.state.tick < cd - p.parryBuffer) b.step(idle());
+      b.step(press(BTN_PARRY));
+      while (b.state.tick <= cd) b.step(idle());
+      expect(b.state.hero.parryStart).toBe(cd);
+    });
+  }
+
+  it('a whiff costs more than a hit', () => {
+    const p = quiet().params;
+    expect(p.parryWhiffCooldown).toBeGreaterThan(p.parryCooldown);
   });
 
   it('beats a lethal orb overlapping the hero on the same tick', () => {

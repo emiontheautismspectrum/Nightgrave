@@ -58,3 +58,17 @@ describe('determinism', () => {
     expect(decodeReplay(r).frames.length).toBe(500);
   });
 });
+
+describe('replay validation', () => {
+  it('rejects a replay recorded under different tuning', () => {
+    const r = encodeReplay(1, 'hard', []);
+    expect(() => decodeReplay({ ...r, tuning: 'deadbeef' })).toThrow(/tuning/);
+  });
+  it('rejects malformed replays', () => {
+    const r = encodeReplay(1, 'hard', []);
+    for (const bad of [null, 1, {}, { ...r, v: 2 }, { ...r, seed: -1 }, { ...r, seed: 1.5 }, { ...r, difficulty: '__proto__' },
+      { ...r, runs: [[1e300, 1, 0, 0, 0]] }, { ...r, runs: [[0, 1, 0, 0, 0]] }, { ...r, runs: [[1, 1, 0, 0]] }]) {
+      expect(() => decodeReplay(bad)).toThrow();
+    }
+  });
+});

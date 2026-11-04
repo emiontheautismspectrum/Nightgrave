@@ -111,7 +111,9 @@ export class GameScene extends Phaser.Scene {
     this.input2.pollPad();
     const st = this.sim.state;
     if (!st.alive) {
-      if (this.time.now - this.deadAt > RESTART_LOCKOUT_MS && this.input2.takeConfirm()) this.newRun();
+      // Presses during the lockout are discarded every frame, so a panic click cannot restart later.
+      const confirmed = this.input2.takeConfirm();
+      if (confirmed && this.time.now - this.deadAt > RESTART_LOCKOUT_MS) this.newRun();
       this.draw();
       return;
     }

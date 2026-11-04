@@ -27,6 +27,8 @@ export interface Hero {
   facing: 1 | -1;
   /** Tick on which the current/last parry started (NEVER = long ago). Active while tick - parryStart < parryActive. */
   parryStart: number;
+  /** Whether the current/last parry destroyed at least one projectile (decides its cooldown). */
+  parryHit: boolean;
   /** A parry press is buffered until this tick (inclusive); -1 = none. */
   parryBufferedUntil: number;
   /** Tick on which the current/last dash started (NEVER = long ago). */
