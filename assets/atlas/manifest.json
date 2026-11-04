@@ -1,0 +1,244 @@
+{
+ "sprites": {
+  "knight_idle": {
+   "w": 16,
+   "h": 16,
+   "frames": 4
+  },
+  "knight_run": {
+   "w": 16,
+   "h": 16,
+   "frames": 6
+  },
+  "knight_parry": {
+   "w": 16,
+   "h": 16,
+   "frames": 3
+  },
+  "knight_dash": {
+   "w": 16,
+   "h": 16,
+   "frames": 2
+  },
+  "knight_death": {
+   "w": 16,
+   "h": 16,
+   "frames": 6
+  },
+  "wisp_idle": {
+   "w": 16,
+   "h": 16,
+   "frames": 4
+  },
+  "wisp_pulse": {
+   "w": 16,
+   "h": 16,
+   "frames": 3
+  },
+  "wisp_dash": {
+   "w": 16,
+   "h": 16,
+   "frames": 2
+  },
+  "wisp_death": {
+   "w": 16,
+   "h": 16,
+   "frames": 6
+  },
+  "hero_shadow": {
+   "w": 12,
+   "h": 6,
+   "frames": 1
+  },
+  "orb_small": {
+   "w": 6,
+   "h": 6,
+   "frames": 2
+  },
+  "orb_large": {
+   "w": 10,
+   "h": 10,
+   "frames": 2
+  },
+  "rune_shard": {
+   "w": 8,
+   "h": 8,
+   "frames": 2
+  },
+  "blade": {
+   "w": 16,
+   "h": 16,
+   "frames": 4
+  },
+  "wraith": {
+   "w": 16,
+   "h": 16,
+   "frames": 4
+  },
+  "wraith_fade": {
+   "w": 16,
+   "h": 16,
+   "frames": 4
+  },
+  "parry_pulse": {
+   "w": 24,
+   "h": 24,
+   "frames": 4
+  },
+  "parry_spark": {
+   "w": 4,
+   "h": 4,
+   "frames": 8
+  },
+  "dash_trail": {
+   "w": 16,
+   "h": 16,
+   "frames": 3
+  },
+  "hit_flash": {
+   "w": 16,
+   "h": 16,
+   "frames": 2
+  },
+  "death_burst": {
+   "w": 32,
+   "h": 32,
+   "frames": 6
+  },
+  "ember_particle": {
+   "w": 2,
+   "h": 2,
+   "frames": 4
+  },
+  "cursor_reticle": {
+   "w": 9,
+   "h": 9,
+   "frames": 1
+  },
+  "gravestone_a": {
+   "w": 12,
+   "h": 16,
+   "frames": 1
+  },
+  "gravestone_b": {
+   "w": 14,
+   "h": 18,
+   "frames": 1
+  },
+  "gravestone_c": {
+   "w": 10,
+   "h": 12,
+   "frames": 1
+  },
+  "dead_tree_a": {
+   "w": 32,
+   "h": 40,
+   "frames": 1
+  },
+  "dead_tree_b": {
+   "w": 24,
+   "h": 36,
+   "frames": 1
+  },
+  "rune_glow_0": {
+   "w": 11,
+   "h": 11,
+   "frames": 4
+  },
+  "rune_glow_1": {
+   "w": 11,
+   "h": 11,
+   "frames": 4
+  },
+  "rune_glow_2": {
+   "w": 11,
+   "h": 11,
+   "frames": 4
+  },
+  "rune_glow_3": {
+   "w": 11,
+   "h": 11,
+   "frames": 4
+  },
+  "rune_glow_4": {
+   "w": 11,
+   "h": 11,
+   "frames": 4
+  },
+  "rune_glow_5": {
+   "w": 11,
+   "h": 11,
+   "frames": 4
+  },
+  "rune_glow_6": {
+   "w": 11,
+   "h": 11,
+   "frames": 4
+  },
+  "rune_glow_7": {
+   "w": 11,
+   "h": 11,
+   "frames": 4
+  }
+ },
+ "backgrounds": {
+  "floor": {
+   "w": 480,
+   "h": 270
+  },
+  "ground_ritual": {
+   "w": 240,
+   "h": 240
+  },
+  "bg_forest_far": {
+   "w": 480,
+   "h": 34
+  },
+  "bg_forest_near": {
+   "w": 480,
+   "h": 22
+  },
+  "fog_overlay": {
+   "w": 256,
+   "h": 256
+  },
+  "vignette": {
+   "w": 480,
+   "h": 270
+  }
+ },
+ "runes": [
+  [
+   326,
+   184
+  ],
+  [
+   276,
+   234
+  ],
+  [
+   204,
+   234
+  ],
+  [
+   154,
+   184
+  ],
+  [
+   154,
+   112
+  ],
+  [
+   204,
+   62
+  ],
+  [
+   276,
+   62
+  ],
+  [
+   326,
+   112
+  ]
+ ]
+}
