@@ -3,22 +3,19 @@ import numpy as np
 
 from . import canvas as C
 from . import font
-from .arena import W, H, rune_positions
+from .arena import FOREST_LAYOUT, H, PROP_LAYOUT, RITUAL_CENTER, RITUAL_ORIGIN, W, rune_positions
 
 SCALE = 3
 
 
 def compose_arena(bg, sp):
     a = bg["floor"].copy()
-    C.paste(a, bg["bg_forest_far"], 0, 0)
-    C.paste(a, bg["bg_forest_near"], 0, 14)
-    C.paste(a, bg["ground_ritual"], 120, 28)
-    for g, (rx, ry) in enumerate(rune_positions(240, 148)):
+    for name, x, y in FOREST_LAYOUT:
+        C.paste(a, bg[name], x, y)
+    C.paste(a, bg["ground_ritual"], *RITUAL_ORIGIN)
+    for g, (rx, ry) in enumerate(rune_positions(*RITUAL_CENTER)):
         C.paste(a, sp[f"rune_glow_{g}"][g % 4], rx - 5, ry - 5)
-    props = [("dead_tree_a", 14, 40), ("dead_tree_b", 438, 52), ("dead_tree_b", 60, 200), ("dead_tree_a", 392, 196),
-             ("gravestone_a", 80, 110), ("gravestone_b", 100, 150), ("gravestone_c", 66, 160),
-             ("gravestone_a", 380, 120), ("gravestone_c", 400, 92), ("gravestone_b", 372, 158)]
-    for name, x, y in props:
+    for name, x, y in PROP_LAYOUT:
         C.paste(a, sp[name][0], x, y)
     # fog sits above the ground but below actors so threats stay readable
     fog = bg["fog_overlay"]

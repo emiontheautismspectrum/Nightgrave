@@ -1,0 +1,23 @@
+{
+  "name": "nightgrave",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "assets": "python3 tools/gen_assets.py && python3 tools/validate_palette.py"
+  },
+  "dependencies": {
+    "@fontsource/press-start-2p": "5.2.7",
+    "phaser": "3.90.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "3.2.7"
+  }
+}

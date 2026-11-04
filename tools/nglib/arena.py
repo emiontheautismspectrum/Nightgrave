@@ -267,6 +267,16 @@ def vignette():
     return a
 
 
+# Where the ritual platform and props sit in the 480x270 arena (shared with the game via manifest.json).
+RITUAL_ORIGIN = (120, 28)
+RITUAL_CENTER = (RITUAL_ORIGIN[0] + 120, RITUAL_ORIGIN[1] + 120)
+PROP_LAYOUT = [
+    ("dead_tree_a", 14, 40), ("dead_tree_b", 438, 52), ("dead_tree_b", 60, 200), ("dead_tree_a", 392, 196),
+    ("gravestone_a", 80, 110), ("gravestone_b", 100, 150), ("gravestone_c", 66, 160),
+    ("gravestone_a", 380, 120), ("gravestone_c", 400, 92), ("gravestone_b", 372, 158),
+]
+FOREST_LAYOUT = [("bg_forest_far", 0, 0), ("bg_forest_near", 0, 14)]
+
 PROPS = {
     "gravestone_a": gravestone_a, "gravestone_b": gravestone_b, "gravestone_c": gravestone_c,
     "dead_tree_a": dead_tree_a, "dead_tree_b": dead_tree_b,

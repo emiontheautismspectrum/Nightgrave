@@ -70,7 +70,12 @@ def main():
     manifest = {
         "sprites": {n: {"w": w, "h": h, "frames": k} for n, (w, h, k) in spec.SPRITES.items()},
         "backgrounds": {n: {"w": w, "h": h} for n, (w, h) in spec.BACKGROUNDS.items()},
-        "runes": [list(p) for p in arena.rune_positions(240, 148)],
+        "layout": {
+            "ritualOrigin": list(arena.RITUAL_ORIGIN),
+            "forest": [{"name": n, "x": x, "y": y} for n, x, y in arena.FOREST_LAYOUT],
+            "props": [{"name": n, "x": x, "y": y} for n, x, y in arena.PROP_LAYOUT],
+            "runes": [{"x": x, "y": y} for x, y in arena.rune_positions(*arena.RITUAL_CENTER)],
+        },
     }
     with open(os.path.join(ASSETS, "atlas", "manifest.json"), "w", encoding="utf-8") as fp:
         json.dump(manifest, fp, indent=1)
