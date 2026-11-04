@@ -491,7 +491,8 @@ def ground_pieces():
         a[0:2, :] = C.ci("stone")
         a[2:5, :] = C.ci("stone_dark")
         a[5, :] = C.ci("bg0")
-        a[0, :] = C.ci("moon") if i == 0 else C.ci("stone")
+        a[0, :] = C.ci("stone")
+        a[0, (i * 2)::5] = C.ci("moon")  # sparse cold rim glints along the lit edge
         for _ in range(2 + i):
             x = int(rng.integers(1, 15))
             a[0:4, x] = C.ci("bg0") if rng.random() < 0.5 else a[0:4, x]
@@ -544,8 +545,8 @@ def decals():
         xx, yy = C.grid(16, 8)
         e = ((xx - 8) / 7) ** 2 + ((yy - 4) / 3) ** 2
         a[e <= 1.0] = C.ci("bg0")
-        for x in range(4 + i, 10 + i):
-            C.put(a, x, 3, "moon" if x % 3 else "stone")
+        for x in range(4 + i, 10 + i):  # mostly stone, two cold moon glints (moon is as bright as violet)
+            C.put(a, x, 3, "moon" if x in (6 + i, 8 + i) else "stone")
         C.put(a, 6, 5, "stone_dark")
         out[f"puddle_{i}"] = [a]
     for i in range(3):  # dark soil stains
@@ -555,9 +556,9 @@ def decals():
         a[(e <= 1.0) & C.bayer_mask(14, 10, 0.5)] = C.ci("earth")
         a[e <= 0.5] = C.ci("earth")
         out[f"stain_{i}"] = [a]
-    for i in range(2):  # bone dust: sparse pale specks
+    for i in range(2):  # bone dust: sparse dull specks (no bright bone on the ground: keeps threats readable)
         a = C.new(10, 6)
-        for _ in range(7):
-            C.put(a, int(rng.integers(0, 10)), int(rng.integers(0, 6)), "bone" if rng.random() < 0.3 else "dry")
+        for _ in range(6):
+            C.put(a, int(rng.integers(0, 10)), int(rng.integers(0, 6)), "dry" if rng.random() < 0.4 else "stone_dark")
         out[f"bonedust_{i}"] = [a]
     return out

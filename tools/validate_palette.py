@@ -23,8 +23,13 @@ PAL = np.array(RGB, dtype=np.int32)
 errors = []
 # Previews that intentionally show a render-side alpha blend (not game art): exempt from the palette check.
 PALETTE_EXEMPT = {"translucency_demo.png"}
-# Reserved gameplay colors allowed per sprite group (decor: none; telegraphs/casters: violet only; never red).
-ALLOWED_RESERVED = {"arena": set(), "telegraph": {"violet", "violet_dark"}, "caster": {"violet", "violet_dark"}}
+# Reserved-color policy, independent of the generator's own group labels:
+#   gameplay sprites (tools/nglib/spec.py) may use any palette color;
+#   the explicit exception list below may use violet/violet_dark (telegraphs, eyes, casters) - never red;
+#   EVERY other sprite (decor, landmarks, UI frames, fence runs...) and every arena background: no reserved color.
+EXCEPTION_PREFIXES = ("rune_glow_", "shade_", "stalker_")
+EXCEPTION_NAMES = {"altar_flame_tele", "portal_ignite", "forest_eyes", "portal_smoke", "forest_leaf_ash"}
+EXCEPTION_ALLOWED = {"violet", "violet_dark"}
 
 
 def err(msg):
@@ -94,12 +99,16 @@ def main():
         used = {tuple(c) for c in np.unique(rgb.reshape(-1, 3), axis=0)} if len(rgb) else set()
         return {NAMES[RGB.index(c)] for c in used if c in RGB} & RESERVED
 
-    for n, g in sorted(groups.items()):
+    for n in sorted(expected):
+        if n in spec.SPRITES:
+            continue
         p = os.path.join(ASSETS, "sprites", f"{n}.png")
-        if p in images and g in ALLOWED_RESERVED:
-            bad = reserved_used(images[p]) - ALLOWED_RESERVED[g]
-            if bad:
-                err(f"sprites/{n}.png ({g}) uses reserved gameplay colors {sorted(bad)}")
+        if p not in images:
+            continue
+        allowed = EXCEPTION_ALLOWED if (n in EXCEPTION_NAMES or n.startswith(EXCEPTION_PREFIXES)) else set()
+        bad = reserved_used(images[p]) - allowed
+        if bad:
+            err(f"sprites/{n}.png ({groups.get(n, '?')}) uses reserved gameplay colors {sorted(bad)}")
     for n in spec.BACKGROUNDS:  # every arena background is decor
         p = os.path.join(ASSETS, "backgrounds", f"{n}.png")
         if p in images:

@@ -1,4 +1,4 @@
-"""The fixed 16-color palette from ASSETS_SPEC.md. Single source of truth for the tools."""
+"""The fixed 19-color palette from ASSETS_SPEC.md (16 + 3 decor-only). Single source of truth for the tools."""
 
 PALETTE = [
     ("bg0", "#0b0d12"),

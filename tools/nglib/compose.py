@@ -82,6 +82,20 @@ def in_calm(box):
     return boxes_overlap(box, CZ)
 
 
+def opaque_min_dist(spr, x, y, cx, cy):
+    """Smallest distance from (cx, cy) to any opaque pixel centre of `spr` placed with its top-left at (x, y)."""
+    ys, xs = np.nonzero(spr != C.T)
+    if not len(xs):
+        return 1e9
+    return float(np.sqrt((xs + x + 0.5 - cx) ** 2 + (ys + y + 0.5 - cy) ** 2).min())
+
+
+def must(p, what):
+    if p is None:
+        raise AssertionError(f"required arena piece could not be placed: {what}")
+    return p
+
+
 # ---------------------------------------------------------------- placement
 
 class Placer:
@@ -127,7 +141,16 @@ class Placer:
         return p
 
 
+# decor variant names (everything placeable that is not a landmark, caster, telegraph or fence run)
+DECOR_PREFIXES = ("grave_", "tree_", "bone_pile_", "skull_", "grass_", "bramble_", "stone_", "root_", "leaves_",
+                  "mushroom_", "fence_straight_", "fence_broken_", "fence_leaning_", "fence_corner_", "fence_post_",
+                  "fence_gate_", "gas_lamp_", "candle_", "weapon_", "helmet_", "workbench_", "crate_")
+DECOR_NAMES = set()
+
+
 def place_all(sprites):
+    DECOR_NAMES.clear()
+    DECOR_NAMES.update(n for n in sprites if n.startswith(DECOR_PREFIXES) and not n.startswith("tree_large"))
     from . import landmarks as LM
 
     P = Placer(sprites)
@@ -161,28 +184,66 @@ def place_all(sprites):
     P.overlay(gal, "crow", 20, 2, "crow")
     P.overlay(gal, "crow", 38, 2, "crow")
     wx, wy = lm["hunter_wagon"]
-    P.add("hunter_wagon", wx, wy + 16, kind="landmark", anim="hunter_wagon", force=True)
-    P.add("horse_skeleton", wx + 6, wy + 30, kind="landmark", flip=True)
+    must(P.add("hunter_wagon", wx, wy + 16, kind="landmark", anim="hunter_wagon", force=True), "hunter_wagon")
+    must(P.add("horse_skeleton", wx + L.WAGON_HORSE[0], wy + L.WAGON_HORSE[1], kind="landmark", flip=True, force=True),
+         "horse_skeleton")
     kx, ky = lm["cursed_well"]
     well = P.add("cursed_well", kx, ky + 12, kind="landmark", force=True)
     P.overlay(well, "well_wisp", 6, -9, "well_wisp")
-    P.add("beast_ribcage", kx + 4, ky + 52, kind="landmark", force=True)
+    must(P.add("beast_ribcage", kx - 12, ky + 54, kind="landmark", force=True), "beast_ribcage")
     hx, hy = lm["hunter_cabin"]
     cab = P.add("hunter_cabin", hx, hy + 28, kind="landmark", force=True)
     P.overlay(cab, "cabin_window", LM.CABIN_WINDOW_AT[0], LM.CABIN_WINDOW_AT[1], "cabin_window")
     P.overlay(cab, "cabin_smoke", LM.CABIN_SMOKE_AT[0], LM.CABIN_SMOKE_AT[1], "cabin_smoke", base_bias=-1)
+    # author dead trees right after the landmark bodies: generated decor must yield to author anchors
+    poly_for_trees = poly
+    hollow_pts = [L.hollow_point(s_, p_) for s_, p_ in L.HOLLOWS]
+
+    def hollow_free(box):
+        return all(not box_hits_circle(box, hx_, hy_, L.HOLLOW_CLEAR) for hx_, hy_ in hollow_pts)
+
+    for k, a in enumerate(L.DEAD_TREES_PCT):
+        x, y = L.pct(a)
+        v = f"tree_{k % 4}"
+        best = None
+        for d in range(0, 90, 2):  # smallest nudge (Chebyshev rings) that clears calm zone, props and hollows
+            ring = [(dx, dy) for dx in range(-d, d + 1, 2) for dy in range(-d, d + 1, 2) if max(abs(dx), abs(dy)) == d]
+            for dx, dy in sorted(ring, key=lambda t: (t[0] ** 2 + t[1] ** 2, t)):
+                box = P.box_for(v, x + dx, y + dy)
+                if (box[0] >= AX0 and box[2] <= AX1 and box[3] <= AY1 and box[1] >= AY0 - 20 and P.free(box, pad=1)
+                        and hollow_free(box) and not point_in_poly(x + dx, y + dy, poly_for_trees)):
+                    best = (dx, dy)
+                    break
+            if best:
+                break
+        dx, dy = best
+        if (dx, dy) != (0, 0):
+            notes.append(f"author tree {k} at ({x},{y}) nudged by ({dx:+d},{dy:+d}) to clear the calm zone/props/hollows")
+        must(P.add(v, x + dx, y + dy, flip=bool(k % 2), shade=k % 2, kind="tree"), f"author tree {k}")
     # workshop props in front of the cabin
-    for name, dx, dy in (("workbench_0", 22, 30), ("weapon_rack_0", 40, 22), ("crate_0", 10, 34), ("crate_1", 32, 36),
-                         ("gas_lamp_1", 48, 34)):
-        P.add(name, hx + dx, hy + dy, kind="decor", shade=0)
+    for name, dx, dy in L.WORKSHOP:  # nearest free spot to the nominal position
+        spot = None
+        for d in range(0, 30, 2):
+            for ox, oy in sorted({(ox, oy) for ox in range(-d, d + 1, 2) for oy in range(-d, d + 1, 2)
+                                  if max(abs(ox), abs(oy)) == d}, key=lambda t: (t[0] ** 2 + t[1] ** 2, t)):
+                b_ = P.box_for(name, hx + dx + ox, hy + dy + oy)
+                if b_[3] <= AY1 + 2 and P.free(b_) and hollow_free(b_):
+                    spot = (ox, oy)
+                    break
+            if spot:
+                break
+        must(spot, name)
+        must(P.add(name, hx + dx + spot[0], hy + dy + spot[1], kind="landmark", shade=0), name)
     # field of fallen hunters' weapons around the rune sword
     r = rng(1)
     for name in ("weapon_sword_0", "weapon_spear_0", "weapon_halberd_0", "weapon_sword_1", "weapon_spear_1", "helmet_0"):
         for _ in range(30):
             ang = r.uniform(0, 2 * math.pi)
             d = r.uniform(26, 40)
-            if P.add(name, sx + math.cos(ang) * d, sy + 32 + math.sin(ang) * d * 0.6, flip=bool(r.integers(0, 2)),
-                     shade=int(r.integers(0, 2))):
+            wx_, wy_ = sx + math.cos(ang) * d, sy + 32 + math.sin(ang) * d * 0.6
+            b_ = P.box_for(name, wx_, wy_)
+            if b_[2] <= AX1 and hollow_free(b_) and P.add(name, wx_, wy_, flip=bool(r.integers(0, 2)),
+                                                          shade=int(r.integers(0, 2))):
                 break
 
     # 3. graveyard fence: runs between consecutive anchors, stone posts at anchors, gate on the bottom side
@@ -199,7 +260,8 @@ def place_all(sprites):
             fence_runs += [(a, g0, i), (g1, b, i)]
             gate = P.add("fence_gate_0", mx, my + 2, kind="fence", force=True)
             for side in (-1, 1):
-                P.add("gas_lamp_0", mx + side * (L.GATE_WIDTH / 2 + 7), my + 4, kind="decor", flip=side > 0)
+                must(P.add("gas_lamp_0", mx + side * (L.GATE_WIDTH / 2 + 7), my + 4, kind="landmark", flip=side > 0,
+                           force=True), "gate gas lamp")
             gate_pt = (mx, my)
         else:
             fence_runs.append((a, b, i))
@@ -268,36 +330,77 @@ def place_all(sprites):
             continue
         neigh = [v for (px, py, v) in placed if math.dist((px, py), (x, y)) < 22]
         choices = [v for v in variants if v not in neigh]
-        v = choices[int(r.integers(0, len(choices)))]
+        fresh = [v for v in choices if v not in {q[2] for q in placed}]  # every variant appears in the graveyard
+        v = (fresh or choices)[int(r.integers(0, len(fresh or choices)))]
         box = P.box_for(v, x, y)
-        foot = (box[0], box[3] - 4, box[2], box[3])  # ground footprint (3/4 view)
-        if box_hits_circle(foot, *portal_clear) or boxes_overlap(foot, altar_foot, 1):
+        # literal portal rule: no opaque pixel of other decor within PORTAL_CLEAR_RADIUS of the portal centre
+        if opaque_min_dist(sprites[v][0], box[0], box[1], *altar_c) < L.PORTAL_CLEAR_RADIUS:
+            continue
+        if boxes_overlap((box[0], box[3] - 4, box[2], box[3]), altar_foot, 1):
             continue
         # inside the fence the author's anchors win over the calm zone and the generic spacing rule
         if P.add(v, x, y, flip=bool(r.integers(0, 2)), shade=int(r.integers(0, 2)), kind="grave", force=True):
             placed.append((x, y, v))
+    # second pass: smallest variants squeeze into what is left (still >= 7 px apart, same portal rule)
+    small = ["grave_broken_0", "grave_broken_1", "grave_slab_0", "grave_slab_1", "grave_cross_2", "grave_intact_3"]
+    for x, y in cands:
+        if len(placed) >= target:
+            break
+        if not point_in_poly(x, y, poly) or near_path(x, y) or edge_dist(x, y) < 3:
+            continue
+        if any(math.dist((px, py), (x, y)) < 7 for px, py, _v in placed):
+            continue
+        neigh = [v for (px, py, v) in placed if math.dist((px, py), (x, y)) < 16]
+        choices = [v for v in small if v not in neigh] or small
+        fresh = [v for v in variants if v not in {q[2] for q in placed} and v not in neigh]
+        choices = fresh or choices
+        v = choices[int(r.integers(0, len(choices)))]
+        box = P.box_for(v, x, y)
+        if opaque_min_dist(sprites[v][0], box[0], box[1], *altar_c) < L.PORTAL_CLEAR_RADIUS:
+            continue
+        if boxes_overlap((box[0], box[3] - 4, box[2], box[3]), altar_foot, 1):
+            continue
+        if P.add(v, x, y, flip=bool(r.integers(0, 2)), shade=int(r.integers(0, 2)), kind="grave", force=True):
+            placed.append((x, y, v))
+    if len(placed) < L.GRAVESTONES_FLOOR:
+        raise AssertionError(f"only {len(placed)} gravestones fit (floor {L.GRAVESTONES_FLOOR})")
     if len(placed) < L.GRAVESTONES[0]:
-        notes.append(f"only {len(placed)} gravestones fit (target {target})")
+        notes.append(f"only {len(placed)} gravestones fit inside the fence (spec target {L.GRAVESTONES[0]}-{L.GRAVESTONES[1]})")
     # small graveyard clutter
     for name in ("bone_pile_0", "skull_0", "grass_1", "mushroom_0", "candle_0", "candle_1", "grass_3", "bone_pile_2",
                  "skull_1", "leaves_1", "mushroom_1", "grass_0"):
         for _ in range(40):
             x, y = r.uniform(80, 165), r.uniform(55, 140)
             b_ = P.box_for(name, x, y)
-            if point_in_poly(x, y, poly) and not box_hits_circle((b_[0], b_[3] - 3, b_[2], b_[3]), *portal_clear):
+            if point_in_poly(x, y, poly) and opaque_min_dist(sprites[name][0], b_[0], b_[1], *altar_c) >= L.PORTAL_CLEAR_RADIUS:
                 if P.add(name, x, y, flip=bool(r.integers(0, 2)), shade=int(r.integers(0, 2)), kind="decor"):
                     break
 
     # 5. author's dead trees (authoritative anchors; small variants inside the calm zone)
-    for k, a in enumerate(L.DEAD_TREES_PCT):
-        x, y = L.pct(a)
-        v = f"tree_{k % 4}"
-        box = P.box_for(v, x, y)
-        if in_calm(box):
-            v = "tree_0"
-            notes.append(f"author tree at ({x},{y}) lies in the calm zone: kept (authoritative), smallest variant")
-        P.add(v, x, y, flip=bool(k % 2), shade=k % 2, kind="tree", force=True)
 
+    rv = rng(6)
+    # every decor variant appears at least once (variation): place the unused ones in the open field
+    used = {p["sprite"] for p in P.props}
+    decor_variants = sorted(n for n, f in sprites.items() if len(f) == 2 and not n.startswith(("rune_glow", "altar_chain", "icon"))
+                            and n not in ("forest_eyes",) and n in DECOR_NAMES)
+    grid_pts = [(x, y) for x in range(AX0 + 6, AX1 - 5, 3) for y in range(AY0 + 12, AY1, 3)]
+    edge_only = ("fence_", "gas_lamp_")
+    for name in decor_variants:
+        if name in used or name.startswith("grave_"):
+            continue
+        order = rv.permutation(len(grid_pts))
+        for idx in order:  # exhaustive, seeded order: finds a spot whenever one exists
+            x, y = grid_pts[int(idx)]
+            if point_in_poly(x, y, poly):
+                continue
+            # ruined fence fragments only along the forest edge (near the curb), never mid-field
+            if name.startswith(edge_only) and min(x - AX0, AX1 - x, y - AY0 - 16, AY1 - y) > 20:
+                continue
+            box = P.box_for(name, x, y)
+            if hollow_free(box) and P.add(name, x, y, flip=bool(rv.integers(0, 2)), shade=int(rv.integers(0, 2))):
+                break
+        else:
+            raise AssertionError(f"decor variant {name} could not be placed anywhere")
     # 6. open-field scatter (Poisson-like dart throwing with min spacing)
     r = rng(3)
     field_kinds = (["bone_pile_%d" % i for i in range(4)] + ["skull_0", "skull_1"] + ["grass_%d" % i for i in range(4)] * 2 +
@@ -313,12 +416,12 @@ def place_all(sprites):
         if point_in_poly(x, y, poly) or any(math.dist((x, y), q) < L.FIELD_MIN_SPACING for q in pts):
             continue
         name = field_kinds[int(r.integers(0, len(field_kinds)))]
-        if P.add(name, x, y, flip=bool(r.integers(0, 2)), shade=int(r.integers(0, 2))):
+        if hollow_free(P.box_for(name, x, y)) and P.add(name, x, y, flip=bool(r.integers(0, 2)), shade=int(r.integers(0, 2))):
             pts.append((x, y))
-    # 7. forest edge: brambles, grass, stones hugging the curb (never in hollows)
-    hollow_pts = [L.hollow_point(s, p) for s, p in L.HOLLOWS]
+    # 7. forest edge: brambles, grass, stones and fallen fence fragments hugging the curb (never in hollows)
     n_edge = int((2 * (AX1 - AX0) + 2 * (AY1 - AY0)) * 12 / 10000 * L.FOREST_EDGE_DENSITY)
-    edge_kinds = ["bramble_0", "bramble_1", "bramble_2", "grass_2", "grass_3", "stone_1", "stone_2", "leaves_0", "root_0"]
+    edge_kinds = ["bramble_0", "bramble_1", "bramble_2", "grass_2", "grass_3", "stone_1", "stone_2", "leaves_0", "root_0",
+                  "root_1", "root_2", "fence_broken_0", "fence_leaning_0"]
     for _ in range(n_edge * 20):
         side = int(r.integers(0, 4))
         if side == 0:
@@ -329,13 +432,21 @@ def place_all(sprites):
             x, y = AX0 + r.uniform(3, 10), r.uniform(AY0 + 8, AY1)
         else:
             x, y = AX1 - r.uniform(3, 10), r.uniform(AY0 + 8, AY1)
-        if any(math.dist((x, y), h) < L.HOLLOW_WIDTH for h in hollow_pts) or point_in_poly(x, y, poly):
+        if point_in_poly(x, y, poly):
             continue
         name = edge_kinds[int(r.integers(0, len(edge_kinds)))]
-        P.add(name, x, y, flip=bool(r.integers(0, 2)), shade=int(r.integers(0, 2)))
+        if hollow_free(P.box_for(name, x, y)):
+            P.add(name, x, y, flip=bool(r.integers(0, 2)), shade=int(r.integers(0, 2)))
     # 8. large forest trees just outside the curb corners (in the forest, not in the arena)
-    for k, (x, y) in enumerate(((22, 70), (458, 120), (24, 268), (456, 268))):
-        P.add(f"tree_large_{k % 2}", x, y, flip=bool(k % 2), shade=k // 2, kind="forest", force=True)
+    for k, (x, y) in enumerate(((14, 30), (470, 26), (24, 268), (456, 268))):
+        must(P.add(f"tree_large_{k % 2}", x, y, flip=bool(k % 2), shade=k // 2, kind="forest", force=True), "large tree")
+    # hard checks: hollows clear of every prop box, landmarks clear of the calm zone
+    for p in P.props:
+        if p["kind"] == "eyes":
+            continue
+        box = (p["x"], p["y"], p["x"] + p["w"], p["y"] + p["h"])
+        if not hollow_free(box):
+            raise AssertionError(f"{p['sprite']} at {box[:2]} blocks a stalker hollow")
     # 9. ambient eye pairs in the dark gaps of the forest (violet_dark at rest; exception group)
     r = rng(4)
     eyes = 0
@@ -508,7 +619,8 @@ def ground(sprites, pieces, decals_, props, poly, gate_pt, ritual):
                 if 0 <= x < W and 0 <= y < H:
                     g[y, x] = C.ci("bg0") if abs(k) < L.HOLLOW_WIDTH // 2 - 3 or (x + y) % 2 else C.ci("earth")
     # roots creeping over the curb
-    root_spr = [sprites[f"root_{i}"][0] for i in range(3)]
+    # roots baked into the ground lose their moon rim (a bright rim on the floor would compete with threats)
+    root_spr = [C.recolor(sprites[f"root_{i}"][0], {"moon": "earth"}) for i in range(3)]
     for _ in range(14):
         side = int(r.integers(0, 4))
         spr = root_spr[int(r.integers(0, 3))]

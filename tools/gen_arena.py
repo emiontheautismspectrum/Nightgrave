@@ -64,6 +64,8 @@ def build():
         "fog_overlay": compose.fog_overlay(),
         "vignette": compose.vignette(),
     }
+    for p in placer.props:  # props standing inside the author's fence contour (calm-zone exemption)
+        p["inGraveyard"] = compose.point_in_poly(p["x"] + p["w"] / 2, p["baseY"], poly)
     props = sorted(placer.props, key=lambda p: (p["baseY"], p["x"], p["sprite"]))
     layout = {
         "arena": list(L.ARENA), "heroSpawn": list(L.HERO_SPAWN), "bossBar": list(L.BOSS_BAR), "calmZone": list(L.CALM_ZONE),

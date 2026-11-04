@@ -34,8 +34,11 @@ PORTAL_CLEAR_RADIUS = 28
 DEAD_TREES_PCT = [(22, 76), (40, 83), (43, 21), (38, 61), (71, 80), (76, 47), (68, 19), (60, 68)]
 
 # --- landmarks: centre positions in px (guidelines; validated against the calm zone, portal and hollows)
+# workshop props in front of the cabin and the wagon's horse (offsets from the landmark centre, px)
+WORKSHOP = [("workbench_0", 46, 26), ("weapon_rack_0", 70, 22), ("crate_0", 36, 28), ("crate_1", 84, 28), ("gas_lamp_1", 96, 28)]
+WAGON_HORSE = (44, 12)
 LANDMARKS = {
-    "rune_sword": (380, 104),
+    "rune_sword": (404, 100),  # nudged right of the author's dead tree at (365,127)
     "gallows": (403, 52),
     "hunter_wagon": (56, 160),
     "cursed_well": (400, 182),
@@ -44,15 +47,19 @@ LANDMARKS = {
 
 # --- forest hollows: gaps in the curb where stalkers step in (side, position along that side in px)
 HOLLOWS = [
-    ("top", 262), ("top", 344),
-    ("bottom", 148), ("bottom", 268),
-    ("left", 46), ("left", 118),
-    ("right", 132), ("right", 214),
+    ("top", 262), ("top", 362),
+    ("bottom", 236), ("bottom", 318),
+    ("left", 60), ("left", 120),
+    ("right", 150), ("right", 186),
 ]
+HOLLOW_CLEAR = 15  # no prop box may come closer than this to a hollow point (stalkers need a clear doorway)
 HOLLOW_WIDTH = 18
 
 # --- density per zone (props per 10,000 px^2) and min spacing for Poisson-like scatter
-GRAVESTONES = (24, 30)  # min, max inside the fence
+GRAVESTONES = (24, 30)  # min, max inside the fence (the spec's target)
+# Hard floor: with the altar (56x44) and its literal 28 px clear radius inside the author's fence, only ~11 fit;
+# the build fails below this floor so a regression cannot silently empty the graveyard.
+GRAVESTONES_FLOOR = 10
 FIELD_DENSITY = 5.0
 FIELD_MIN_SPACING = 18
 FOREST_EDGE_DENSITY = 9.0
