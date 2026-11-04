@@ -30,12 +30,37 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   Blade (spinning arcs, UNPARRYABLE, dash/dodge only), Wraith (slow homing shadow, parryable, fades).
 - Visual language: parryable = violet, unparryable = blood red. Must be readable at a glance.
 - Waves every ~15 s. Endless scaling: +5% speed, +6% density per wave, with caps.
+- Casters summon attacks (they are emitters only: not hittable, not lethal, no collision). Their attacks are the
+  threats above, so parry/dash rules and colors are unchanged.
+  - Shade (portal altar): portal ignites violet (telegraph), a hooded shade rises, idles, casts, dissolves into violet smoke.
+  - Stalker (forest hollows): eyes light up (telegraph), a hunched antlered silhouette steps out, idles, casts, melts into the trees.
+  - Timing: rise/emerge anim, then idle a seeded 1.0-3.0 s (`casterIdleMinSeconds/MaxSeconds`), cast wind-up >= 15 ticks,
+    one attack, dissolve ~0.4 s. A cap on simultaneous casters lives in tuning.
+- Fairness (all spawns, incl. casters): >= 0.25 s (15 ticks) from the first visual cue to the first projectile;
+  no projectile spawns within 60 px of the hero unless telegraphed; spawn points come from the seeded PRNG only.
+
+## Arena
+- Playable rectangle 384x216 at x 48..432, y 27..243 of the 480x270 screen (16:9, 80% height). Hero spawns at (240,135)
+  and moves anywhere inside the rectangle (sim clamp). Projectiles are removed 24 px outside it.
+- Border: low mossy, cracked stone curb (~6 px), broken in places. Gaps ("hollows", 2 per side) are where stalkers step in.
+- Decor never blocks anything: no colliders. Moonlit night, moon top-left: cold 1 px `moon` rim light on top-left edges,
+  hard dithered shadows lower-right, a soft "moon pool" of lighter ground at the centre, vignette at the edges.
+- Zones: GRAVEYARD upper-left inside a wrought-iron fence (author anchors in `tools/arena_layout.py`, gate on the bottom
+  side) with ~24-30 gravestones and the PORTAL ALTAR (shade spawn, at (120,78), 28 px clear radius); OPEN FIELD (centre
+  and right, calm, keeps the ritual runes); DARK FOREST outside the curb (3 parallax layers, fog, roots, eyes).
+- Landmarks (final set, one each, small render-only loops): giant rune sword with a field of fallen weapons, gallows tree
+  with cage and crows, hunter's wagon, cursed well with a beast ribcage, hunter's cabin with workshop props.
+  Keep the central 200x120 calm zone and the portal clear. Original designs only (mood references, no copying).
+- Draw order: forest far/mid (parallax) -> ground + curb + decals -> ground telegraphs -> y-sorted props, casters, hero,
+  projectiles, effects -> fog -> vignette -> forest near overhang (max 8 px into the arena) -> UI.
+- Translucency: a prop/overhang drawn in front of the hero, a caster or a projectile (box + 4 px) fades to ~35% alpha in
+  ~100 ms and back when clear. Render-only; the hero keeps its outline.
 
 ## Bosses (MVP: 2)
 - Eye Sentinel: rotating ring and beam patterns, spawns orbs.
 - Lich Mage: teleports, summons wraiths, orb fans.
 - A boss appears every 4th wave, alternating.
-- Boss health is a segmented bar at the bottom of the screen, spanning the arena width (classic boss bar).
+- Boss health is a segmented bar below the arena (x 48..432, y 250..262), spanning the arena width (classic boss bar).
 - Boss HP = number of attacks it will make: 12 segments by default (tunable range 10-15, can differ per boss).
   Each boss attack (one pattern cast, a thrust or a strike) removes exactly 1 segment.
 - The player survives each attack by dodging, dashing or parrying (reflecting). Both ways are valid.
