@@ -168,12 +168,16 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       const dy = pr.y - h.y;
       const r = p.parryRadius + pr.radius;
       if (pr.parryable && !isFading(s, pr) && dx * dx + dy * dy <= r * r) {
-        const points = p.parryBase * s.multiplier; // hundredths of a point
+        // first kill of this pulse: full points, then the multiplier steps (once per pulse)
+        const first = !h.parryHit;
+        const points = (first ? p.parryBase : p.extraKillPoints) * s.multiplier; // hundredths of a point
         s.parryScoreHundredths += points;
         s.events.push({ type: 'parry_hit', id: pr.id, x: pr.x, y: pr.y, points: points / 100, multiplier: s.multiplier / 100 });
-        s.multiplier = Math.min(p.multCap, s.multiplier + p.multStep);
+        if (first) {
+          s.multiplier = Math.min(p.multCap, s.multiplier + p.multStep);
+          s.parryCount++;
+        }
         s.lastParryTick = t;
-        s.parryCount++;
         h.parryHit = true;
       } else keep.push(pr);
     }

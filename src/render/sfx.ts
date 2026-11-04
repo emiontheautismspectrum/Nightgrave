@@ -18,7 +18,11 @@ let ctx: AudioContext | null = null;
 export function playCue(cue: Cue): void {
   try {
     ctx ??= new AudioContext();
-    if (ctx.state === 'suspended') void ctx.resume();
+    if (ctx.state !== 'running') {
+      // no user activation yet (e.g. gamepad only): try to resume, but drop this cue instead of queueing
+      void ctx.resume();
+      return;
+    }
     const c = CUES[cue];
     const t = ctx.currentTime;
     const osc = ctx.createOscillator();

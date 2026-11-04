@@ -25,12 +25,15 @@ async function boot(): Promise<void> {
   const run: RunConfig = {
     difficulty,
     hero: pick<HeroKind>(q.get('hero'), ['knight', 'wisp'], 'knight'),
-    // Hard: the same daily seed for everyone (UTC date), re-read at every restart so midnight rolls over.
-    makeSeed:
+    // Hard: the same daily seed for everyone. The UTC date is read ONCE per run and both the seed and
+    // the HUD label come from it, so they can never disagree at midnight.
+    makeRun:
       difficulty === 'hard'
-        ? () => dailySeed(utcDateKey(new Date()))
-        : () => crypto.getRandomValues(new Uint32Array(1))[0] ?? 1,
-    dateKey: difficulty === 'hard' ? () => utcDateKey(new Date()) : undefined,
+        ? () => {
+            const key = utcDateKey(new Date());
+            return { seed: dailySeed(key), label: `HARD - DAILY ${key}` };
+          }
+        : () => ({ seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 1, label: '' }),
   };
   const game = new Phaser.Game({
     type: Phaser.AUTO,

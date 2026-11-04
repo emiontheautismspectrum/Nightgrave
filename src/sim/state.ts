@@ -92,6 +92,7 @@ export interface SimState {
   multiplier: number;
   /** Tick of the last successful parry (-1 = never). */
   lastParryTick: number;
+  /** Successful parry pulses (a pulse that destroyed at least one projectile). */
   parryCount: number;
   /** Current wave (-1 before the first one starts). */
   wave: number;

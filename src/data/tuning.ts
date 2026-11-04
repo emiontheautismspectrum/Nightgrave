@@ -23,7 +23,12 @@ export const TUNING = {
   dash: { distance: 80, durationSeconds: 0.2, invulnSeconds: 0.2, cooldownSeconds: 3, bufferSeconds: 0.1 },
   /** Multiplier is stored as integer hundredths inside the sim (100 = x1.00). */
   multiplier: { start: 1, step: 0.25, cap: 5, resetSeconds: 5 },
-  score: { survivalPerSecond: 10, parryBase: 25 },
+  /**
+   * A successful parry = one pulse that destroyed something. The first projectile of a pulse scores
+   * parryBase x multiplier; every extra one in the same pulse scores extraKillPoints x multiplier.
+   * The multiplier steps once per successful pulse (a 16-shard ring is not 16 parries).
+   */
+  score: { survivalPerSecond: 10, parryBase: 25, extraKillPoints: 5 },
   orbs: {
     small: { radius: 2.5, speed: 75 },
     large: { radius: 4.5, speed: 55 },

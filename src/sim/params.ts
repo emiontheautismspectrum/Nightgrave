@@ -26,6 +26,7 @@ export interface SimParams {
   multReset: number; // ticks
   survivalPerSecond: number;
   parryBase: number;
+  extraKillPoints: number;
   smallRadius: number;
   smallSpeed: number; // px per tick, difficulty applied (wave multiplier applied at spawn)
   largeRadius: number;
@@ -92,6 +93,7 @@ export function makeParams(difficulty: Difficulty): SimParams {
     multReset: ticks(T.multiplier.resetSeconds),
     survivalPerSecond: T.score.survivalPerSecond,
     parryBase: T.score.parryBase,
+    extraKillPoints: T.score.extraKillPoints,
     smallRadius: T.orbs.small.radius,
     smallSpeed: (T.orbs.small.speed * d.speed) / TICK_RATE,
     largeRadius: T.orbs.large.radius,

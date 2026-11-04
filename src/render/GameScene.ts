@@ -23,10 +23,11 @@ export type HeroKind = 'knight' | 'wisp';
 export interface RunConfig {
   difficulty: Difficulty;
   hero: HeroKind;
-  /** Seed source lives on the render side (Math.random/crypto is fine here, never in src/sim). */
-  makeSeed: () => number;
-  /** UTC date of the daily seed (Hard only), shown in the HUD; read at each restart. */
-  dateKey?: () => string;
+  /**
+   * Called once per run. The seed source lives on the render side (crypto/clock are fine here, never in
+   * src/sim). `label` is shown in the HUD (Hard: the UTC date the daily seed was derived from).
+   */
+  makeRun: () => { seed: number; label: string };
 }
 
 export class GameScene extends Phaser.Scene {
@@ -44,6 +45,7 @@ export class GameScene extends Phaser.Scene {
   private reticle!: Phaser.GameObjects.Image;
   private fog!: Phaser.GameObjects.TileSprite;
   private runes: Phaser.GameObjects.Sprite[] = [];
+  private runeOverlay: Phaser.GameObjects.Sprite[] = [];
   private parallax: { sprite: Phaser.GameObjects.TileSprite; k: number }[] = [];
   private actors!: Phaser.GameObjects.Layer;
   private orbs = new Map<number, Phaser.GameObjects.Sprite>();
@@ -80,6 +82,7 @@ export class GameScene extends Phaser.Scene {
     this.hero = this.add.sprite(0, 0, ATLAS, frame(`${this.cfg.hero}_idle`));
     this.pulse = this.add.sprite(0, 0, ATLAS, frame('parry_pulse')).setVisible(false);
     this.actors.add([this.shadow, this.hero, this.pulse]);
+    this.buildTelegraphOverlay();
     this.reticle = this.add.image(0, 0, ATLAS, frame('cursor_reticle'));
     this.buildHud();
     this.input2 = new InputCollector(this);
@@ -100,6 +103,13 @@ export class GameScene extends Phaser.Scene {
     this.add.image(L.ritualOrigin[0] ?? 0, L.ritualOrigin[1] ?? 0, bgKey('ground_ritual')).setOrigin(0);
     // Runes rest on frame 0 (dim carved stone); they only glow as a rune-burst telegraph.
     this.runes = L.runes.map((r, g) => this.add.sprite(r.x, r.y, ATLAS, frame(`rune_glow_${g}` as SpriteName)));
+  }
+
+  /** Telegraph copies drawn ABOVE the actors, so a hero standing on a rune still sees it light up. */
+  private buildTelegraphOverlay(): void {
+    this.runeOverlay = MANIFEST.layout.runes.map((r, g) =>
+      this.add.sprite(r.x, r.y, ATLAS, frame(`rune_glow_${g}` as SpriteName)).setAlpha(0.65).setVisible(false),
+    );
   }
 
   private buildHud(): void {
@@ -124,10 +134,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private newRun(): void {
-    this.sim = new Sim(this.cfg.makeSeed(), this.cfg.difficulty);
-    this.hudDaily.setText(this.cfg.dateKey ? `HARD - DAILY ${this.cfg.dateKey()}` : '');
+    const run = this.cfg.makeRun();
+    this.sim = new Sim(run.seed, this.cfg.difficulty);
+    this.hudDaily.setText(run.label);
     for (const s of this.orbs.values()) s.destroy();
     this.orbs.clear();
+    this.tweens.killTweensOf(this.banner);
     this.banner.setAlpha(0);
     this.acc = 0;
     this.input2.clear();
@@ -270,6 +282,11 @@ export class GameScene extends Phaser.Scene {
     const glow = new Map<number, number>();
     for (const t of st.telegraphs) glow.set(t.rune, 1 + Math.min(2, Math.floor(((st.tick - t.start) / (t.fire - t.start)) * 3)));
     this.runes.forEach((r, g) => r.setFrame(frame(`rune_glow_${g}` as SpriteName, glow.get(g) ?? 0)));
+    this.runeOverlay.forEach((r, g) => {
+      const f = glow.get(g);
+      r.setVisible(f !== undefined);
+      if (f !== undefined) r.setFrame(frame(`rune_glow_${g}` as SpriteName, f));
+    });
     for (const [id, s] of this.orbs) {
       if (!seen.has(id)) {
         this.orbs.delete(id);

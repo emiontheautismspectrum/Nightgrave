@@ -27,7 +27,18 @@ function collect(sim: Sim, player: (sim: Sim, t: number) => InputFrame, ticks: n
 describe('fairness: nothing appears near the hero without a >= 0.25 s telegraph', () => {
   const players: [string, (sim: Sim, t: number) => InputFrame][] = [
     ['bot', (sim) => botInput(sim)],
-    ['rim hugger', (sim, t) => ({ cursor: true, mx: t % 600 < 300 ? 240 : 240, my: t % 600 < 300 ? 0 : 400, buttons: 0 })],
+    // walks the rim through top, right, bottom, left (targets outside the circle are clamped onto it)
+    ['rim hugger', (_s, t) => {
+      const pts = [[240, 0], [480, 150], [240, 300], [0, 150]] as const;
+      const [mx, my] = pts[Math.floor(t / 150) % 4]!;
+      return { cursor: true, mx, my, buttons: 0 };
+    }],
+    // runs onto whichever rune is lit (or the nearest one) and stands on it
+    ['rune camper', (sim, t) => {
+      const lit = sim.state.telegraphs[0];
+      const r = lit ? RUNES[lit.rune]! : RUNES[Math.floor(t / 240) % RUNES.length]!;
+      return { cursor: true, mx: r.x, my: r.y, buttons: 0 };
+    }],
     ['scripted', (() => { const f = mulberryInputs(9, 60 * 120); return (_s: Sim, t: number) => f[t] ?? idle(); })()],
   ];
   for (const d of DIFFS) {
@@ -181,6 +192,21 @@ describe('waves', () => {
     expect(m('hard').smallSpeed / base.smallSpeed).toBeCloseTo(1.25, 12);
     expect(m('easy').density).toBe(0.7);
     expect(m('hard').density).toBe(1.4);
+  });
+});
+
+describe('multi-kill scoring', () => {
+  it('a pulse that destroys a whole ring is ONE successful parry: one multiplier step, reduced extra points', () => {
+    const sim = new Sim(1, 'medium', { spawner: false });
+    const p = sim.params;
+    const h = sim.state.hero;
+    for (let k = 0; k < 16; k++) spawnProjectile(sim.state, p, 'rune_shard', h.x + 3, h.y, 0, 0);
+    sim.step({ ...idle(), buttons: BTN_PARRY });
+    expect(sim.state.projectiles).toHaveLength(0);
+    expect(sim.state.parryCount).toBe(1);
+    expect(sim.state.multiplier).toBe(p.multStart + p.multStep);
+    // extras in the same pulse score at the already-stepped multiplier
+    expect(sim.state.parryScoreHundredths).toBe(p.parryBase * p.multStart + 15 * p.extraKillPoints * (p.multStart + p.multStep));
   });
 });
 
