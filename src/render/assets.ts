@@ -7,6 +7,7 @@ import manifest from '../../assets/atlas/manifest.json';
 export const ATLAS = 'ng';
 export const MANIFEST = manifest;
 export type SpriteName = keyof typeof manifest.sprites;
+export type BgName = keyof typeof manifest.backgrounds;
 
 const backgroundUrls = import.meta.glob('../../assets/backgrounds/*.png', {
   eager: true,

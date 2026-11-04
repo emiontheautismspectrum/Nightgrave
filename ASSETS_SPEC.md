@@ -40,8 +40,9 @@ Pickups
 - pickup_slow_time 12x12 4f (teal hourglass), pickup_double_score 12x12 4f (gold "x2" rune)
 
 Arena (480x270 composed from layers)
-- bg_forest_far, bg_forest_near (parallax, tileable horizontally)
-- ground_ritual 240x240: circular stone platform with 8 runes, rune glow 4f animated
+- bg_forest_far, bg_forest_mid, bg_forest_near (3 parallax layers of tree silhouettes with fog bands, tileable horizontally)
+- ground_ritual 240x240: circular stone platform with 8 runes. This circle is the play area; props stay outside it.
+- rune_glow_0..7 11x11 4f: frame 0 = dim carved stone at rest (never violet); frames 1-3 = violet telegraph before a rune burst
 - gravestone_a/b/c, crypt_door, dead_tree_a/b, iron_fence_segment, bones_decals
 - fog_overlay 256x256 seamless (alpha via dithering), vignette 480x270
 
@@ -54,4 +55,5 @@ UI
 1. `tools/gen_assets.py` (+ helper modules) that regenerates everything from scratch in one command.
 2. `tools/validate_palette.py` that fails if any pixel is off-palette or any sprite breaks size rules.
 3. `assets/preview/style_board.png`: one image showing all sprites on the arena at 3x scale for approval.
+   `assets/preview/stress_board.png`: hero + ~80 projectiles of all types over the arena at 3x (readability check).
 4. Atlas + JSON consumed by the game through a single `src/render/assets.ts` loader.

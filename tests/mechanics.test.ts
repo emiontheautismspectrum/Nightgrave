@@ -153,11 +153,12 @@ describe('dash', () => {
     expect(sim.state.hero.dashStart).toBe(p.dashCooldown);
   });
 
-  it('stays inside the arena when dashing into a wall', () => {
+  it('stays inside the play circle when dashing into its edge', () => {
     const sim = quiet();
     const p = sim.params;
     for (let i = 0; i < 200; i++) sim.step({ cursor: false, mx: -100, my: 0, buttons: i === 150 ? BTN_DASH : 0 });
-    expect(sim.state.hero.x).toBe(p.heroMargin);
+    expect(sim.state.hero.x).toBeCloseTo(p.cx - p.playRadius, 9);
+    expect(sim.state.hero.y).toBeCloseTo(p.cy, 9);
   });
 });
 
@@ -217,10 +218,7 @@ describe('input handling', () => {
     for (let i = 0; i < 300; i++) sim.step(junk[i % junk.length] as InputFrame);
     const h = sim.state.hero;
     for (const v of [h.x, h.y, h.dirX, h.dirY]) expect(Number.isFinite(v)).toBe(true);
-    expect(h.x).toBeGreaterThanOrEqual(p.heroMargin);
-    expect(h.x).toBeLessThanOrEqual(p.arenaW - p.heroMargin);
-    expect(h.y).toBeGreaterThanOrEqual(p.heroMargin);
-    expect(h.y).toBeLessThanOrEqual(p.arenaH - p.heroMargin);
+    expect(Math.sqrt((h.x - p.cx) ** 2 + (h.y - p.cy) ** 2)).toBeLessThanOrEqual(p.playRadius + 1e-9);
   });
 
   it('diagonal axis input is normalised (no faster diagonal movement)', () => {

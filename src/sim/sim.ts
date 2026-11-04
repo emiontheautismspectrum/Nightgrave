@@ -1,5 +1,5 @@
 import { TICK_RATE, type Difficulty } from '../data/tuning';
-import { clamp, rotate } from './dmath';
+import { dcos, dsin, PI, rotate } from './dmath';
 import { AXIS_MAX, BTN_DASH, BTN_PARRY, sanitizeInput, type InputFrame } from './input';
 import { makeParams, type SimParams } from './params';
 import { nextFloat, range, toSeed } from './rng';
@@ -18,8 +18,8 @@ export function createState(seed: number, difficulty: Difficulty, p: SimParams =
     tick: 0,
     rng: s,
     hero: {
-      x: p.arenaW / 2,
-      y: p.arenaH / 2,
+      x: p.cx,
+      y: p.cy,
       dirX: 1,
       dirY: 0,
       facing: 1,
@@ -63,6 +63,16 @@ export function score(s: SimState, p: SimParams): number {
   return Math.floor((s.survivalTicks * p.survivalPerSecond) / TICK_RATE) + Math.floor(s.parryScoreHundredths / 100);
 }
 
+/** Project a point onto the disc (cx, cy, r) if it lies outside it. */
+export function clampToCircle(x: number, y: number, cx: number, cy: number, r: number): [number, number] {
+  const dx = x - cx;
+  const dy = y - cy;
+  const d2 = dx * dx + dy * dy;
+  if (d2 <= r * r) return [x, y];
+  const d = Math.sqrt(d2);
+  return [cx + (dx / d) * r, cy + (dy / d) * r];
+}
+
 // ------------------------------------------------------------------ spawning
 
 export function spawnProjectile(
@@ -91,15 +101,9 @@ export function spawnProjectile(
 }
 
 function spawnAimedOrb(s: SimState, p: SimParams): void {
-  const side = Math.floor(nextFloat(s) * 4);
-  const along = nextFloat(s);
-  const off = 10;
-  let x: number;
-  let y: number;
-  if (side === 0) [x, y] = [along * p.arenaW, -off];
-  else if (side === 1) [x, y] = [p.arenaW + off, along * p.arenaH];
-  else if (side === 2) [x, y] = [along * p.arenaW, p.arenaH + off];
-  else [x, y] = [-off, along * p.arenaH];
+  const ang = nextFloat(s) * 2 * PI;
+  const x = p.cx + dcos(ang) * p.spawnRadius;
+  const y = p.cy + dsin(ang) * p.spawnRadius;
   const large = nextFloat(s) < p.largeChance;
   const err = range(s, -p.spread, p.spread);
   let dx = s.hero.x - x;
@@ -145,8 +149,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   let iy = 0;
   let want = 0;
   if (input.cursor) {
-    const tx = clamp(input.mx, p.heroMargin, p.arenaW - p.heroMargin);
-    const ty = clamp(input.my, p.heroMargin, p.arenaH - p.heroMargin);
+    const [tx, ty] = clampToCircle(input.mx, input.my, p.cx, p.cy, p.playRadius);
     const dx = tx - h.x;
     const dy = ty - h.y;
     const d = Math.sqrt(dx * dx + dy * dy);
@@ -195,8 +198,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       h.dirY = iy;
     }
   }
-  h.x = clamp(h.x + mx, p.heroMargin, p.arenaW - p.heroMargin);
-  h.y = clamp(h.y + my, p.heroMargin, p.arenaH - p.heroMargin);
+  [h.x, h.y] = clampToCircle(h.x + mx, h.y + my, p.cx, p.cy, p.playRadius);
   if (mx > 0.01) h.facing = 1;
   else if (mx < -0.01) h.facing = -1;
 
@@ -244,8 +246,8 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   }
 
   // 8. despawn off-arena projectiles
-  const m = p.despawnMargin;
-  s.projectiles = s.projectiles.filter((pr) => pr.x > -m && pr.x < p.arenaW + m && pr.y > -m && pr.y < p.arenaH + m);
+  const dr2 = p.despawnRadius * p.despawnRadius;
+  s.projectiles = s.projectiles.filter((pr) => (pr.x - p.cx) * (pr.x - p.cx) + (pr.y - p.cy) * (pr.y - p.cy) < dr2);
 
   if (s.alive) s.survivalTicks++;
   s.tick++;

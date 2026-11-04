@@ -50,6 +50,21 @@ def check_pixels(path, px):
         err(f"{os.path.relpath(path, ROOT)}: {int(off.sum())} off-palette px, first #{key[y, x]:06x} at ({x},{y})")
 
 
+def check_board(images, bp):
+    """A preview board must exist and be an exact 3x nearest-neighbour upscale."""
+    name = os.path.relpath(bp, ASSETS)
+    if bp not in images:
+        err(f"missing {name}")
+        return
+    b = images[bp]
+    if b.shape[0] % 3 or b.shape[1] % 3:
+        err(f"{name} size is not a multiple of 3")
+        return
+    base = b[::3, ::3]
+    if not np.array_equal(np.repeat(np.repeat(base, 3, 0), 3, 1), b):
+        err(f"{name} is not a clean 3x nearest-neighbour upscale")
+
+
 def main():
     pngs = sorted(glob.glob(os.path.join(ASSETS, "**", "*.png"), recursive=True))
     if not pngs:
@@ -103,17 +118,8 @@ def main():
         err("missing atlas/nightgrave.png or atlas/nightgrave.json")
 
     # style board: exact 3x nearest-neighbour upscale
-    bp = os.path.join(ASSETS, "preview", "style_board.png")
-    if bp not in images:
-        err("missing preview/style_board.png")
-    else:
-        b = images[bp]
-        if b.shape[0] % 3 or b.shape[1] % 3:
-            err("style_board.png size is not a multiple of 3")
-        else:
-            base = b[::3, ::3]
-            if not np.array_equal(np.repeat(np.repeat(base, 3, 0), 3, 1), b):
-                err("style_board.png is not a clean 3x nearest-neighbour upscale")
+    for board in ("style_board", "stress_board"):
+        check_board(images, os.path.join(ASSETS, "preview", f"{board}.png"))
 
     if errors:
         print(f"PALETTE/SIZE VALIDATION FAILED ({len(errors)} problems):")

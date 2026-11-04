@@ -20,7 +20,13 @@ def _orb(size, r, hi):
 
 
 def orb_small():
-    return [_orb(6, 2.1, [(2, 2)]), _orb(6, 2.1, [(2, 2), (3, 2)])]
+    """4x4 violet body, no inner shade (too small), bright 1 px bone core that shimmers between frames."""
+    def f(cx):
+        a = C.new(6, 6)
+        C.disc(a, 3, 3, 2.1, "violet")
+        C.put(a, cx, 2, "bone")
+        return C.outline(a)
+    return [f(2), f(3)]
 
 
 def orb_large():
@@ -39,8 +45,7 @@ def rune_shard():
         else:
             m = (np.abs(xx - 4) <= 2.0) & (np.abs(yy - 4) <= 2.0)
         a[m] = C.ci("violet")
-        C.put(a, 3, 3, "bone")
-        C.put(a, 4, 4, "bone")
+        C.put(a, 3, 3, "bone")  # bright 1 px core
         frames.append(C.outline(a))
     return frames
 

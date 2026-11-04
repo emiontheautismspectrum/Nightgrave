@@ -62,6 +62,9 @@ def main():
         backgrounds[name] = a
         save(a, os.path.join(ASSETS, "backgrounds", f"{name}.png"))
 
+    bad = arena.check_props_clear(sprites)
+    assert not bad, "props intrude into the play circle: " + "; ".join(bad)
+
     atlas, atlas_json = pack(sprites)
     save(atlas, os.path.join(ASSETS, "atlas", "nightgrave.png"))
     with open(os.path.join(ASSETS, "atlas", "nightgrave.json"), "w", encoding="utf-8") as fp:
@@ -72,7 +75,9 @@ def main():
         "backgrounds": {n: {"w": w, "h": h} for n, (w, h) in spec.BACKGROUNDS.items()},
         "layout": {
             "ritualOrigin": list(arena.RITUAL_ORIGIN),
-            "forest": [{"name": n, "x": x, "y": y} for n, x, y in arena.FOREST_LAYOUT],
+            "ritualCenter": list(arena.RITUAL_CENTER),
+            "platformRadius": arena.PLATFORM_RADIUS,
+            "forest": [{"name": n, "x": x, "y": y, "parallax": k} for n, x, y, k in arena.FOREST_LAYOUT],
             "props": [{"name": n, "x": x, "y": y} for n, x, y in arena.PROP_LAYOUT],
             "runes": [{"x": x, "y": y} for x, y in arena.rune_positions(*arena.RITUAL_CENTER)],
         },
@@ -83,6 +88,8 @@ def main():
 
     sb = board.style_board(backgrounds, sprites, list(spec.SPRITES), read_title().upper())
     save(sb, os.path.join(ASSETS, "preview", "style_board.png"))
+    stress = board.stress_board(backgrounds, sprites, read_title().upper())
+    save(stress, os.path.join(ASSETS, "preview", "stress_board.png"))
     print(f"generated {len(sprites)} sprites, {len(backgrounds)} backgrounds, atlas {atlas.shape[1]}x{atlas.shape[0]}")
 
 

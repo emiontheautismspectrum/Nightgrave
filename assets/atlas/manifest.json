@@ -116,18 +116,28 @@
    "frames": 1
   },
   "gravestone_a": {
-   "w": 12,
-   "h": 16,
+   "w": 16,
+   "h": 22,
    "frames": 1
   },
   "gravestone_b": {
+   "w": 18,
+   "h": 26,
+   "frames": 1
+  },
+  "gravestone_c": {
    "w": 14,
    "h": 18,
    "frames": 1
   },
-  "gravestone_c": {
-   "w": 10,
-   "h": 12,
+  "iron_fence_segment": {
+   "w": 32,
+   "h": 16,
+   "frames": 1
+  },
+  "crypt_door": {
+   "w": 40,
+   "h": 30,
    "frames": 1
   },
   "dead_tree_a": {
@@ -192,11 +202,15 @@
   },
   "bg_forest_far": {
    "w": 480,
-   "h": 34
+   "h": 64
+  },
+  "bg_forest_mid": {
+   "w": 480,
+   "h": 56
   },
   "bg_forest_near": {
    "w": 480,
-   "h": 22
+   "h": 44
   },
   "fog_overlay": {
    "w": 256,
@@ -210,104 +224,142 @@
  "layout": {
   "ritualOrigin": [
    120,
-   28
+   30
   ],
+  "ritualCenter": [
+   240,
+   150
+  ],
+  "platformRadius": 116,
   "forest": [
    {
     "name": "bg_forest_far",
     "x": 0,
-    "y": 0
+    "y": 0,
+    "parallax": 0.02
+   },
+   {
+    "name": "bg_forest_mid",
+    "x": 0,
+    "y": 8,
+    "parallax": 0.05
    },
    {
     "name": "bg_forest_near",
     "x": 0,
-    "y": 14
+    "y": 18,
+    "parallax": 0.1
    }
   ],
   "props": [
    {
+    "name": "crypt_door",
+    "x": 220,
+    "y": 0
+   },
+   {
+    "name": "iron_fence_segment",
+    "x": 176,
+    "y": 13
+   },
+   {
+    "name": "iron_fence_segment",
+    "x": 264,
+    "y": 13
+   },
+   {
+    "name": "iron_fence_segment",
+    "x": 6,
+    "y": 238
+   },
+   {
+    "name": "iron_fence_segment",
+    "x": 442,
+    "y": 238
+   },
+   {
     "name": "dead_tree_a",
-    "x": 14,
-    "y": 40
+    "x": 10,
+    "y": 58
    },
    {
     "name": "dead_tree_b",
-    "x": 438,
-    "y": 52
+    "x": 446,
+    "y": 66
    },
    {
     "name": "dead_tree_b",
-    "x": 60,
-    "y": 200
+    "x": 66,
+    "y": 196
    },
    {
     "name": "dead_tree_a",
     "x": 392,
-    "y": 196
+    "y": 190
    },
    {
     "name": "gravestone_a",
-    "x": 80,
-    "y": 110
+    "x": 78,
+    "y": 98
    },
    {
     "name": "gravestone_b",
-    "x": 100,
-    "y": 150
+    "x": 92,
+    "y": 140
    },
    {
     "name": "gravestone_c",
-    "x": 66,
-    "y": 160
+    "x": 50,
+    "y": 168
    },
    {
     "name": "gravestone_a",
-    "x": 380,
-    "y": 120
+    "x": 384,
+    "y": 126
    },
    {
     "name": "gravestone_c",
-    "x": 400,
-    "y": 92
+    "x": 404,
+    "y": 96
    },
    {
     "name": "gravestone_b",
     "x": 372,
-    "y": 158
+    "y": 166
    }
   ],
   "runes": [
    {
     "x": 326,
-    "y": 184
+    "y": 186
    },
    {
     "x": 276,
-    "y": 234
+    "y": 236
    },
    {
     "x": 204,
-    "y": 234
+    "y": 236
    },
    {
     "x": 154,
-    "y": 184
+    "y": 186
    },
    {
     "x": 154,
-    "y": 112
+    "y": 114
    },
    {
     "x": 204,
-    "y": 62
+    "y": 64
    },
    {
     "x": 276,
-    "y": 62
+    "y": 64
    },
    {
     "x": 326,
-    "y": 112
+    "y": 114
    }
   ]
  }

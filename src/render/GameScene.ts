@@ -8,7 +8,7 @@ import { TICK_RATE, type Difficulty } from '../data/tuning';
 import { encodeReplay, type Replay } from '../sim/replay';
 import { dashCooldownLeft, isDashing, isParryActive, Sim } from '../sim/sim';
 import type { SimEvent } from '../sim/state';
-import { ATLAS, MANIFEST, bgKey, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
+import { ATLAS, MANIFEST, bgKey, type BgName, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
 import { InputCollector } from './input';
 
 const STEP_MS = 1000 / TICK_RATE;
@@ -40,6 +40,7 @@ export class GameScene extends Phaser.Scene {
   private reticle!: Phaser.GameObjects.Image;
   private fog!: Phaser.GameObjects.TileSprite;
   private runes: Phaser.GameObjects.Sprite[] = [];
+  private parallax: { sprite: Phaser.GameObjects.TileSprite; k: number }[] = [];
   private actors!: Phaser.GameObjects.Layer;
   private orbs = new Map<number, Phaser.GameObjects.Sprite>();
   private hudScore!: Phaser.GameObjects.Text;
@@ -78,12 +79,17 @@ export class GameScene extends Phaser.Scene {
   private buildArena(): void {
     const L = MANIFEST.layout;
     this.add.image(0, 0, bgKey('floor')).setOrigin(0);
-    for (const f of L.forest) this.add.image(f.x, f.y, bgKey(f.name)).setOrigin(0);
-    this.add.image(L.ritualOrigin[0] ?? 0, L.ritualOrigin[1] ?? 0, bgKey('ground_ritual')).setOrigin(0);
-    // Runes stay dim (frame 0) so violet always means "threat"; they light up when rune bursts charge (Stage 2).
-    this.runes = L.runes.map((r, g) => this.add.sprite(r.x, r.y, ATLAS, frame(`rune_glow_${g}` as SpriteName)));
+    // three horizontally tileable tree layers; they drift against the hero for parallax
+    this.parallax = L.forest.map((f) => ({
+      sprite: this.add.tileSprite(f.x, f.y, VIEW_WIDTH, MANIFEST.backgrounds[f.name as BgName].h, bgKey(f.name)).setOrigin(0),
+      k: f.parallax,
+    }));
     for (const p of L.props) this.add.image(p.x, p.y, ATLAS, frame(p.name as SpriteName)).setOrigin(0);
+    // fog drifts over ground and props but under the raised platform, which stays calm and readable
     this.fog = this.add.tileSprite(0, 0, VIEW_WIDTH, VIEW_HEIGHT, bgKey('fog_overlay')).setOrigin(0);
+    this.add.image(L.ritualOrigin[0] ?? 0, L.ritualOrigin[1] ?? 0, bgKey('ground_ritual')).setOrigin(0);
+    // Runes rest on frame 0 (dim carved stone); they only glow as a rune-burst telegraph.
+    this.runes = L.runes.map((r, g) => this.add.sprite(r.x, r.y, ATLAS, frame(`rune_glow_${g}` as SpriteName)));
   }
 
   private buildHud(): void {
@@ -124,6 +130,8 @@ export class GameScene extends Phaser.Scene {
       for (const e of this.sim.state.events) this.onEvent(e);
     }
     this.fog.tilePositionX = Math.floor(this.sim.state.tick / 12);
+    const dx = this.sim.state.hero.x - this.sim.params.cx;
+    for (const l of this.parallax) l.sprite.tilePositionX = Math.round(dx * l.k);
     this.draw();
   }
 
@@ -187,7 +195,7 @@ export class GameScene extends Phaser.Scene {
     const hx = Math.round(h.x);
     const hy = Math.round(h.y);
     this.hero.setPosition(hx, hy - 4).setFlipX(h.facing < 0);
-    this.shadow.setPosition(hx, hy + 4);
+    this.shadow.setPosition(hx, hy + 5);
     this.pulse.setPosition(hx, hy - 2);
     if (st.alive) {
       const anim = this.hero.anims.currentAnim?.key ?? '';

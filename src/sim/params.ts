@@ -3,10 +3,11 @@ import { TICK_RATE, TUNING, type Difficulty } from '../data/tuning';
 /** Tuning converted to tick units for one run. Derived purely from TUNING + difficulty. */
 export interface SimParams {
   difficulty: Difficulty;
-  arenaW: number;
-  arenaH: number;
-  heroMargin: number;
-  despawnMargin: number;
+  cx: number;
+  cy: number;
+  playRadius: number;
+  spawnRadius: number;
+  despawnRadius: number;
   heroSpeed: number; // px per tick
   heroRadius: number;
   parryRadius: number;
@@ -46,10 +47,11 @@ export function makeParams(difficulty: Difficulty): SimParams {
   const dashTicks = ticks(T.dash.durationSeconds);
   return {
     difficulty,
-    arenaW: T.arena.width,
-    arenaH: T.arena.height,
-    heroMargin: T.arena.heroMargin,
-    despawnMargin: T.arena.despawnMargin,
+    cx: T.arena.centerX,
+    cy: T.arena.centerY,
+    playRadius: T.arena.playRadius,
+    spawnRadius: T.arena.spawnRadius,
+    despawnRadius: T.arena.despawnRadius,
     heroSpeed: T.hero.speed / TICK_RATE,
     heroRadius: T.hero.radius,
     parryRadius: T.parry.radius,

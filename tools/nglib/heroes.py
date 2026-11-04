@@ -5,52 +5,64 @@ import numpy as np
 
 from . import canvas as C
 
-LEGEND = {"G": "gold", "A": "amber", "E": "ember", "B": "bone", "S": "stone", "D": "stone_dark", "K": "bg0"}
+LEGEND = {"G": "gold", "A": "amber", "E": "ember", "B": "bone", "S": "stone", "D": "stone_dark", "F": "fog",
+          "K": "bg0"}
+HERO_OUTLINE = "bg0"  # darkest shade: the hero silhouette must cut cleanly out of the stone platform
 
-# Upper body only; legs are drawn per frame. Bone/stone highlights sit top-left, stone_dark on the right.
+# Knight, facing right. Bone armour lit from the top-left (stone shade on the right), a dark visor slit
+# through the helmet front, a dark cape (stone_dark/fog) behind, and ONE amber accent: the plume.
+# Legs (rows 13-14) are drawn per frame.
 KNIGHT_BODY = [
     "................",
-    "........A.......",
-    ".......GA.......",
-    "......BBBS......",
-    ".....BBBBSD.....",
-    ".....BKGGKD.....",
-    ".....BBBSSD.....",
-    "....EBBBSSDE....",
-    "...EABBBSSDEE...",
-    "...EABBGSSDEE...",
-    "...EABBBSSDEE...",
-    "....EDBSSDEE....",
-    "....EES..DEE....",
+    "......AAA.......",
+    ".....ABBBB......",
+    ".....BBBBBS.....",
+    ".....BBKKKK.....",
+    ".....BBBBBS.....",
+    "......DSSD......",
+    "...DDBBBBSS.....",
+    "..DDBBBBBSSS....",
+    "..DFDBBBBSSS....",
+    "..DFDSBBSSDS....",
+    "..DDDSSSSSD.....",
+    "...DDBB.SS......",
     "................",
     "................",
     "................",
 ]
+# cape hem variants for the run cycle (extra pixels at the back)
+CAPE_FLUTTER = [[], [(1, 10, "D")], [(1, 10, "D"), (1, 11, "D")], [(2, 12, "D")], [], [(1, 11, "F")]]
 
 
-def _knight_body(plume_flicker=False):
-    a = C.from_ascii(KNIGHT_BODY, LEGEND)
-    if plume_flicker:
-        a[1, 8] = C.ci("gold")
-        a[2, 7] = C.ci("amber")
-    return a
+def _knight_body():
+    return C.from_ascii(KNIGHT_BODY, LEGEND)
 
 
-def _legs(a, lx=6, rx=9, ly=0, ry=0):
-    for x, dy, top in ((lx, ly, "bone"), (rx, ry, "stone")):
-        C.put(a, x, 13 + dy, top)
-        C.put(a, x, 14 + dy, "stone_dark")
+def _legs(a, lx=5, rx=8, ly=0, ry=0):
+    """Two separate 2 px legs; the near (left) leg is lit, boots are dark with a forward toe."""
+    for x, dy, (c0, c1) in ((lx, ly, ("bone", "stone")), (rx, ry, ("stone", "stone_dark"))):
+        C.put(a, x, 13 + dy, c0)
+        C.put(a, x + 1, 13 + dy, c1)
+        for k in range(3):
+            C.put(a, x + k, 14 + dy, "stone_dark")
 
 
-def _knight(dy=0, dx=0, legs=(6, 9, 0, 0), plume=False):
+def _knight(dy=0, dx=0, legs=(5, 8, 0, 0), flutter=()):
     a = C.new(16, 16)
-    C.paste(a, _knight_body(plume), dx, dy)
+    body = _knight_body()
+    for x, y, ch in flutter:
+        body[y, x] = C.ci(LEGEND[ch])
+    C.paste(a, body, dx, dy)
     _legs(a, *legs)
     return a
 
 
+def _finish(a):
+    return C.outline(a, color=HERO_OUTLINE)
+
+
 def knight_idle():
-    return [C.outline(_knight(dy=d, plume=p)) for d, p in ((0, False), (0, True), (1, False), (1, True))]
+    return [_finish(_knight(dy=d, flutter=CAPE_FLUTTER[f])) for d, f in ((0, 0), (0, 4), (1, 5), (1, 0))]
 
 
 def knight_run():
@@ -59,27 +71,26 @@ def knight_run():
         ph = math.sin(i / 6 * 2 * math.pi)
         l = int(round(ph * 1.4))
         bob = 1 if i in (1, 4) else 0
-        legs = (6 + l, 9 - l, -1 if l > 0 else 0, -1 if l < 0 else 0)
-        frames.append(C.outline(_knight(dy=bob, legs=legs, plume=i % 2 == 0)))
+        legs = (5 + l, 8 - l, -1 if l > 0 else 0, -1 if l < 0 else 0)
+        frames.append(_finish(_knight(dy=bob, legs=legs, flutter=CAPE_FLUTTER[i])))
     return frames
 
 
 def _shield(a, flash):
+    """Small round shield held in front (right side)."""
     cx, cy = 12.5, 9.5
-    C.disc(a, cx, cy, 2.7, "gold" if flash else "bone")
-    if not flash:
-        C.put(a, 13, 10, "stone")
-        C.put(a, 13, 11, "stone")
-        C.put(a, 14, 9, "stone")
-        C.put(a, 12, 9, "gold")
+    C.disc(a, cx, cy, 2.6, "bone")
+    for x, y in ((14, 9), (14, 10), (13, 11), (12, 11)):
+        C.put(a, x, y, "stone")  # shaded lower-right rim
+    C.put(a, 12, 9, "gold" if flash else "stone_dark")  # boss
 
 
 def knight_parry():
     frames = []
     for i in range(3):
-        a = _knight(legs=(6, 9, 0, 0))
+        a = _knight(dx=-1)
         _shield(a, flash=(i == 1))
-        a = C.outline(a)
+        a = _finish(a)
         if i == 1:
             C.ring(a, 12.5, 9.5, 4.0, 5.2, "gold", mask=C.bayer_mask(16, 16, 0.5) & (a == C.T))
         if i == 2:
@@ -89,19 +100,18 @@ def knight_parry():
 
 
 def knight_dash():
+    """Cloak dash: body leans forward, the cape streams straight back."""
     frames = []
     for i in range(2):
-        a = _knight(dx=2, dy=1, legs=(6, 8, 0, 0))
-        a = C.outline(a)
-        streak = C.new(16, 16)
-        for row, (x0, col) in enumerate(((0, "ember"), (1, "amber"), (0, "ember"), (2, "amber"), (1, "ember"))):
-            for x in range(x0 + i * 2, 6):
-                C.put(streak, x, 8 + row, col)
-        if i == 1:
-            streak = C.dither_out(streak, 0.5)
-        m = (a == C.T) & (streak != C.T)
-        a[m] = streak[m]
-        frames.append(a)
+        a = _knight(dx=2, dy=1, legs=(6, 8, -1, 0))
+        # remove the hanging cape, then draw it streaming horizontally behind
+        a[(a == C.ci("stone_dark")) & (np.arange(16)[None, :] < 7) & (np.arange(16)[:, None] < 13)] = C.T
+        a[(a == C.ci("fog")) & (np.arange(16)[None, :] < 7)] = C.T
+        for row, (x0, col) in enumerate(((3 + i, "stone_dark"), (1 + i, "fog"), (0 + i, "stone_dark"),
+                                         (2 + i, "stone_dark"))):
+            for x in range(x0, 8):
+                C.put(a, x, 8 + row, col)
+        frames.append(_finish(a))
     return frames
 
 
@@ -115,23 +125,19 @@ def _embers(a, n, rise):
 
 def knight_death():
     base = _knight()
-    frames = [C.outline(C.recolor(base, {"stone": "bone", "stone_dark": "bone", "ember": "gold", "amber": "gold"}),
-                        color="ember")]
-    tilt = C.new(16, 16)
-    for y in range(16):  # shear the body to the right: falling over
-        sh = max(0, (12 - y) // 4)
-        for x in range(16):
-            if base[y, x] != C.T and 0 <= x + sh < 16:
-                tilt[y, x + sh] = base[y, x]
-    frames.append(C.outline(tilt))
+    flash = C.recolor(base, {"stone": "bone", "stone_dark": "bone", "fog": "bone", "bg0": "bone"})
+    frames = [C.outline(flash, color="amber")]
+    kneel = C.new(16, 16)  # drops to one knee: body sinks, legs fold
+    C.paste(kneel, _knight_body(), 0, 2)
+    frames.append(_finish(kneel))
     lying = C.new(16, 16)
-    rot = np.rot90(base, k=-1)
-    C.paste(lying, rot, 0, 3)
-    lying = C.outline(lying)
+    C.paste(lying, np.rot90(_knight(), k=-1), 0, 3)
+    lying = _finish(lying)
     frames.append(lying)
     for i, keep in enumerate((0.6, 0.3, 0.0)):
         a = C.dither_out(lying, keep, ox=i, oy=i)
-        a = C.recolor(a, {"stone": "ember", "bone": "amber", "stone_dark": "blood_dark"}) if keep < 0.5 else a
+        if keep < 0.5:
+            a = C.recolor(a, {"stone": "ember", "bone": "amber", "stone_dark": "blood_dark", "fog": "blood_dark"})
         _embers(a, 8 - i * 2, rise=2 + i * 2)
         frames.append(a)
     return frames
@@ -164,7 +170,7 @@ def _flame(w, h, cx, cy, r, tip_x, tip_y, eyes=True):
 def wisp_idle():
     frames = []
     for i, (tx, ty) in enumerate(((8, 2.5), (9, 3.0), (8, 2.0), (7, 3.0))):
-        a = C.outline(_flame(16, 16, 8, 10, 4.5, tx, ty))
+        a = _finish(_flame(16, 16, 8, 10, 4.5, tx, ty))
         C.put(a, (3, 12, 4, 11)[i], (4, 2, 2, 5)[i], "amber")
         frames.append(a)
     return frames
@@ -174,7 +180,7 @@ def wisp_pulse():
     frames = []
     spec = ((5.0, 6.0, "gold", 1.0), (6.0, 7.5, "amber", 0.5), (6.5, 7.8, "ember", 0.25))
     for i, (r0, r1, col, cov) in enumerate(spec):
-        a = C.outline(_flame(16, 16, 8, 9.5, 4.0 + (i == 0) * 0.6, 8, 2.5))
+        a = _finish(_flame(16, 16, 8, 9.5, 4.0 + (i == 0) * 0.6, 8, 2.5))
         C.ring(a, 8, 9, r0, r1, col, mask=(a == C.T) & C.bayer_mask(16, 16, cov))
         frames.append(a)
     return frames
@@ -188,7 +194,7 @@ def wisp_dash():
         C.paste(a, np.rot90(f, k=1), 1, 0)  # tip points left (trailing)
         C.put(a, 10, 8, "bg0")
         C.put(a, 10, 10, "bg0")
-        a = C.outline(a)
+        a = _finish(a)
         for k, x in enumerate(range(0, 4)):
             if (x + i) % 2 == 0:
                 C.put(a, x, 6 + (k % 3) * 2, "amber")
@@ -204,7 +210,7 @@ def wisp_death():
             a = _flame(16, 16, 8, 10, r, 8, 10 - r * 1.6, eyes=(i < 2))
             if i == 0:
                 a = C.recolor(a, {"ember": "gold", "amber": "gold"})
-            a = C.outline(a)
+            a = _finish(a)
         spread = i * 1.4
         for k in range(8):
             ang = k / 8 * 2 * math.pi + 0.3
@@ -216,10 +222,12 @@ def wisp_death():
 
 
 def hero_shadow():
+    """Contact shadow + amber under-glow: solid bg0 core, checker amber rim. Reads on stone and dark floor."""
     a = C.new(12, 6)
     xx, yy = C.grid(12, 6)
-    m = ((xx - 6) / 5.5) ** 2 + ((yy - 3) / 2.6) ** 2 <= 1.0
-    a[m & C.bayer_mask(12, 6, 0.5)] = C.ci("bg0")
+    e = ((xx - 6) / 5.6) ** 2 + ((yy - 3) / 2.7) ** 2
+    a[(e <= 1.0) & C.bayer_mask(12, 6, 0.5)] = C.ci("amber")
+    a[e <= 0.55] = C.ci("bg0")
     return [a]
 
 

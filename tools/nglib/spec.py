@@ -14,12 +14,13 @@ SPRITES = {
     "hit_flash": (16, 16, 2), "death_burst": (32, 32, 6), "ember_particle": (2, 2, 4),
     "cursor_reticle": (9, 9, 1),
     # props
-    "gravestone_a": (12, 16, 1), "gravestone_b": (14, 18, 1), "gravestone_c": (10, 12, 1),
+    "gravestone_a": (16, 22, 1), "gravestone_b": (18, 26, 1), "gravestone_c": (14, 18, 1),
+    "iron_fence_segment": (32, 16, 1), "crypt_door": (40, 30, 1),
     "dead_tree_a": (32, 40, 1), "dead_tree_b": (24, 36, 1),
 }
 SPRITES.update({f"rune_glow_{g}": (11, 11, 4) for g in range(8)})
 
 BACKGROUNDS = {
-    "floor": (480, 270), "ground_ritual": (240, 240), "bg_forest_far": (480, 34),
-    "bg_forest_near": (480, 22), "fog_overlay": (256, 256), "vignette": (480, 270),
+    "floor": (480, 270), "ground_ritual": (240, 240), "bg_forest_far": (480, 64),
+    "bg_forest_mid": (480, 56), "bg_forest_near": (480, 44), "fog_overlay": (256, 256), "vignette": (480, 270),
 }
