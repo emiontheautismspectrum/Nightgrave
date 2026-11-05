@@ -204,3 +204,37 @@ describe('review hardening', () => {
     expect(await pending()).toEqual([]);
   });
 });
+
+describe('private data in responses and logs', () => {
+  it('playerId never appears in any response (submit, GET, verifier payload)', async () => {
+    const id = pid(77);
+    const texts: string[] = [];
+    texts.push(await (await submit(RUN.log, RUN.score, { playerId: id })).text());
+    texts.push(await (await v('GET', '/api/verify/pending?limit=50')).text());
+    await runVerifier();
+    texts.push(await (await handle(new Request('https://api.test/api/daily', { headers: { 'CF-Connecting-IP': '7.7.7.7' } }), env, NOW)).text());
+    for (const t of texts) {
+      expect(t).not.toContain(id);
+      expect(t.toLowerCase()).not.toContain('player');
+    }
+  });
+  it('unexpected exceptions return a generic { error: "internal" } 500 (no stack, SQL or echoed input)', async () => {
+    env.DB = { prepare: () => { throw new Error('SELECT secret FROM boom WHERE x = "<echo>"'); } } as unknown as Env['DB'];
+    for (const r of [
+      await handle(new Request('https://api.test/api/daily', { headers: { 'CF-Connecting-IP': '6.6.6.6' } }), env, NOW),
+      await submit(RUN.log, RUN.score),
+    ]) {
+      expect(r.status).toBe(500);
+      const t = await r.text();
+      expect(JSON.parse(t)).toEqual({ error: 'internal' });
+    }
+  });
+  it('Worker and verifier never log IPs, hashes, tokens, replays or request bodies', async () => {
+    const { readFileSync } = await import('node:fs');
+    expect(readFileSync('server/src/index.ts', 'utf8')).not.toMatch(/console\./);
+    const src = readFileSync('tools/verify/pending.ts', 'utf8');
+    // only interpolated values matter (the text may name a variable): ids, verdicts, timings, HTTP status
+    for (const line of src.split('\n').filter((l) => l.includes('console.')))
+      for (const m of line.matchAll(/\$\{([^}]*)\}/g)) expect(m[1], line).not.toMatch(/TOKEN|headers|replay|body|raw\b|\bit\.|ip/i);
+  });
+});

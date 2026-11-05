@@ -398,9 +398,9 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
   const allowed = origins(env);
   const origin = req.headers.get('Origin');
   // without a salt the stored IP hashes could be reversed: refuse to run rather than store weak hashes
-  if (!env.IP_SALT || env.IP_SALT.length < 16) return json({ error: 'server' }, 500, req, env);
+  if (!env.IP_SALT || env.IP_SALT.length < 16) return json({ error: 'internal' }, 500, req, env);
   // the verifier secret is required too (without it nothing could ever reach the board)
-  if (!env.VERIFIER_TOKEN || env.VERIFIER_TOKEN.length < 32) return json({ error: 'server' }, 500, req, env);
+  if (!env.VERIFIER_TOKEN || env.VERIFIER_TOKEN.length < 32) return json({ error: 'internal' }, 500, req, env);
   if (req.method === 'OPTIONS') {
     if (!origin || !allowed.includes(origin)) return new Response(null, { status: 403, headers: { Vary: 'Origin' } });
     return new Response(null, {
@@ -425,7 +425,7 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
     if (parts[1] === 'api' && parts[2] === 'admin') return await admin(req, env, now, parts);
     return notFound(req, env);
   } catch {
-    return json({ error: 'server' }, 500, req, env);
+    return json({ error: 'internal' }, 500, req, env);
   }
 }
 
