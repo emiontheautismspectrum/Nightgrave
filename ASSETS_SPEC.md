@@ -69,14 +69,30 @@ Arena softness rules (v2, refined in v3; everything in the arena group)
 1. Value hierarchy: ground darkest, props mid-dark, threats/pickups brighter, hero brightest. No bone/moon-bright pixels
    in props except landmark accents (<= 2% of that landmark's pixels). Prop outlines are a DARKER shade of the fill.
 2. No fine dithering anywhere in ground, forest, fog, vignette; large flat tonal patches. Coarse 2x2 only on the fog edge.
-3. Ground (v3) = ONE colour story: deep teal-green forest floor (forest / fern), warm desaturated loam only on worn paths
-   and small patches, cool moonlight (mist) only as soft lit areas. Depth from large flat organic shapes (>= 6x6 px):
-   lit / mid / shade value zones, 3-4 diagonal moonbeam patches from the top-left, a wide value falloff from the
-   top-left (lighter) to the bottom-right (darker), flat cast shadows under every prop (lower-right, 40-60% of its width),
-   worn loam paths (altar -> left of centre -> cabin; a short one toward the well), low-contrast clustered details
-   (ferns, grass clumps, leaf clusters, mossy rocks, root tendrils, pale mushrooms). The centre is the same floor, one
-   tone calmer and slightly darker (no lighter blob). The rune circle stays faint; rune glyphs are original angular
-   arcane marks (no letters, digits or console symbols).
+3. Ground (v4) = an old ruined STONE COURTYARD being reclaimed by the forest (supersedes the v3 forest floor).
+   Ground colour ramps (relative luminance, darkest first; one step = the next colour in the same ramp):
+   STONE bg0 < bg1 < fog < mist < stone_dark; MOSS forest < fern; SOIL earth < loam.
+   Brightness cap inside the arena rect: no ground or decal pixel brighter than stone_dark; `stone` and `moss` are
+   never used in the ground (they stay allowed on props). Only exception: tiny `moon` glints on the 2 puddles and on
+   the glowing mushrooms.
+   Stones: large irregular flagstones (20-44 px) from relaxed seeded Voronoi cells (no bricks, no grid, T/Y joints, no
+   long straight seams, no "+" crosses), <= 2 flat tones per stone within one step, neighbours differ by <= 1 step in a
+   calm irregular rhythm; joints 1-2 px one step DARKER than the stone (never lighter, joint/stone contrast <= 1.35);
+   a 1 px lit top-left edge on <= 15% of stones, one step lighter, never above the cap. Some stones broken, a few
+   missing (soil/moss showing), some sunken or tilted (1 px darker bottom-right edge).
+   Value structure from large flat shapes: lit zone (upper-left, altar, left of centre), mid zone, shade zone
+   (bottom-right, forest edge, under the giant tree); 3-4 diagonal moonbeam patches (stones one step lighter); a wide
+   top-left -> bottom-right falloff; flat cast shadows under props (lower-right, 40-60% of the prop width, one step darker).
+   Zones: calm centre = the largest stones (36-44 px), fog/mist only, bg1 joints, <= 4 hairline cracks, one step darker
+   than its surroundings, faint rune circle; mid ring = medium stones, fern moss in joints/corners, sparse cracks, a few
+   sunken stones, 2-4 broken slabs; edges and under trees = stones fragment and sink, fern moss, soil, needle specks and
+   root tendrils take over, forest floor along the forest edge; boundary = a broken low curb (fragments with gaps),
+   forest floor beyond it, one step darker outside the rect; altar plaza (r ~40 around the altar) = stones laid in a
+   subtle concentric pattern, 2-3 slabs with faint carved rune lines; cobble path (8-14 px cobbles, one step darker than
+   the flagstones) from the altar to the cabin around the gallows, plus a short branch toward the well; giant tree roots
+   lift and crack the flagstones around its base.
+   Details (low contrast, clustered): <= 12 hairline cracks (<= 4 in the calm centre), fern moss patches 8-20 px,
+   <= 25 joint weeds (ground decals, not props), 3 leaf-litter clusters, needle specks in shade, <= 2 small puddles.
 4. Density budget in the arena rect: small decor <= 25, non-landmark trees <= 6, gravestones 8-12 (never overlapping),
    bones/skulls <= 4 and only near the altar and graves, >= 45% of the arena free of prop boxes.
 5. Soft edge (moss, roots, half-buried ring stones); ground just outside the rect slightly darker.

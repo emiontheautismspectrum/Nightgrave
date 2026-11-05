@@ -57,8 +57,10 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   (138,150) with cage and crows; cursed well (362,172) with a bent gas lamp (386,162); gothic hunter's wagon at the top
   edge (270,44) half behind the forest; hunter's cabin with workshop lower-left. No bones in the lower-right; bones and
   skulls only near the altar and graves (<= 4). Original designs only (mood references, no copying).
-- Ground (v3): one colour story (teal-green floor, desaturated loam paths, cool moonlit patches), depth from large flat
-  shapes (value zones, moonbeams, top-left -> bottom-right falloff, cast shadows); the centre is one tone calmer and darker.
+- Ground (v4): an old ruined stone courtyard reclaimed by the forest: large irregular flagstones (relaxed Voronoi), dark
+  joints, calm tones capped at stone_dark; stone gives way to moss, soil and roots toward the edges and under trees;
+  concentric altar plaza, cobble path to the cabin and the well, a broken low curb at the rect; depth from large flat
+  value zones, moonbeams and a top-left -> bottom-right falloff; the centre is one step darker so the hero pops.
 - Draw order: forest far/mid (parallax) -> ground + edge + decals -> ground telegraphs -> y-sorted props, casters, hero,
   projectiles, effects -> fog -> vignette -> forest near overhang (max 8 px into the arena) -> UI.
 - Translucency: a prop/overhang drawn in front of the hero, a caster or a projectile (box + 4 px) fades to ~35% alpha
