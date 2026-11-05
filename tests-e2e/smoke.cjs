@@ -32,6 +32,7 @@ async function touch(cdp, type, pts) {
 
 async function phone(browser) {
   const ctx = await browser.newContext({ ...devices['Pixel 7 landscape'] });
+  await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} }); // tests skip the site intro
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', (e) => errs.push(String(e)));
@@ -89,6 +90,7 @@ async function phone(browser) {
 
 async function desktop(browser) {
   const ctx = await browser.newContext({ viewport: { width: 960, height: 540 }, deviceScaleFactor: 2 });
+  await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} }); // tests skip the site intro
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', (e) => errs.push(String(e)));

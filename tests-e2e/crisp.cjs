@@ -19,6 +19,7 @@ let failed = false;
     for (const dpr of [1, 1.1, 1.25, 1.5, 2])
       for (const [w, h] of [[1920, 1040], [1366, 700]]) {
         const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: dpr });
+        await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} }); // tests skip the site intro
         const page = await ctx.newPage();
         await page.goto('http://localhost:4181/');
         await sleep(1500);

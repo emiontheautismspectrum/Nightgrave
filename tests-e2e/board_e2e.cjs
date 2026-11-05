@@ -33,6 +33,7 @@ const ok = (c, m) => (c ? console.log('ok  ', m) : fail(m));
     await sleep(2500);
     const browser = await chromium.launch();
     const ctx = await browser.newContext({ viewport: { width: 960, height: 540 } });
+    await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} }); // tests skip the site intro
     // the production CSP on every HTML document (vite preview does not read _headers)
     await ctx.route('**/*', async (route) => {
       const res = await route.fetch();

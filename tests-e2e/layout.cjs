@@ -42,6 +42,7 @@ function check(name, L) {
   try {
     for (const [label, opts] of [['desktop', { viewport: { width: 1440, height: 810 } }], ['phone', { ...devices['Pixel 7 landscape'] }]]) {
       const ctx = await b.newContext(opts);
+      await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} }); // tests skip the site intro
       await ctx.addInitScript(() => localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'hard', settings: { touchHintSeen: true, hintsDone: true }, best: {}, daily: [] })));
       const page = await ctx.newPage();
       const L = () => page.evaluate(() => window.__ngLayout);

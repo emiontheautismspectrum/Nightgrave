@@ -15,6 +15,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   try {
     // 1440x810 at DPR 1 = exactly 3 device px per game px
     const ctx = await b.newContext({ viewport: { width: 1440, height: 810 } });
+    await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} }); // tests skip the site intro
     const page = await ctx.newPage();
     await page.goto('http://localhost:4182/');
     await sleep(1500);
@@ -30,6 +31,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await page.screenshot({ path: path.join(OUT, 'dash_chevron.png'), clip: { x: box.x + (d.x - 30) * 3, y: box.y + (d.y - 30) * 3, width: 180, height: 180 } });
     await ctx.close();
     const ctx2 = await b.newContext({ viewport: { width: 1440, height: 810 } });
+    await ctx2.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} }); // tests skip the site intro
     await ctx2.addInitScript(() => {
       localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'medium', settings: { touchHintSeen: true, hintsDone: true },
         best: { medium: [{ score: 15230, hero: 'knight', date: '2026-11-05', secs: 312.4 }, { score: 980, hero: 'wisp', date: '2026-11-04', secs: 41 }] }, daily: [] }));

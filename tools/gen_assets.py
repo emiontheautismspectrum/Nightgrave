@@ -20,7 +20,8 @@ from nglib import canvas as C  # noqa: E402
 from nglib import spec  # noqa: E402
 from nglib.pack import pack  # noqa: E402
 
-SCREENSHOT_PREFIXES = ("boss_fight_", "menu_", "death_panel", "touch_layout", "crisp_", "dash_chevron", "best_scores", "first_run_hint")
+SCREENSHOT_PREFIXES = ("boss_fight_", "menu_", "death_panel", "touch_layout", "crisp_", "dash_chevron", "best_scores", "first_run_hint",
+                       "intro_frame", "desktop_layout", "phone_")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
 
