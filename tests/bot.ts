@@ -81,6 +81,9 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
       fx += nx * 3;
       fy += ny * 3;
     }
+    // the sweep is about to reach us from the front: dash across it to the safe side (dash i-frames)
+    const active = sim.state.beams.length > 0 || (sim.state.boss?.attack?.pattern === 'beam' && sim.state.boss.attack.fire - sim.state.tick <= 4);
+    if (active && c < 0 && c > -18) dashAway = [nx, ny];
   }
   // converging shots can cancel each other's sidestep: break the tie by stepping across the most urgent one
   if (nearT < 45 && Math.abs(fx) + Math.abs(fy) < 0.05) {
