@@ -11,74 +11,127 @@ from .decor import picket
 
 
 def _finish(a):
-    return C.moonlit(a)
+    """v2: darker-shade outline (never a light rim)."""
+    return C.outline(a)
 
 
-# ---------------------------------------------------------------- giant rune sword
+# ---------------------------------------------------------------- giant tree + ornate rune sword
 
-RUNE_ROWS = (26, 31, 36, 41, 46, 51)
+GIANT_TREE_BASE = (64, 127)  # trunk base centre inside the 128x128 giant_tree sprite
+
+
+def giant_tree():
+    """Enormous ancient dead tree: a 60 px gnarled trunk with root flare, bark in 3 flat tones (bg1 / earth / dry),
+    massive limbs going up and out of the arena; only thin limbs dip into the arena (see-through)."""
+    w, h = 128, 128
+    a = C.new(w, h)
+    rng = np.random.default_rng(4040)
+    cx, base = GIANT_TREE_BASE
+    xx, yy = C.grid(w, h)
+    # trunk silhouette: wide flared base tapering upward, slightly twisting
+    t = (base - yy) / 70.0  # 0 at the base, 1 at the fork
+    twist = np.sin(t * 2.4) * 4
+    half = 30 - 13 * np.clip(t, 0, 1) + np.where(t < 0.12, (0.12 - t) * 45, 0)
+    trunk = (np.abs(xx - cx - twist) <= half) & (yy <= base) & (t <= 1.05)
+    a[trunk] = C.ci("earth")
+    # bark: 3 flat tones -> lit left flank (dry), shadowed right flank (bg1), twisting grooves (bg1) on earth
+    rel = (xx - cx - twist) / np.maximum(half, 1)
+    a[trunk & (rel < -0.55)] = C.ci("dry")
+    a[trunk & (rel > 0.45)] = C.ci("bg1")
+    for g in (-0.25, 0.05, 0.3):
+        groove = trunk & (np.abs(rel - g - 0.08 * np.sin(yy / 7.0 + g * 9)) < 0.045)
+        a[groove] = C.ci("bg1")
+    # a hollow knot and a scar
+    C.disc(a, cx - 6, base - 46, 3.2, "bg0")
+    C.line(a, cx + 8, base - 30, cx + 12, base - 16, "bg1")
+
+    # main limbs: thick, upward and outward, mostly above the arena (sprite top = screen top)
+    def limb(x0, y0, ang, length, thick, depth):
+        x1, y1 = x0 + math.cos(ang) * length, y0 + math.sin(ang) * length
+        for k in range(thick):
+            off = k - thick // 2
+            C.line(a, x0 + off, y0, x1 + off, y1, "dry" if k == 0 and thick > 2 else ("bg1" if k == thick - 1 and thick > 2 else "earth"))
+        if depth > 0:
+            for s_ in (-1, 1):
+                limb(x1, y1, ang + s_ * rng.uniform(0.35, 0.7), length * rng.uniform(0.55, 0.72), max(1, thick - 2), depth - 1)
+
+    fork_y = base - 70
+    for ang, ln, th in ((-2.35, 30, 9), (-1.95, 34, 9), (-1.45, 36, 10), (-0.95, 32, 9), (-0.55, 28, 7)):
+        limb(cx + math.cos(ang) * 6, fork_y + 4, ang, ln, th, 3)
+    # two thin low limbs reaching into the arena (thin, see-through)
+    limb(cx - 22, base - 52, -2.75, 26, 2, 1)
+    limb(cx + 24, base - 48, -0.3, 22, 2, 1)
+    # root flare above ground (the long roots are flat ground decals, baked into arena_ground)
+    for side in (-1, 1):  # short flare toward the arena centre (left), longer outward
+        reach = (27, 29, 30) if side < 0 else (34, 38, 42)
+        for k in range(3):
+            C.line(a, cx + side * (24 + k * 2), base - 4 + k, cx + side * reach[k], base, "earth")
+    return [_finish(a)]
+
+
+RUNE_ROWS = (24, 29, 34, 39, 44)
 
 
 def _sword_body():
-    a = C.new(40, 64)
-    # pommel + grip
-    a[2:6, 18:22] = C.ci("stone")
-    a[3:5, 21] = C.ci("stone_dark")
-    for y in range(6, 17):
-        a[y, 19:21] = C.ci("earth" if y % 2 else "dry")
-    # crossguard: wide, drooping ends
-    a[17:20, 6:34] = C.ci("stone")
-    a[19, 6:34] = C.ci("stone_dark")
-    a[20:22, 6:9] = C.ci("stone_dark")
-    a[20:22, 31:34] = C.ci("stone_dark")
-    # blade, point down into the base (bottom rows are hidden by the base sprite)
-    for y in range(20, 64):
-        half = 4 if y < 56 else max(1, 4 - (y - 56) // 2)
-        a[y, 20 - half:20] = C.ci("stone")
-        a[y, 20:20 + half] = C.ci("stone_dark")
-        a[y, 20] = C.ci("fog")  # fuller
-    for y in RUNE_ROWS:  # carved runes (rest: dark)
-        a[y, 18:23] = C.ci("bg0")
-        a[y - 1, 19] = C.ci("bg0")
-        a[y + 1, 21] = C.ci("bg0")
+    """Ornate runed greatsword, 24x58: ring pommel, wrapped grip, curled quillons, ricasso, fullered 44 px blade."""
+    a = C.new(24, 58)
+    # ring pommel
+    C.ring(a, 12, 3.5, 1.4, 2.9, "stone")
+    C.put(a, 13, 4, "stone_dark")
+    # wrapped grip
+    for y in range(6, 13):
+        a[y, 11:13] = C.ci("dry" if y % 2 else "earth")
+    # crossguard with curled quillons
+    a[13:15, 3:21] = C.ci("stone")
+    a[14, 3:21] = C.ci("stone_dark")
+    for x, y in ((2, 12), (1, 11), (2, 10), (21, 15), (22, 16), (21, 17)):
+        C.put(a, x, y, "stone")
+    a[12, 10:14] = C.ci("stone_dark")  # langet
+    # ricasso + blade (point hidden in the base)
+    for y in range(15, 58):
+        half = 3 if y < 52 else max(1, 3 - (y - 52) // 2)
+        a[y, 12 - half:12] = C.ci("stone")
+        a[y, 12:12 + half] = C.ci("stone_dark")
+        if 18 <= y < 52:
+            a[y, 12] = C.ci("fog")  # fuller
+    for y in RUNE_ROWS:  # carved runes inside the fuller (rest: dark)
+        a[y, 11:14] = C.ci("bg1")
+        a[y - 1, 11] = C.ci("bg1")
+        a[y + 1, 13] = C.ci("bg1")
     return a
 
 
 def rune_sword():
-    """4f: carved runes pulse slowly in pale moon, a few dust motes drift up."""
+    """4f slow, LOW-amplitude rune pulse: dark -> faint -> faint with a 2 px pale core -> faint."""
     frames = []
-    glow = ["fog", "stone", "moon", "stone"]
-    motes = [[(12, 40), (28, 30)], [(12, 37), (29, 26), (9, 50)], [(13, 34), (28, 22), (10, 46)], [(13, 31), (9, 42)]]
+    glow = ["bg1", "stone", "stone", "stone"]
     for i in range(4):
         a = _sword_body()
         for y in RUNE_ROWS:
-            for x, yy in ((18, y), (19, y), (20, y), (21, y), (22, y), (19, y - 1), (21, y + 1)):
-                a[yy, x] = C.ci(glow[(i + RUNE_ROWS.index(y) // 2) % 4])
-        a = _finish(a)
-        for x, y in motes[i]:
-            C.put(a, x, y, "moon" if (x + i) % 2 else "stone")
-        frames.append(a)
+            for x, yy in ((11, y), (12, y), (13, y), (11, y - 1), (13, y + 1)):
+                a[yy, x] = C.ci(glow[i])
+        if i == 2:
+            C.put(a, 12, RUNE_ROWS[1], "moon")  # landmark accent: 2 px (<= 2% of the sprite)
+            C.put(a, 12, RUNE_ROWS[3], "moon")
+        frames.append(_finish(a))
     return frames
 
 
 def rune_sword_base():
-    """Cracked round stone platform the sword is stuck in (3/4 view ellipse)."""
-    w, h = 48, 20
+    """Small cracked stone base the sword is stuck in."""
+    w, h = 28, 10
     a = C.new(w, h)
     xx, yy = C.grid(w, h)
-    top = ((xx - 24) / 22) ** 2 + ((yy - 8) / 6.5) ** 2 <= 1
-    side = (np.abs(xx - 24) <= 22) & (yy > 8) & (yy <= 14) & (((xx - 24) / 22) ** 2 + ((yy - 14) / 5) ** 2 <= 1.0) | (
-        (np.abs(xx - 24) <= 21.5) & (yy > 8) & (yy <= 13))
+    top = ((xx - 14) / 12.5) ** 2 + ((yy - 4) / 3.2) ** 2 <= 1
+    side = (np.abs(xx - 14) <= 12) & (yy > 4) & (yy <= 8)
     a[side] = C.ci("stone_dark")
     a[top] = C.ci("stone")
-    a[top & ((xx - 24) > 6)] = C.ci("stone_dark")
-    rng = np.random.default_rng(71)
-    for _ in range(5):  # radial cracks from the blade
-        ang = rng.uniform(0, 2 * math.pi)
-        C.line(a, 24, 8, 24 + math.cos(ang) * 18, 8 + math.sin(ang) * 5.5, "bg0")
-    a[6:10, 22:27] = C.ci("bg0")  # slot where the blade enters
-    for x in range(3, 45, 4):
-        C.put(a, x, 13, "moss")
+    a[top & ((xx - 14) > 4)] = C.ci("stone_dark")
+    a[2:6, 12:16] = C.ci("bg1")  # slot
+    C.line(a, 6, 4, 2, 6, "bg1")
+    C.line(a, 20, 3, 25, 5, "bg1")
+    for x in (3, 9, 18, 24):
+        C.put(a, x, 8, "moss")
     return [_finish(a)]
 
 
@@ -121,8 +174,8 @@ def gallows_cage():
             C.put(a, x, 16, "stone_dark")
             C.put(a, x, 23, "stone")
         C.put(a, cx - 1, 8, "stone")
-        C.put(a, cx - 3, 12, "bone")  # something left inside
-        C.put(a, cx - 2, 19, "bone")
+        C.put(a, cx - 3, 12, "dry")  # something left inside
+        C.put(a, cx - 2, 19, "dry")
         frames.append(_finish(a))
     return frames
 
@@ -133,8 +186,9 @@ def crow():
     hop = ["...KK...", "..KKKm..", ".KKKKKs.", "KKKKK...", "..s.s...", "........"]
     flap = ["s.....s.", "sK.KK.Ks", ".KKKKm..", "..KKKKs.", "..KK....", "........"]
     land = ["........", "........", "..KKKm..", ".KKKKKs.", "KKKKKK..", "..s.s..."]
-    leg = {"K": "bg0", "m": "moon", "s": "stone_dark"}
-    return [C.moonlit(C.from_ascii(r, leg), body_outline="bg0") for r in (perched, hop, flap, land)]
+    leg = {"K": "bg0", "m": "stone", "s": "stone_dark"}
+    # low amplitude: perched most of the loop, a single small hop and flap
+    return [C.outline(C.from_ascii(r, leg), color="bg1") for r in (perched, perched, hop, land)]
 
 
 # ---------------------------------------------------------------- hunter's wagon + horse skeleton
@@ -142,7 +196,7 @@ def crow():
 def hunter_wagon():
     """Wrecked black funeral carriage. 3f: the lantern's pale light flickers."""
     frames = []
-    for i, lamp in enumerate(("moon", "stone", "moon")):
+    for i, lamp in enumerate(("stone", "fog", "stone")):
         w, h = 48, 32
         a = C.new(w, h)
         a[8:24, 6:40] = C.ci("bg0")  # body
@@ -157,7 +211,7 @@ def hunter_wagon():
                 half = 2 if y > 12 else (1 if y == 12 else 0)
                 for x in range(wx - half, wx + half + 1):
                     C.put(a, x + 2, y, "fog")
-            C.put(a, wx + 1, 12, "moon")
+            C.put(a, wx + 1, 12, "stone")
         a[24, 6:40] = C.ci("stone_dark")
         # wheels: rear intact, front broken (tilted, missing spokes)
         for cx, cy, r, broken in ((12, 26, 5.5, False), (34, 27, 5.0, True)):
@@ -175,8 +229,8 @@ def hunter_wagon():
         a[12:14, 44] = C.ci(lamp)
         C.line(a, 0, 21, 6, 21, "earth")  # broken shaft
         a = _finish(a)
-        if lamp == "moon":
-            C.put(a, 47, 12, "stone" if i == 0 else "fog")
+        if i == 0:
+            C.put(a, 44, 12, "moon")  # landmark accent: one pale pixel in the lantern
         frames.append(a)
     return frames
 
@@ -198,7 +252,7 @@ def horse_skeleton():
         "..DDDDDDDDDDDDDDDDD.............",
         "................................",
     ]
-    return [_finish(C.from_ascii(rows, {"B": "bone", "D": "dry", "K": "bg0"}))]
+    return [_finish(C.from_ascii(rows, {"B": "dry", "D": "earth", "K": "bg0"}))]
 
 
 # ---------------------------------------------------------------- cursed well + ribcage
@@ -234,13 +288,13 @@ def well_wisp():
         for k in range(16):
             ang = k / 16 * 2 * math.pi
             if i < 5:
-                C.put(a, int(6 + math.cos(ang) * r), int(17 + math.sin(ang) * r * 0.35), "stone" if i > 2 else "moon")
+                C.put(a, int(6 + math.cos(ang) * r), int(17 + math.sin(ang) * r * 0.35), "fog" if i > 2 else "stone_dark")
         # wisp: a small pale flame climbing, then dithering out
         y = 15 - i * 2.4
         blob = C.new(12, 20)
-        C.disc(blob, 6, y, 2.2 - i * 0.15, "moon")
-        C.put(blob, 6, int(y) - 3, "moon")
-        C.put(blob, 5, int(y) + 2, "stone")
+        C.disc(blob, 6, y, 2.0 - i * 0.15, "stone")
+        C.put(blob, 6, int(y) - 3, "fog")
+        C.put(blob, 5, int(y) + 2, "fog")
         keep = 1.0 if i < 3 else (0.5 if i < 5 else 0.25)
         blob = C.dither_out(blob, keep, ox=i)
         m = (blob != C.T) & (a == C.T)
@@ -256,28 +310,30 @@ def beast_ribcage():
     # spine arching along the top
     pts = [(6, 30), (14, 18), (24, 12), (34, 12), (44, 18), (50, 28)]
     for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
-        C.line(a, x0, y0, x1, y1, "bone")
-        C.line(a, x0, y0 + 1, x1, y1 + 1, "dry")
+        C.line(a, x0, y0, x1, y1, "dry")
+        C.line(a, x0, y0 + 1, x1, y1 + 1, "earth")
     # ribs curving down into the earth
     for k, (sx, sy) in enumerate([(14, 18), (19, 15), (24, 13), (29, 12), (34, 12), (39, 14), (44, 18)]):
         depth = 18 - abs(k - 3) * 2
         for t in range(depth):
             ang = 0.4 + t / depth * 1.2
             x = sx + (math.cos(ang) * 5 if k % 2 else -math.cos(ang) * 3)
-            C.put(a, int(x), sy + t, "bone" if t < depth - 4 else "dry")
+            C.put(a, int(x), sy + t, "dry" if t < depth - 4 else "earth")
     # horned skull at the left end, lying in the dirt
-    a[28:35, 2:12] = C.ci("bone")
+    a[28:35, 2:12] = C.ci("dry")
     a[30:32, 4:6] = C.ci("bg0")
-    a[33:35, 2:8] = C.ci("dry")
-    C.line(a, 4, 28, 1, 20, "bone")  # horns
-    C.line(a, 1, 20, 3, 15, "bone")
-    C.line(a, 9, 28, 13, 22, "bone")
-    C.line(a, 13, 22, 12, 17, "bone")
+    a[33:35, 2:8] = C.ci("earth")
+    C.line(a, 4, 28, 1, 20, "dry")  # horns
+    C.line(a, 1, 20, 3, 15, "dry")
+    C.line(a, 9, 28, 13, 22, "dry")
+    C.line(a, 13, 22, 12, 17, "dry")
+    C.put(a, 3, 16, "bone")  # landmark accent: pale horn tips (2 px)
+    C.put(a, 12, 18, "bone")
     # earth mound burying the lower half
     xx, yy = C.grid(w, h)
     mound = ((xx - 28) / 27) ** 2 + ((yy - 40) / 9) ** 2 <= 1
     a[mound] = C.ci("earth")
-    a[mound & C.bayer_mask(w, h, 0.25)] = C.ci("dry")
+    a[mound & (yy > 37)] = C.ci("bg1")  # flat darker foot, no dithering
     return [_finish(a)]
 
 
@@ -327,13 +383,13 @@ CABIN_SMOKE_AT = (43, -18)  # top-left of the smoke overlay
 
 def cabin_window():
     frames = []
-    for i, col in enumerate(("moon", "stone", "moon")):
+    for i, col in enumerate(("stone", "fog", "stone")):
         a = C.new(7, 5)
         a[:, :] = C.ci(col)
         a[2, :] = C.ci("earth")
         a[:, 3] = C.ci("earth")
-        if i == 2:
-            a[0, 0:3] = C.ci("stone")
+        if i == 0:
+            a[0, 1] = C.ci("moon")  # landmark accent
         frames.append(a)
     return frames
 
@@ -346,10 +402,9 @@ def cabin_smoke():
         for k, (x, y) in enumerate(puffs):
             yy = y - (i * 5 // 6)
             r = 1.3 + k * 0.5
-            col = "stone" if k < 2 else "fog"
+            col = "stone_dark" if k < 2 else "fog"
             blob = C.new(12, 20)
             C.disc(blob, x + ((i + k) % 3) - 1, yy, r, col)
-            blob = C.dither_out(blob, 1.0 - k * 0.22, ox=i, oy=k)
             m = (blob != C.T) & (a == C.T)
             a[m] = blob[m]
         frames.append(a)
@@ -394,11 +449,11 @@ def portal_altar():
         y = int(cy + 3 + math.sin(ang) * 11)
         if 0 <= y < h - 2 and 0 <= x < w - 2:
             if k % 2 == 0:
-                a[y:y + 2, x:x + 2] = C.ci("bone")
+                a[y:y + 2, x:x + 2] = C.ci("dry")
                 C.put(a, x, y + 1, "bg0")
             else:
-                C.put(a, x, y + 1, "bone")
-                C.put(a, x + 1, y + 1, "dry")
+                C.put(a, x, y + 1, "dry")
+                C.put(a, x + 1, y + 1, "earth")
     # 4 small iron braziers (bowls on legs; cold flames are overlays)
     for bx, by in BRAZIERS:
         a[by + 7, bx:bx + 6] = C.ci("stone_dark")
@@ -424,8 +479,8 @@ def _flame(col_core, col_edge, i):
 
 
 def altar_flame():
-    """Cold ghost flames at rest: pale moon (4f)."""
-    return [_flame("moon", "stone", i) for i in range(4)]
+    """Cold ghost flames at rest: a low-amplitude mid-tone flicker (4f); violet only in altar_flame_tele."""
+    return [_flame("stone", "stone_dark", i) for i in range(4)]
 
 
 def altar_flame_tele():

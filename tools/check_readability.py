@@ -62,83 +62,101 @@ def shifted_sum(img, mask, ys, xs):
     return out
 
 
-def sweep(base, fog_mask, frames, hue):
-    """Worst/percentile contrast of a projectile at every position inside the arena."""
+def lum_rgb(rgb):
+    c = np.asarray(rgb, dtype=np.float64) / 255
+    lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    return lin[..., 0] * 0.2126 + lin[..., 1] * 0.7152 + lin[..., 2] * 0.0722
+
+
+def sweep(lum, fog_mask, fog_rgb, alpha, frames, hue):
+    """Contrast of a projectile at every position in the arena. `lum` = luminance of the scene under the projectile
+    (fog already blended in); body pixels under fog are blended with the fog colour at the same alpha."""
     x0, y0, x1, y1 = L.ARENA
-    lum = LUM[base]
-    fog_l = LUM[IDX["fog"]]
-    hue_l = LUM[IDX[hue]]
+    hue_rgb = np.array(RGB[IDX[hue]], dtype=np.float64)
+    l_hue = float(lum_rgb(hue_rgb))
+    l_hue_fog = float(lum_rgb(hue_rgb * (1 - alpha) + fog_rgb * alpha))
     allr = []
     for f in frames:
         fh, fw = f.shape
         sil = f != -1
         body = f == IDX[hue]
         pad = 3
-        ring = np.zeros((fh + 2 * pad, fw + 2 * pad), dtype=bool)
-        silp = np.zeros_like(ring)
+        silp = np.zeros((fh + 2 * pad, fw + 2 * pad), dtype=bool)
         silp[pad:pad + fh, pad:pad + fw] = sil
+        ring = np.zeros_like(silp)
         for dy in range(-pad, pad + 1):
             for dx in range(-pad, pad + 1):
                 ring |= np.roll(np.roll(silp, dy, 0), dx, 1)
         ring &= ~silp
         ys = np.arange(y0, y1 - fh)
         xs = np.arange(x0, x1 - fw)
-        # body luminance after fog: fog pixels replace body pixels where the fog layer has a pixel
         fogged = shifted_sum(fog_mask.astype(float), body, ys, xs)
         nb = body.sum()
-        body_l = (fogged * fog_l + (nb - fogged) * hue_l) / nb
+        body_l = (fogged * l_hue_fog + (nb - fogged) * l_hue) / nb
         ring_l = shifted_sum(lum, ring, ys - pad, xs - pad) / ring.sum()
         hi, lo = np.maximum(body_l, ring_l), np.minimum(body_l, ring_l)
         allr.append(((hi + 0.05) / (lo + 0.05)).ravel())
     return np.concatenate(allr)
 
 
+GOAL_OVER_PROPS = {"violet": 0.10, "blood": 0.25}
+
+
 def main():
-    bg = lambda n: load_idx(os.path.join(ASSETS, "backgrounds", f"{n}.png"))  # noqa: E731
     W, H = L.SCREEN
-    ground = np.full((H, W), IDX["bg0"], dtype=np.int16)
-    for n in ("forest_far", "forest_mid", "arena_ground"):
-        C.paste(ground, bg(n), 0, 0)
-    fog_tile, vig = bg("fog_overlay"), bg("vignette")
-    fog = C.new(W, H)
-    for ty in range(0, H, 256):
-        for tx in range(0, W, 256):
-            C.paste(fog, fog_tile, tx, ty)
-    C.paste(fog, vig, 0, 0)  # vignette pixels are bg0 drawn over everything, treat like fog-style overlay
-    fog_mask = fog != -1
+    bgd = os.path.join(ASSETS, "backgrounds")
+    lay = json.load(open(os.path.join(ASSETS, "atlas", "manifest.json")))["layout"]
+    al = lay.get("alphas", {})
+    rgb = lambda n: np.array(Image.open(os.path.join(bgd, f"{n}.png")).convert("RGBA"))  # noqa: E731
 
-    def with_overlay(img):
-        out = img.copy()
-        out[fog_mask] = fog[fog_mask]
-        return out
+    def put(img, im, alpha=1.0):
+        m = im[..., 3] == 255
+        img[m] = img[m] * (1 - alpha) + im[..., :3][m] * alpha
 
+    base = np.zeros((H, W, 3))
+    base[:] = RGB[IDX["bg0"]]
+    put(base, rgb("forest_far"))
+    put(base, rgb("forest_mid"))
+    put(base, rgb("forest_mist"), al.get("forest_mist", 1.0))
+    put(base, rgb("arena_ground"))
+    with_props = base.copy()
     props = json.load(open(os.path.join(ASSETS, "data", "arena_props.json"), encoding="utf-8"))["props"]
-    with_props = ground.copy()
-    sheets = {}
     for p in sorted(props, key=lambda q: q["baseY"]):
-        if p["sprite"] not in sheets:
-            sheets[p["sprite"]] = load_idx(os.path.join(ASSETS, "sprites", f"{p['sprite']}.png"))
-        sh = sheets[p["sprite"]]
-        fw = p["w"]
-        spr = sh[:, p["frame"] * fw:(p["frame"] + 1) * fw]
-        C.paste(with_props, spr[:, ::-1] if p["flip"] else spr, p["x"], p["y"])
-    g_over = with_overlay(ground)
-    p_over = with_overlay(with_props)
+        sh = np.array(Image.open(os.path.join(ASSETS, "sprites", f"{p['sprite']}.png")).convert("RGBA"))
+        spr = sh[:, p["frame"] * p["w"]:(p["frame"] + 1) * p["w"]]
+        if p["flip"]:
+            spr = spr[:, ::-1]
+        layer = np.zeros((H, W, 4), dtype=np.uint8)
+        x, y = p["x"], p["y"]
+        hh, ww = spr.shape[:2]
+        X0, Y0, X1, Y1 = max(0, x), max(0, y), min(W, x + ww), min(H, y + hh)
+        if X1 > X0 and Y1 > Y0:
+            layer[Y0:Y1, X0:X1] = spr[Y0 - y:Y1 - y, X0 - x:X1 - x]
+            put(with_props, layer)
+    fog = rgb("fog_overlay")
+    fa = al.get("fog_overlay", 1.0)
+    fog_mask = fog[..., 3] == 255
+    fog_rgb = np.array(RGB[IDX["fog"]], dtype=np.float64)
+    put(base, fog, fa)
+    put(with_props, fog, fa)
+    lum_g, lum_p = lum_rgb(base), lum_rgb(with_props)
 
     failed = False
-    print("projectile contrast vs surroundings (every position in the arena; fog + vignette on top):")
+    print(f"projectile contrast vs surroundings (every position in the arena; fog at alpha {fa} on top):")
     for name, hue in PROJECTILES.items():
         sheet = load_idx(os.path.join(ASSETS, "sprites", f"{name}.png"))
         h = sheet.shape[0]
         frames = [sheet[:, i * h:(i + 1) * h] for i in range(sheet.shape[1] // h)]
-        r = sweep(g_over, fog_mask, frames, hue)
-        rp = sweep(p_over, fog_mask, frames, hue)
+        r = sweep(lum_g, fog_mask, fog_rgb, fa, frames, hue)
+        rp = sweep(lum_p, fog_mask, fog_rgb, fa, frames, hue)
         ok = r.min() >= TARGET[hue]
+        below = (rp < TARGET[hue]).mean()
+        goal_ok = below < GOAL_OVER_PROPS[hue]
         failed |= not ok
-        below = (rp < TARGET[hue]).mean() * 100
         print(f"  {name:11s} ({hue:6s}) ground: min {r.min():.2f} p1 {np.percentile(r, 1):.2f} median {np.median(r):.2f}"
-              f"  target >= {TARGET[hue]} {'OK' if ok else 'FAIL'}   | over props: min {rp.min():.2f}, {below:.1f}% below target")
-    g = bg("arena_ground")
+              f" (>= {TARGET[hue]}) {'OK' if ok else 'FAIL'} | over props: {below * 100:.1f}% below target"
+              f" (goal < {GOAL_OVER_PROPS[hue] * 100:.0f}%) {'OK' if goal_ok else 'MISSED'}")
+    g = load_idx(os.path.join(bgd, "arena_ground.png"))
     cx0, cy0, cx1, cy1 = L.CALM_ZONE
     z = LUM[g[cy0:cy1, cx0:cx1]]
     worst = 0.0
@@ -146,15 +164,9 @@ def main():
         hi, lo = np.maximum(a_, b_), np.minimum(a_, b_)
         worst = max(worst, float(((hi + 0.05) / (lo + 0.05)).max()))
     ok = worst <= CALM_MAX
-    intruders = [p for p in props if not (p["x"] + p["w"] <= cx0 or p["x"] >= cx1 or p["y"] + p["h"] <= cy0 or p["y"] >= cy1)]
-    bad = [p for p in intruders if p["kind"] not in CALM_EXEMPT_KINDS and p["sprite"] not in ("portal_altar", "altar_flame")
-           and not p.get("inGraveyard")]
-    exempt = len(intruders) - len(bad)
-    ok_props = not bad
-    failed |= not (ok and ok_props)
-    print(f"calm zone {L.CALM_ZONE}: max neighbour contrast {worst:.2f} (<= {CALM_MAX}) {'OK' if ok else 'FAIL'}; "
-          f"props inside: {len(bad)} {'OK' if ok_props else 'FAIL ' + str([p['sprite'] for p in bad])}"
-          f" ({exempt} exempt: author's graveyard fence/graves/altar)")
+    failed |= not ok
+    print(f"calm zone {L.CALM_ZONE}: max neighbour contrast {worst:.2f} (<= {CALM_MAX}) {'OK' if ok else 'FAIL'}"
+          " (props in the calm zone: see check_layout.py)")
     return 1 if failed else 0
 
 

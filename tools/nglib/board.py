@@ -4,7 +4,8 @@ import numpy as np
 from . import canvas as C
 from . import font
 from .palette import NAMES
-from .scene import W, compose_scene, upscale
+from .palette import RGB
+from .scene import W, compose_rgb, upscale
 
 SCALE = 3
 
@@ -51,13 +52,15 @@ def style_board(art, game, order, title):
               ("orb_small", 0, cx + 20, cy - 20, cy - 14, False), ("orb_large", 0, cx - 60, cy - 30, cy - 20, False),
               ("rune_shard", 0, cx + 30, cy + 40, cy + 48, False), ("blade", 0, cx + 90, cy - 30, cy - 14, False),
               ("wraith", 0, cx - 40, cy + 40, cy + 56, False)]
-    scene = compose_scene(art["backgrounds"], sp, art["props"], actors)
-    sw = np.full((11, W), C.ci("bg0"), dtype=np.int16)
+    scene = compose_rgb(art["backgrounds"], sp, art["props"], actors, alphas=art["layout"]["alphas"])
     head = _header(f"{title} - STYLE BOARD - 19 COLOR PALETTE - 480X270 AT 3X")
     for i, n in enumerate(NAMES):
         head[2:9, W - 4 - (len(NAMES) - i) * 8:W - 4 - (len(NAMES) - i) * 8 + 7] = C.ci(n)
-    del sw
-    return upscale(np.vstack([head, scene, catalogue(sp, order)]), SCALE)
+    return upscale(np.vstack([_rgb(head), scene, _rgb(catalogue(sp, order))]), SCALE)
+
+
+def _rgb(idx):
+    return np.array(C.to_image(idx))[..., :3]
 
 
 def stress_board(art, game, title, count=80, seed=4242):
@@ -79,6 +82,6 @@ def stress_board(art, game, title, count=80, seed=4242):
         f = int(rng.integers(0, len(sp[k])))
         h, w = sp[k][f].shape
         actors.append((k, f, int(x - w / 2), int(y - h / 2), int(y + h / 2), False))
-    scene = compose_scene(art["backgrounds"], sp, art["props"], actors)
+    scene = compose_rgb(art["backgrounds"], sp, art["props"], actors, alphas=art["layout"]["alphas"])
     head = _header(f"{title} - STRESS BOARD - 2 HEROES + {len(kinds)} PROJECTILES - 3X")
-    return upscale(np.vstack([head, scene]), SCALE)
+    return upscale(np.vstack([_rgb(head), scene]), SCALE)

@@ -1,69 +1,73 @@
-"""Arena layout: single source of truth for the art composer (and, from Part C, the sim spawn data).
+"""Arena layout v2 (a calm forest clearing): single source of truth for the art composer and the sim spawn data.
 
-Screen 480x270. Author anchors are given in percent of the screen (x from left, y from top): px = x*4.8, y*2.7.
-Everything here is data; tools/nglib/compose.py turns it into ground, fence runs and placed props.
+All coordinates are screen px of the 480x270 screen. Landmark positions are the BASE CENTRE of the sprite (where it
+touches the ground). tools/nglib/compose.py turns this into ground, forest and placed props; the generator writes
+assets/data/arena_layout.json (read by the sim) and assets/data/arena_props.json (read by the renderer).
 """
 
-SEED = 20261104
+SEED = 20261105
 SCREEN = (480, 270)
 ARENA = (48, 27, 432, 243)  # playable rectangle x0, y0, x1, y1 (384x216)
 HERO_SPAWN = (240, 135)
 BOSS_BAR = (48, 250, 432, 262)
-CALM_ZONE = (140, 75, 340, 195)  # central 200x120: no high-contrast ground detail, no props
-CURB_THICKNESS = 6
+CALM_ZONE = (165, 75, 340, 195)  # nearly flat ground, no props
 DESPAWN_MARGIN = 24
 OVERHANG_MAX = 8
+EDGE_BAND = 10  # soft dark band just outside the rectangle so the clamp still reads
 
 # Ritual inlay (rune bursts still come from its 8 runes)
 RITUAL_CENTER = HERO_SPAWN
 RITUAL_RADIUS = 76
 RUNE_RING_RADIUS = 64
 
-# --- graveyard: author's 32 fence anchors (percent), merged + ordered by compose.fence_polyline()
-FENCE_ANCHORS_PCT = [
-    (17, 20), (17, 24), (18, 30), (18, 35), (18, 44), (17, 44), (18, 40), (22, 43), (21, 45), (26, 47), (28, 49),
-    (31, 47), (20, 49), (21, 52), (25, 52), (30, 51), (33, 49), (32, 42), (33, 37), (33, 34), (34, 29), (33, 23),
-    (33, 19), (27, 18), (20, 19), (23, 19), (28, 19), (30, 19), (29, 18), (19, 20), (19, 20), (22, 21),
-]
-FENCE_MERGE_DIST = 6  # anchors closer than this (px) are merged
-GATE_WIDTH = 18  # gap on the bottom side, filled by the double gate (the anchor posts flank it)
+# Portal altar (shade spawn): stays at the author's anchor, alone in the clearing
+PORTAL_ALTAR = (120, 78)  # dais centre
+PORTAL_CLEAR_RADIUS = 20
 
-PORTAL_ALTAR_PCT = (25, 29)  # the author's cross -> portal altar centre
-PORTAL_CLEAR_RADIUS = 28
+# Landmarks: base centres (px)
+GIANT_TREE = (378, 125)  # trunk base centre
+RUNE_SWORD = (378, 140)  # sword stuck in a small stone base at the foot of the trunk
+GALLOWS = (138, 150)
+WELL = (362, 172)
+WELL_LAMP = (386, 162)  # small bent gas lamp post next to the well
+RIBCAGE = (372, 242)  # beast ribcage, bottom-right (kept off the right-side hollows)
+WAGON = (270, 44)  # top edge, half behind the forest
+WAGON_HORSE = (318, 46)  # horse skeleton beside the wagon
+CABIN = (54, 242)  # lower-left, half hidden by the forest (unchanged from the previous arena)
+WORKSHOP = [("workbench_0", 46, 26), ("weapon_rack_0", 70, 22), ("crate_0", 36, 28), ("crate_1", 84, 28), ("gas_lamp_0", 96, 28)]
+FALLEN_WEAPONS = [("weapon_sword_1", 404, 152), ("weapon_spear_1", 352, 140), ("helmet_0", 396, 160)]
+TIGHT_CANVAS_CROWN = True  # the giant tree crown leaves the arena through the top edge
 
-DEAD_TREES_PCT = [(22, 76), (40, 83), (43, 21), (38, 61), (71, 80), (76, 47), (68, 19), (60, 68)]
-
-# --- landmarks: centre positions in px (guidelines; validated against the calm zone, portal and hollows)
-# workshop props in front of the cabin and the wagon's horse (offsets from the landmark centre, px)
-WORKSHOP = [("workbench_0", 46, 26), ("weapon_rack_0", 70, 22), ("crate_0", 36, 28), ("crate_1", 84, 28), ("gas_lamp_1", 96, 28)]
-WAGON_HORSE = (44, 12)
-LANDMARKS = {
-    "rune_sword": (404, 100),  # nudged right of the author's dead tree at (365,127)
-    "gallows": (403, 52),
-    "hunter_wagon": (56, 160),
-    "cursed_well": (400, 182),
-    "hunter_cabin": (54, 214),
-}
-
-# --- forest hollows: gaps in the curb where stalkers step in (side, position along that side in px)
+# Forest hollows: gaps in the tree line where stalkers step in (side, position along that side).
+# Chosen so that none is within HOLLOW_CLEAR px of a landmark sprite's pixels or a grave's box (generator-checked).
 HOLLOWS = [
-    ("top", 262), ("top", 362),
-    ("bottom", 236), ("bottom", 318),
-    ("left", 60), ("left", 120),
-    ("right", 150), ("right", 186),
+    ("top", 72), ("top", 162),
+    ("bottom", 190), ("bottom", 300),
+    ("left", 47), ("left", 139),
+    ("right", 180), ("right", 226),
 ]
-HOLLOW_CLEAR = 15  # no prop box may come closer than this to a hollow point (stalkers need a clear doorway)
+HOLLOW_CLEAR = 30
 HOLLOW_WIDTH = 18
 
-# --- density per zone (props per 10,000 px^2) and min spacing for Poisson-like scatter
-GRAVESTONES = (24, 30)  # min, max inside the fence (the spec's target)
-# Hard floor: with the altar (56x44) and its literal 28 px clear radius inside the author's fence, only ~11 fit;
-# the build fails below this floor so a regression cannot silently empty the graveyard.
-GRAVESTONES_FLOOR = 10
-FIELD_DENSITY = 5.0
-FIELD_MIN_SPACING = 18
-FOREST_EDGE_DENSITY = 9.0
-DECAL_COUNT = {"crack": 16, "moss": 10, "puddle": 3, "stain": 9, "bonedust": 6}
+# Author's dead-tree anchors (percent of the screen). v2 allows at most 6 non-landmark trees: anchors that collide with
+# the calm zone, a landmark or a hollow are nudged (smallest move) or dropped; the generator reports both.
+DEAD_TREES_PCT = [(22, 76), (40, 83), (43, 21), (38, 61), (71, 80), (76, 47), (68, 19), (60, 68)]
+MAX_TREES = 6
+
+# Graves: 8-12 in 2-3 loose clusters (2-4 each) plus singles. Cluster centres (base points) and sizes.
+# ((centre), count, (spread x, spread y)) - spreads follow the free space left by the landmarks
+GRAVE_CLUSTERS = [((204, 58), 4, (10, 13)), ((246, 230), 4, (14, 10)), ((60, 103), 2, (2, 5))]
+GRAVE_SINGLES = [(84, 152), (120, 195)]
+GRAVE_LANDMARK_CLEAR = 24
+GRAVE_ALTAR_CLEAR = 20
+FENCE_FRAGMENTS = 3  # short broken fence fragments placed next to graves
+
+# Small decor budget (<= 25) in loose clusters; Poisson-disc min spacing within a cluster
+SMALL_DECOR_CLUSTERS = [((64, 60), 4), ((150, 222), 4), ((300, 70), 3), ((236, 40), 3), ((420, 120), 3), ((110, 112), 3),
+                        ((330, 240), 3)]
+SMALL_DECOR_MAX = 25
+SMALL_DECOR_SPACING = 7
+FREE_AREA_MIN = 0.45
 AMBIENT_EYES = 7
 
 
@@ -74,3 +78,7 @@ def pct(p):
 def hollow_point(side, pos):
     x0, y0, x1, y1 = ARENA
     return {"top": (pos, y0), "bottom": (pos, y1), "left": (x0, pos), "right": (x1, pos)}[side]
+
+# Render-side alphas (shared by the game, previews and checks via manifest.layout.alphas). PNGs stay binary-alpha
+# and palette-pure; these flat layers are made translucent at draw time.
+ALPHAS = {"forest_mist": 0.35, "fog_overlay": 0.12, "vignette": 0.35, "vignette_outer": 0.35}

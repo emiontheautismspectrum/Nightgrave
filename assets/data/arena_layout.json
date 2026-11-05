@@ -6,7 +6,7 @@
   243
  ],
  "calmZone": [
-  140,
+  165,
   75,
   340,
   195
@@ -18,50 +18,50 @@
  "hollows": [
   {
    "side": "top",
-   "x": 262,
+   "x": 72,
    "y": 27
   },
   {
    "side": "top",
-   "x": 362,
+   "x": 162,
    "y": 27
   },
   {
    "side": "bottom",
-   "x": 236,
+   "x": 190,
    "y": 243
   },
   {
    "side": "bottom",
-   "x": 318,
+   "x": 300,
    "y": 243
   },
   {
    "side": "left",
    "x": 48,
-   "y": 60
+   "y": 47
   },
   {
    "side": "left",
    "x": 48,
-   "y": 120
+   "y": 139
   },
   {
    "side": "right",
    "x": 432,
-   "y": 150
+   "y": 180
   },
   {
    "side": "right",
    "x": 432,
-   "y": 186
+   "y": 226
   }
  ],
  "portal": [
   120,
   78
  ],
- "portalClearRadius": 28,
+ "portalClearRadius": 20,
  "runes": [
   {
    "x": 299,

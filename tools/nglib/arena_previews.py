@@ -7,7 +7,7 @@ from PIL import Image
 from . import canvas as C
 from . import font
 from .palette import RGB
-from .scene import H, W, compose_scene, upscale
+from .scene import H, W, compose_rgb, paste_rgb, upscale
 
 
 def _hero(cx, cy):
@@ -38,47 +38,30 @@ def arena_board(art, threat_sprites):
         actors.append((k, int(rng.integers(0, len(sp[k]))), int(x - f.shape[1] / 2), int(y - f.shape[0] / 2), int(y + f.shape[0] / 2), False))
     eyes = [i for i, p in enumerate(art["props"]) if p["sprite"] == "forest_eyes"]
     over = {eyes[0]: 1} if eyes else {}
-    a = compose_scene(art["backgrounds"], sp, art["props"], actors, tele, overrides=over)
+    a = compose_rgb(art["backgrounds"], sp, art["props"], actors, tele, art["layout"]["alphas"], overrides=over)
     return upscale(a, 3)
 
 
-def _alpha_blend(top_rgba, bottom_rgb, alpha):
-    t = top_rgba[..., :3].astype(np.float32)
-    m = (top_rgba[..., 3:4] > 0).astype(np.float32) * alpha
-    return (t * m + bottom_rgb.astype(np.float32) * (1 - m)).astype(np.uint8)
-
-
 def translucency_demo(art, threat_sprites):
-    """The hero behind a tree, the fence and the cabin: normal vs faded (35% alpha), side by side, 3x.
-    (The chapel facade was dropped from the final landmark set; the cabin stands in for it.)
-    This preview shows a real alpha blend, so it is exempt from the palette check."""
+    """The hero behind a tree, a grave and the cabin: normal vs faded (35%; 45% for props wider than 40 px), 3x.
+    (The chapel facade was dropped from the landmark set; the cabin stands in for it.) Real alpha blend, so this
+    preview is exempt from the palette check."""
     sp = {**art["sprites"], **threat_sprites}
     bg = art["backgrounds"]
     props = art["props"]
-    picks = []
-    for want in ("tree_", "fence_run_", "hunter_cabin"):
-        p = next(p for p in props if p["sprite"].startswith(want) and p["kind"] != "forest")
-        picks.append(p)
     tiles = []
-    for p in picks:
+    for want in ("tree_", "grave_", "hunter_cabin"):
+        i, p = next((i, p) for i, p in enumerate(props) if p["sprite"].startswith(want) and p["kind"] != "forest")
         hx = p["x"] + p["w"] // 2
         hy = p["baseY"] - 6  # just behind the prop's base: the prop is drawn in front
         cw, ch = max(64, p["w"] + 24), max(56, p["h"] + 20)
         x0 = int(np.clip(hx - cw // 2, 0, W - cw))
         y0 = int(np.clip(p["baseY"] - ch + 8, 0, H - ch))
-        others = [q for q in props if q is not p]
-        base = compose_scene(bg, sp, others, _hero(hx, hy), fog=False)
-        rgb_base = np.array(C.to_image(base))[..., :3]
-        spr = p and sp[p["sprite"]][p["frame"]]
-        if p["flip"]:
-            spr = spr[:, ::-1]
-        layer = C.new(W, H)
-        C.paste(layer, spr, p["x"], p["y"])
-        top = np.array(C.to_image(layer))
-        normal = _alpha_blend(top, rgb_base, 1.0)
-        faded = _alpha_blend(top, rgb_base, 0.35)
-        crop = lambda im: im[y0:y0 + ch, x0:x0 + cw]
-        tiles.append((crop(normal), crop(faded), p["sprite"]))
+        fade = 0.45 if p["w"] > 40 else 0.35
+        normal = compose_rgb(bg, sp, props, _hero(hx, hy), alphas=art["layout"]["alphas"])
+        faded = compose_rgb(bg, sp, props, _hero(hx, hy), alphas=art["layout"]["alphas"], prop_alpha={i: fade})
+        crop = lambda im: im[y0:y0 + ch, x0:x0 + cw]  # noqa: E731
+        tiles.append((crop(normal), crop(faded), f"FADED {int(fade * 100)}%"))
     pad = 6
     th = max(t[0].shape[0] for t in tiles)
     tw = sum(t[0].shape[1] * 2 + pad * 3 for t in tiles) + pad
@@ -86,17 +69,23 @@ def translucency_demo(art, threat_sprites):
     canvas[:] = RGB[0]
     x = pad
     lab = C.new(tw, 14)
-    for n, f, name in tiles:
+    for n, f, label in tiles:
         canvas[12:12 + n.shape[0], x:x + n.shape[1]] = n
-        font.text(lab, x, 3, "NORMAL", "moon")
+        font.text(lab, x, 3, "NORMAL", "stone")
         x += n.shape[1] + pad
         canvas[12:12 + f.shape[0], x:x + f.shape[1]] = f
-        font.text(lab, x, 3, "FADED 35%", "moon")
+        font.text(lab, x, 3, label, "stone")
         x += f.shape[1] + pad * 2
     labrgb = np.array(C.to_image(lab))
     m = labrgb[..., 3] > 0
     canvas[:14][m] = labrgb[..., :3][m]
     return np.repeat(np.repeat(canvas, 3, axis=0), 3, axis=1)
+
+
+def squint_test(board_rgb):
+    """The 3x arena board blurred (radius ~3 px at 3x): do the hero and threats still stand out, is the clearing calm?"""
+    from PIL import Image, ImageFilter
+    return np.array(Image.fromarray(board_rgb).filter(ImageFilter.GaussianBlur(3)))
 
 
 def _grid_board(entries, title, scale, cols_w=W):
@@ -128,11 +117,9 @@ def _grid_board(entries, title, scale, cols_w=W):
 def variation_board(art):
     sp = art["sprites"]
     entries = []
-    for name in sorted(n for n, g in art["groups"].items() if g == "arena" and not n.startswith("fence_run_")):
+    for name in sorted(n for n, g in art["groups"].items() if g == "arena" and n != "giant_tree"):
         frames = sp[name]
         entries.append((name, frames if len(frames) <= 2 else frames[:1]))
-    for name in sorted(art["pieces"]):
-        entries.append((name, art["pieces"][name]))
     for name in sorted(art["decals"]):
         entries.append((name, art["decals"][name]))
     return _grid_board(entries, "VARIATION BOARD - DECOR VARIANTS - 2 FRAMES = SHADE A / B", 3, cols_w=720)
@@ -142,8 +129,11 @@ ANIMS = ["shade_rise", "shade_idle", "shade_cast", "shade_dissolve", "portal_ign
          "stalker_emerge", "stalker_idle", "stalker_cast", "stalker_vanish", "forest_eyes", "forest_leaf_ash",
          "rune_sword", "gallows_cage", "crow", "hunter_wagon", "well_wisp", "cabin_smoke", "cabin_window",
          "altar_flame", "altar_flame_tele", "altar_chain"] + [f"rune_glow_{g}" for g in range(2)]
+# static landmarks shown for context in the strips (giant tree is the new main landmark)
+ANIM_CONTEXT = ["giant_tree", "rune_sword_base"]
 
 
 def animation_strips(art):
     sp = art["sprites"]
-    return _grid_board([(n, sp[n]) for n in ANIMS], "ANIMATION STRIPS - SPAWN / VANISH + LANDMARK LOOPS - 4X", 4, cols_w=400)
+    return _grid_board([(n, sp[n]) for n in ANIMS + ANIM_CONTEXT], "ANIMATION STRIPS - SPAWN / VANISH + LANDMARK LOOPS - 4X",
+                       4, cols_w=400)

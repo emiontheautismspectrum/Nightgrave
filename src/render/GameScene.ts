@@ -96,8 +96,12 @@ export class GameScene extends Phaser.Scene {
     this.hero = this.add.sprite(0, 0, ATLAS, frame(`${this.cfg.hero}_idle`));
     this.pulse = this.add.sprite(0, 0, ATLAS, frame('parry_pulse')).setVisible(false);
     // fog, vignette and the thin near-forest overhang above the world, then telegraph copies, reticle, HUD
+    // flat layers are palette-pure PNGs made translucent here (alphas shared with previews/checks via the manifest)
+    const al: Record<string, number> = MANIFEST.layout.alphas;
     this.fog = this.add.tileSprite(0, 0, VIEW_WIDTH, VIEW_HEIGHT, bgKey('fog_overlay')).setOrigin(0).setDepth(D_FOG);
-    this.add.image(0, 0, bgKey('vignette')).setOrigin(0).setDepth(D_FOG + 1);
+    this.fog.setAlpha(al.fog_overlay ?? 1);
+    this.add.image(0, 0, bgKey('vignette')).setOrigin(0).setDepth(D_FOG + 1).setAlpha(al.vignette ?? 1);
+    this.add.image(0, 0, bgKey('vignette_outer')).setOrigin(0).setDepth(D_FOG + 1).setAlpha(al.vignette_outer ?? 1);
     this.add.image(0, 0, bgKey('forest_near')).setOrigin(0).setDepth(D_FOG + 2);
     this.buildTelegraphOverlay();
     this.reticle = this.add.image(0, 0, ATLAS, frame('cursor_reticle')).setDepth(D_HUD);
@@ -115,6 +119,7 @@ export class GameScene extends Phaser.Scene {
         sprite: this.add.tileSprite(0, 0, VIEW_WIDTH, VIEW_HEIGHT, bgKey(f.name)).setOrigin(0),
         k: f.parallax,
       }));
+    this.add.image(0, 0, bgKey('forest_mist')).setOrigin(0).setAlpha(MANIFEST.layout.alphas.forest_mist ?? 1);
     this.add.image(0, 0, bgKey('arena_ground')).setOrigin(0);
     // Runes rest on frame 0 (dim carved stone); they only glow as a rune-burst telegraph.
     this.runes = RUNES.map((r, g) => this.add.sprite(r.x, r.y, ATLAS, frame(`rune_glow_${g}` as SpriteName)));
@@ -197,7 +202,8 @@ export class GameScene extends Phaser.Scene {
       this.sim.step(this.input2.sample());
       for (const e of this.sim.state.events) this.onEvent(e);
     }
-    this.fog.tilePositionX = Math.floor(this.sim.state.tick / 12);
+    // slow, small fog drift (a few px back and forth; the fog layer is full-screen and avoids the calm zone)
+    this.fog.tilePositionX = Math.round(Math.sin(this.sim.state.tick / 600) * 4);
     const dx = this.sim.state.hero.x - this.sim.params.cx;
     for (const l of this.parallax) l.sprite.tilePositionX = Math.round(dx * l.k);
     this.draw();

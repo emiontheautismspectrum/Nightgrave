@@ -22,7 +22,13 @@ ASSETS = os.path.join(ROOT, "assets")
 PAL = np.array(RGB, dtype=np.int32)
 errors = []
 # Previews that intentionally show a render-side alpha blend (not game art): exempt from the palette check.
-PALETTE_EXEMPT = {"translucency_demo.png"}
+# These composites reproduce the game's render-side alphas (fog, mist, vignette steps, translucency, blur), so they
+# contain blended colours by design. All sprites and backgrounds stay strictly palette-pure.
+PALETTE_EXEMPT = {"translucency_demo.png", "arena_board.png", "style_board.png", "stress_board.png", "squint_test.png",
+                  "noise_compare.png"}
+# v2 value hierarchy: share of bone/moon-bright pixels allowed per arena sprite (decor: none; landmarks: accents)
+BRIGHT = {"bone", "moon"}
+LANDMARK_BRIGHT_MAX = 0.02
 # Reserved-color policy, independent of the generator's own group labels:
 #   gameplay sprites (tools/nglib/spec.py) may use any palette color;
 #   the explicit exception list below may use violet/violet_dark (telegraphs, eyes, casters) - never red;
@@ -109,6 +115,17 @@ def main():
         bad = reserved_used(images[p]) - allowed
         if bad:
             err(f"sprites/{n}.png ({groups.get(n, '?')}) uses reserved gameplay colors {sorted(bad)}")
+        if groups.get(n) == "arena":
+            px = images[p]
+            op = px[..., 3] == 255
+            bright = np.zeros(op.shape, dtype=bool)
+            for c in BRIGHT:
+                r_, g_, b_ = RGB[NAMES.index(c)]
+                bright |= op & (px[..., 0] == r_) & (px[..., 1] == g_) & (px[..., 2] == b_)
+            share = bright.sum() / max(1, op.sum())
+            limit = LANDMARK_BRIGHT_MAX if n in gen_arena.LANDMARK_STATIC + gen_arena.LANDMARK_ANIM else 0.0
+            if share > limit:
+                err(f"sprites/{n}.png has {share * 100:.1f}% bone/moon-bright pixels (max {limit * 100:.0f}%)")
     for n in spec.BACKGROUNDS:  # every arena background is decor
         p = os.path.join(ASSETS, "backgrounds", f"{n}.png")
         if p in images:
@@ -161,7 +178,7 @@ def main():
 
     # style board: exact 3x nearest-neighbour upscale
     for board, scale in (("style_board", 3), ("stress_board", 3), ("arena_board", 3), ("variation_board", 3),
-                         ("animation_strips", 4), ("translucency_demo", 3)):
+                         ("animation_strips", 4), ("translucency_demo", 3), ("noise_compare", 2), ("squint_test", 1)):
         check_board(images, os.path.join(ASSETS, "preview", f"{board}.png"), scale)
     pj = os.path.join(ASSETS, "data", "arena_props.json")
     if not os.path.exists(pj):

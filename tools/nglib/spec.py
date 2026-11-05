@@ -19,6 +19,6 @@ SPRITES = {
 
 # Gameplay sprites above; arena decor/landmark/caster sprites are defined by tools/gen_arena.py (layout-dependent).
 BACKGROUNDS = {
-    "arena_ground": (480, 270), "forest_far": (480, 270), "forest_mid": (480, 270), "forest_near": (480, 270),
-    "fog_overlay": (256, 256), "vignette": (480, 270),
+    "arena_ground": (480, 270), "forest_far": (480, 270), "forest_mid": (480, 270), "forest_mist": (480, 270),
+    "forest_near": (480, 270), "fog_overlay": (480, 270), "vignette": (480, 270), "vignette_outer": (480, 270),
 }

@@ -5,14 +5,18 @@
    "w": 480
   },
   "fog_overlay": {
-   "h": 256,
-   "w": 256
+   "h": 270,
+   "w": 480
   },
   "forest_far": {
    "h": 270,
    "w": 480
   },
   "forest_mid": {
+   "h": 270,
+   "w": 480
+  },
+  "forest_mist": {
    "h": 270,
    "w": 480
   },
@@ -23,9 +27,19 @@
   "vignette": {
    "h": 270,
    "w": 480
+  },
+  "vignette_outer": {
+   "h": 270,
+   "w": 480
   }
  },
  "layout": {
+  "alphas": {
+   "fog_overlay": 0.12,
+   "forest_mist": 0.35,
+   "vignette": 0.35,
+   "vignette_outer": 0.35
+  },
   "arena": [
    48,
    27,
@@ -39,120 +53,10 @@
    262
   ],
   "calmZone": [
-   140,
+   165,
    75,
    340,
    195
-  ],
-  "fence": [
-   [
-    86,
-    94
-   ],
-   [
-    86,
-    81
-   ],
-   [
-    82,
-    65
-   ],
-   [
-    82,
-    54
-   ],
-   [
-    93,
-    53
-   ],
-   [
-    106,
-    57
-   ],
-   [
-    110,
-    51
-   ],
-   [
-    132,
-    50
-   ],
-   [
-    142,
-    50
-   ],
-   [
-    158,
-    51
-   ],
-   [
-    158,
-    62
-   ],
-   [
-    163,
-    78
-   ],
-   [
-    158,
-    92
-   ],
-   [
-    158,
-    100
-   ],
-   [
-    154,
-    113
-   ],
-   [
-    158,
-    132
-   ],
-   [
-    149,
-    127
-   ],
-   [
-    144,
-    138
-   ],
-   [
-    134,
-    132
-   ],
-   [
-    125,
-    127
-   ],
-   [
-    120,
-    140
-   ],
-   [
-    101,
-    140
-   ],
-   [
-    96,
-    132
-   ],
-   [
-    106,
-    116
-   ],
-   [
-    101,
-    122
-   ],
-   [
-    84,
-    119
-   ],
-   [
-    86,
-    108
-   ]
   ],
   "forest": [
    {
@@ -168,10 +72,7 @@
     "parallax": 0.0
    }
   ],
-  "gate": [
-   110,
-   140
-  ],
+  "graves": 11,
   "heroSpawn": [
    240,
    135
@@ -179,50 +80,223 @@
   "hollows": [
    {
     "side": "top",
-    "x": 262,
+    "x": 72,
     "y": 27
    },
    {
     "side": "top",
-    "x": 362,
+    "x": 162,
     "y": 27
    },
    {
     "side": "bottom",
-    "x": 236,
+    "x": 190,
     "y": 243
    },
    {
     "side": "bottom",
-    "x": 318,
+    "x": 300,
     "y": 243
    },
    {
     "side": "left",
     "x": 48,
-    "y": 60
+    "y": 47
    },
    {
     "side": "left",
     "x": 48,
-    "y": 120
+    "y": 139
    },
    {
     "side": "right",
     "x": 432,
-    "y": 150
+    "y": 180
    },
    {
     "side": "right",
     "x": 432,
-    "y": 186
+    "y": 226
+   }
+  ],
+  "landmarks": [
+   {
+    "box": [
+     92,
+     52,
+     148,
+     96
+    ],
+    "sprite": "portal_altar"
+   },
+   {
+    "box": [
+     314,
+     -2,
+     442,
+     126
+    ],
+    "sprite": "giant_tree"
+   },
+   {
+    "box": [
+     366,
+     82,
+     390,
+     140
+    ],
+    "sprite": "rune_sword"
+   },
+   {
+    "box": [
+     364,
+     133,
+     392,
+     143
+    ],
+    "sprite": "rune_sword_base"
+   },
+   {
+    "box": [
+     114,
+     94,
+     162,
+     150
+    ],
+    "sprite": "gallows_tree"
+   },
+   {
+    "box": [
+     350,
+     148,
+     374,
+     172
+    ],
+    "sprite": "cursed_well"
+   },
+   {
+    "box": [
+     380,
+     134,
+     392,
+     162
+    ],
+    "sprite": "gas_lamp_1"
+   },
+   {
+    "box": [
+     344,
+     202,
+     400,
+     242
+    ],
+    "sprite": "beast_ribcage"
+   },
+   {
+    "box": [
+     246,
+     12,
+     294,
+     44
+    ],
+    "sprite": "hunter_wagon"
+   },
+   {
+    "box": [
+     302,
+     32,
+     334,
+     46
+    ],
+    "sprite": "horse_skeleton"
+   },
+   {
+    "box": [
+     22,
+     186,
+     86,
+     242
+    ],
+    "sprite": "hunter_cabin"
+   },
+   {
+    "box": [
+     90,
+     230,
+     110,
+     240
+    ],
+    "sprite": "workbench_0"
+   },
+   {
+    "box": [
+     116,
+     224,
+     132,
+     236
+    ],
+    "sprite": "weapon_rack_0"
+   },
+   {
+    "box": [
+     85,
+     232,
+     95,
+     242
+    ],
+    "sprite": "crate_0"
+   },
+   {
+    "box": [
+     133,
+     232,
+     143,
+     242
+    ],
+    "sprite": "crate_1"
+   },
+   {
+    "box": [
+     144,
+     214,
+     156,
+     242
+    ],
+    "sprite": "gas_lamp_0"
+   },
+   {
+    "box": [
+     402,
+     143,
+     406,
+     152
+    ],
+    "sprite": "weapon_sword_1"
+   },
+   {
+    "box": [
+     350,
+     130,
+     355,
+     140
+    ],
+    "sprite": "weapon_spear_1"
+   },
+   {
+    "box": [
+     391,
+     153,
+     401,
+     160
+    ],
+    "sprite": "helmet_0"
    }
   ],
   "portal": [
    120,
    78
   ],
-  "portalClearRadius": 28,
+  "portalClearRadius": 20,
   "ritualCenter": [
    240,
    135
@@ -414,227 +488,23 @@
    "h": 2,
    "w": 2
   },
-  "fence_broken_0": {
+  "fence_frag_0": {
    "frames": 2,
    "group": "arena",
-   "h": 16,
-   "w": 24
+   "h": 14,
+   "w": 13
   },
-  "fence_broken_1": {
+  "fence_frag_1": {
    "frames": 2,
    "group": "arena",
-   "h": 16,
-   "w": 24
-  },
-  "fence_corner_0": {
-   "frames": 2,
-   "group": "arena",
-   "h": 18,
-   "w": 16
-  },
-  "fence_corner_1": {
-   "frames": 2,
-   "group": "arena",
-   "h": 18,
-   "w": 16
-  },
-  "fence_gate_0": {
-   "frames": 2,
-   "group": "arena",
-   "h": 20,
-   "w": 20
-  },
-  "fence_leaning_0": {
-   "frames": 2,
-   "group": "arena",
-   "h": 16,
-   "w": 24
-  },
-  "fence_post_0": {
-   "frames": 2,
-   "group": "arena",
-   "h": 15,
-   "w": 6
-  },
-  "fence_post_1": {
-   "frames": 2,
-   "group": "arena",
-   "h": 15,
-   "w": 6
-  },
-  "fence_run_00": {
-   "frames": 1,
-   "group": "arena",
-   "h": 30,
-   "w": 5
-  },
-  "fence_run_01": {
-   "frames": 1,
-   "group": "arena",
-   "h": 33,
-   "w": 9
-  },
-  "fence_run_02": {
-   "frames": 1,
-   "group": "arena",
-   "h": 28,
-   "w": 5
-  },
-  "fence_run_03": {
-   "frames": 1,
-   "group": "arena",
-   "h": 18,
-   "w": 16
-  },
-  "fence_run_04": {
-   "frames": 1,
-   "group": "arena",
-   "h": 21,
-   "w": 18
-  },
-  "fence_run_05": {
-   "frames": 1,
-   "group": "arena",
-   "h": 23,
-   "w": 9
-  },
-  "fence_run_06": {
-   "frames": 1,
-   "group": "arena",
-   "h": 18,
-   "w": 27
-  },
-  "fence_run_07": {
-   "frames": 1,
-   "group": "arena",
-   "h": 17,
-   "w": 15
-  },
-  "fence_run_08": {
-   "frames": 1,
-   "group": "arena",
-   "h": 18,
-   "w": 21
-  },
-  "fence_run_09": {
-   "frames": 1,
-   "group": "arena",
-   "h": 28,
-   "w": 5
-  },
-  "fence_run_10": {
-   "frames": 1,
-   "group": "arena",
-   "h": 33,
+   "h": 14,
    "w": 10
   },
-  "fence_run_11": {
-   "frames": 1,
+  "fence_frag_2": {
+   "frames": 2,
    "group": "arena",
-   "h": 31,
-   "w": 10
-  },
-  "fence_run_12": {
-   "frames": 1,
-   "group": "arena",
-   "h": 25,
-   "w": 5
-  },
-  "fence_run_13": {
-   "frames": 1,
-   "group": "arena",
-   "h": 30,
-   "w": 9
-  },
-  "fence_run_14": {
-   "frames": 1,
-   "group": "arena",
-   "h": 36,
-   "w": 9
-  },
-  "fence_run_15": {
-   "frames": 1,
-   "group": "arena",
-   "h": 22,
-   "w": 14
-  },
-  "fence_run_16": {
-   "frames": 1,
-   "group": "arena",
-   "h": 28,
-   "w": 10
-  },
-  "fence_run_17": {
-   "frames": 1,
-   "group": "arena",
-   "h": 23,
-   "w": 15
-  },
-  "fence_run_18": {
-   "frames": 1,
-   "group": "arena",
-   "h": 22,
-   "w": 14
-  },
-  "fence_run_19": {
-   "frames": 1,
-   "group": "arena",
-   "h": 30,
-   "w": 10
-  },
-  "fence_run_20": {
-   "frames": 1,
-   "group": "arena",
-   "h": 25,
-   "w": 10
-  },
-  "fence_run_21": {
-   "frames": 1,
-   "group": "arena",
-   "h": 33,
-   "w": 15
-  },
-  "fence_run_22": {
-   "frames": 1,
-   "group": "arena",
-   "h": 23,
-   "w": 10
-  },
-  "fence_run_23": {
-   "frames": 1,
-   "group": "arena",
-   "h": 20,
-   "w": 22
-  },
-  "fence_run_24": {
-   "frames": 1,
-   "group": "arena",
-   "h": 28,
+   "h": 14,
    "w": 7
-  },
-  "fence_run_25": {
-   "frames": 1,
-   "group": "arena",
-   "h": 31,
-   "w": 5
-  },
-  "fence_straight_0": {
-   "frames": 2,
-   "group": "arena",
-   "h": 16,
-   "w": 24
-  },
-  "fence_straight_1": {
-   "frames": 2,
-   "group": "arena",
-   "h": 16,
-   "w": 24
-  },
-  "fence_straight_2": {
-   "frames": 2,
-   "group": "arena",
-   "h": 16,
-   "w": 24
   },
   "forest_eyes": {
    "frames": 3,
@@ -671,6 +541,12 @@
    "group": "arena",
    "h": 28,
    "w": 12
+  },
+  "giant_tree": {
+   "frames": 1,
+   "group": "arena",
+   "h": 128,
+   "w": 128
   },
   "grass_0": {
    "frames": 2,
@@ -773,6 +649,18 @@
    "group": "arena",
    "h": 12,
    "w": 20
+  },
+  "grave_sunk_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 14
+  },
+  "grave_sunk_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 16,
+   "w": 12
   },
   "helmet_0": {
    "frames": 2,
@@ -1011,14 +899,14 @@
   "rune_sword": {
    "frames": 4,
    "group": "arena",
-   "h": 64,
-   "w": 40
+   "h": 58,
+   "w": 24
   },
   "rune_sword_base": {
    "frames": 1,
    "group": "arena",
-   "h": 20,
-   "w": 48
+   "h": 10,
+   "w": 28
   },
   "shade_cast": {
    "frames": 3,

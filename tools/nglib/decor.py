@@ -13,10 +13,10 @@ SHADE_B = {"stone": "stone_dark", "stone_dark": "fog", "moss": "forest", "dry": 
 
 
 def prop(a, shade_b=None):
-    """Finish a prop: moonlit outline + its shade-B twin."""
-    fa = C.moonlit(a)
+    """Finish a prop (v2 softness): a DARKER-shade outline of the fill (never a light rim), plus its shade-B twin."""
+    fa = C.outline(a)
     b = C.recolor(a, shade_b or SHADE_B)
-    return [fa, C.moonlit(b)]
+    return [fa, C.outline(b)]
 
 
 def _lit_split(a, frac=0.55):
@@ -148,6 +148,13 @@ def gravestones():
         out[f"grave_broken_{i}"] = prop(_grave(w, h, _broken(i, rng), rng, engrave=i != 1, cracks=2))
     for i, (w, h, f) in enumerate([(12, 20, _cross(6, 4.5)), (14, 20, _cross(6, 5.5, ring=True)), (12, 18, _cross(6, 4.0, lean=3.0))]):
         out[f"grave_cross_{i}"] = prop(_grave(w, h, f, rng, engrave=False))
+    for i, (w, h, sh) in enumerate([(14, 18, _round_top()), (12, 16, _pointed)]):  # half-sunk in a moss mound
+        a = _grave(w, h, sh, rng, cracks=1, moss=False)
+        xx, yy = C.grid(w, h)
+        mound = ((xx - w / 2) / (w / 2 + 1)) ** 2 + ((yy - h) / (h * 0.45)) ** 2 <= 1
+        a[mound & (a != C.T)] = C.ci("moss")
+        a[mound & (a == C.T) & (yy > h * 0.75)] = C.ci("moss")
+        out[f"grave_sunk_{i}"] = prop(a)
     for i, (w, h) in enumerate([(18, 10), (20, 12)]):
         a = C.new(w, h)
         a[1:h - 1, 1:w - 1] = C.ci("stone_dark")
@@ -215,8 +222,9 @@ def _ascii_prop(rows, legend, shade_b=None):
     return prop(C.from_ascii(rows, legend), shade_b)
 
 
-BONE = {"B": "bone", "D": "dry", "K": "bg0", "S": "stone", "s": "stone_dark", "E": "earth", "M": "moss", "F": "forest",
-        "m": "moon", "f": "fog"}
+# v2 value hierarchy: props are mid-dark, so old bones read as dry/earth, never bone-bright; no moon in decor
+BONE = {"B": "dry", "D": "earth", "K": "bg0", "S": "stone", "s": "stone_dark", "E": "earth", "M": "moss", "F": "forest",
+        "m": "stone", "f": "fog"}
 
 
 def small_decor():
@@ -228,11 +236,11 @@ def small_decor():
         ["..........", "....BBB...", "..BBDDBB..", ".BDD..DB..", ".........."],
     ]
     for i, r in enumerate(bones):
-        out[f"bone_pile_{i}"] = _ascii_prop(r, BONE, {"bone": "moon", "dry": "earth"})
+        out[f"bone_pile_{i}"] = _ascii_prop(r, BONE, {"dry": "earth", "earth": "bg1"})
     skulls = [[".......", "..BBB..", ".BBBBB.", ".BKBKB.", "..BDB..", "......."],
               [".......", ".BBBB..", "BBBBBB.", "BKBBKB.", ".BDDB..", "......."]]
     for i, r in enumerate(skulls):
-        out[f"skull_{i}"] = _ascii_prop(r, BONE, {"bone": "moon"})
+        out[f"skull_{i}"] = _ascii_prop(r, BONE, {"dry": "earth"})
     grass = [
         ["........", "..D...D.", ".D.D.D..", "..DDDD..", ".EEEEE..", "........"],
         ["........", ".D..D...", "..D.D.D.", ".DDDDD..", "..EEE...", "........"],
@@ -282,7 +290,7 @@ def small_decor():
     mush = [["......", ".mmm..", "mmmmm.", "..B...", "..B...", "......"],
             [".......", ".mm.mm.", "mmmmmmm", ".B...B.", ".B...B.", "......."]]
     for i, r in enumerate(mush):
-        out[f"mushroom_{i}"] = _ascii_prop(r, BONE, {"moon": "stone", "bone": "moon"})
+        out[f"mushroom_{i}"] = _ascii_prop(r, BONE, {"stone": "stone_dark", "dry": "earth"})
     return out
 
 
@@ -300,7 +308,7 @@ def picket(a, x, base_y, height, bent=0, rust=True, tip=True):
     if tip:
         tx = x + bent
         ty = base_y - height
-        C.put(a, tx, ty, "moon")
+        C.put(a, tx, ty, "stone")
         C.put(a, tx - 1, ty + 1, "stone_dark")
         C.put(a, tx + 1, ty + 1, "stone_dark")
 
@@ -352,39 +360,22 @@ def stone_post(h, finial):
 
 
 def fence_pieces():
+    """v2: no fenced graveyard, only 2-3 short broken fragments (1-3 pickets), very low contrast."""
     out = {}
-    for i in range(3):
-        a = _fence_piece(24, 16, "straight", 400 + i)
-        if i == 1:
-            a[10:14, 7] = C.T  # a missing picket
-        if i == 2:
-            for x in range(1, 23, 3):
-                C.put(a, x, 13, "dry")
-        out[f"fence_straight_{i}"] = prop(a)
-    for i in range(2):
-        out[f"fence_broken_{i}"] = prop(_fence_piece(24, 16, "broken", 410 + i))
-    out["fence_leaning_0"] = prop(_fence_piece(24, 16, "leaning", 420))
-    for i in range(2):  # corner: post with two short runs meeting at a right angle (seen from 3/4)
-        a = C.new(16, 18)
-        C.paste(a, stone_post(18, i), 0 if i == 0 else 10, 0)
-        for x in (8, 11, 14) if i == 0 else (1, 4, 7):
-            picket(a, x, 17, 12)
-        for y in (6, 9, 12):
-            C.put(a, 6 if i == 0 else 9, y, "stone_dark")
-        out[f"fence_corner_{i}"] = prop(a)
-    for i in range(2):
-        out[f"fence_post_{i}"] = prop(stone_post(15, i))
-    g = C.new(20, 20)  # double gate (two leaves, arched top); the stone posts come from the fence anchors
-    for x in range(1, 19, 2):
-        top = 5 + int(abs(x - 9.5) * 0.5)
-        picket(g, x, 19, 19 - top, rust=x % 4 == 1)
-    for x in range(1, 19):
-        C.put(g, x, 15, "stone_dark")
-        C.put(g, x, 9, "stone_dark")
-    C.line(g, 2, 15, 8, 9, "stone_dark")  # diagonal braces
-    C.line(g, 17, 15, 11, 9, "stone_dark")
-    C.put(g, 9, 12, "moon")  # latch
-    out["fence_gate_0"] = prop(g)
+    for i, (n, lean) in enumerate(((3, 0), (2, 1), (1, 0))):
+        a = C.new(4 + n * 3, 14)
+        for k in range(n):
+            x = 2 + k * 3
+            h = 10 - (k * 3 + i) % 4
+            for y in range(13 - h, 13):
+                C.put(a, x + ((13 - y) * lean) // 8, y, "fog")
+            C.put(a, x + (h * lean) // 8, 12 - h, "stone_dark")  # dull spear tip
+        if n > 1:
+            for x in range(2, 2 + (n - 1) * 3 + 1):
+                C.put(a, x, 8, "fog")
+        for x in range(1, a.shape[1] - 1):
+            C.put(a, x, 13, "moss")
+        out[f"fence_frag_{i}"] = prop(a, {"fog": "stone_dark", "stone_dark": "bg1", "moss": "forest"})
     return out
 
 
@@ -399,12 +390,12 @@ def lamps_candles_weapons():
         hx = 5 + (4 if i == 1 else 0)
         a[3:8, hx - 2:hx + 3] = C.ci("stone_dark")
         a[4:7, hx - 1:hx + 2] = C.ci("fog")
-        C.put(a, hx - 1, 4, "moon")  # cold glass glint, unlit
+        C.put(a, hx - 1, 4, "stone")  # glass glint, unlit (mid tone)
         a[2, hx - 1:hx + 2] = C.ci("stone")
         a[26, 3:9] = C.ci("stone")
         out[f"gas_lamp_{i}"] = prop(a)
     for i, rows in enumerate([[".K.", ".B.", ".B.", ".B.", "DDD"], [".K..", ".BB.", ".BB.", "DDDD"]]):
-        out[f"candle_{i}"] = _ascii_prop(rows, BONE, {"bone": "moon", "dry": "earth"})
+        out[f"candle_{i}"] = _ascii_prop(rows, BONE, {"dry": "earth", "earth": "bg1"})
     weapons = {
         "weapon_sword_0": ["..m..", "..S..", "..S..", "..S..", "..S..", "..S..", "..S..", "..S..", ".sSs.", "sssss", "..E..", "..E..", "..D..", "..E.."],
         "weapon_sword_1": ["..m.", "..S.", ".SS.", "..S.", "..S.", "sSss", "..E.", "..D.", "..E."],
@@ -492,7 +483,6 @@ def ground_pieces():
         a[2:5, :] = C.ci("stone_dark")
         a[5, :] = C.ci("bg0")
         a[0, :] = C.ci("stone")
-        a[0, (i * 2)::5] = C.ci("moon")  # sparse cold rim glints along the lit edge
         for _ in range(2 + i):
             x = int(rng.integers(1, 15))
             a[0:4, x] = C.ci("bg0") if rng.random() < 0.5 else a[0:4, x]
@@ -505,7 +495,6 @@ def ground_pieces():
         a[:, :] = C.ci("stone_dark")
         a[0:2, :] = C.ci("stone")
         a[:, 0:2] = C.ci("stone")
-        a[0, 0] = C.ci("moon")
         if i:
             a[3:6, 3:6] = C.ci("moss")
         out[f"curb_corner_{i}"] = [a]
@@ -546,7 +535,7 @@ def decals():
         e = ((xx - 8) / 7) ** 2 + ((yy - 4) / 3) ** 2
         a[e <= 1.0] = C.ci("bg0")
         for x in range(4 + i, 10 + i):  # mostly stone, two cold moon glints (moon is as bright as violet)
-            C.put(a, x, 3, "moon" if x in (6 + i, 8 + i) else "stone")
+            C.put(a, x, 3, "stone_dark" if x in (6 + i, 8 + i) else "fog")
         C.put(a, 6, 5, "stone_dark")
         out[f"puddle_{i}"] = [a]
     for i in range(3):  # dark soil stains

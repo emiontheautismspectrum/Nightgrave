@@ -96,13 +96,18 @@ def main():
     write_json(os.path.join(ASSETS, "data", "arena_layout.json"), {
         "arena": lay["arena"], "heroSpawn": lay["heroSpawn"], "calmZone": lay["calmZone"], "portal": lay["portal"],
         "portalClearRadius": lay["portalClearRadius"], "hollows": lay["hollows"], "runes": lay["runes"]})
+    os.makedirs(os.path.join(ASSETS, "data"), exist_ok=True)
 
     title = read_title().upper()
     pv = lambda n: os.path.join(ASSETS, "preview", n)  # noqa: E731
-    save(board.style_board(art, game, list(spec.SPRITES), title), pv("style_board.png"))
-    save(board.stress_board(art, game, title), pv("stress_board.png"))
-    save(AP.arena_board(art, game), pv("arena_board.png"))
-    Image.fromarray(AP.translucency_demo(art, game)).save(pv("translucency_demo.png"), optimize=False)
+    os.makedirs(os.path.join(ASSETS, "preview"), exist_ok=True)
+    rgb = lambda a, n: Image.fromarray(a).save(pv(n), optimize=False)  # noqa: E731
+    rgb(board.style_board(art, game, list(spec.SPRITES), title), "style_board.png")
+    rgb(board.stress_board(art, game, title), "stress_board.png")
+    ab = AP.arena_board(art, game)
+    rgb(ab, "arena_board.png")
+    rgb(AP.squint_test(ab), "squint_test.png")
+    rgb(AP.translucency_demo(art, game), "translucency_demo.png")
     save(AP.variation_board(art), pv("variation_board.png"))
     save(AP.animation_strips(art), pv("animation_strips.png"))
     for n in art["notes"]:
