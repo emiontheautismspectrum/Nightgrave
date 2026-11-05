@@ -8,7 +8,9 @@ export const REPLAY_VERSION = 1;
 
 /** FNV-1a fingerprint of TUNING: a replay only plays back under the tuning it was recorded with. */
 export function tuningHash(): string {
-  const src = JSON.stringify(TUNING) + JSON.stringify(ARENA_LAYOUT); // spawn geometry is part of the rules
+  // spawn geometry is part of the rules (decorative layout fields such as the calm zone are not)
+  const L = ARENA_LAYOUT;
+  const src = JSON.stringify(TUNING) + JSON.stringify([L.arena, L.heroSpawn, L.portal, L.hollows, L.runes]);
   let h = 0x811c9dc5;
   for (let i = 0; i < src.length; i++) h = Math.imul(h ^ src.charCodeAt(i), 0x01000193) >>> 0;
   return h.toString(16).padStart(8, '0');

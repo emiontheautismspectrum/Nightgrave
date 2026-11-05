@@ -86,6 +86,30 @@ describe('casters', () => {
     }
   });
 
+  it('a hero standing ON a caster is never shot point-blank (the cast fizzles instead)', () => {
+    let fizzles = 0;
+    let checked = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const sim = new Sim(seed * 13, 'hard', { startWave: 3 });
+      for (let t = 0; t < 60 * 40 && sim.state.alive; t++) {
+        // walk onto the newest caster (portal or a stalker spot) and stand there
+        const c = sim.state.casters[sim.state.casters.length - 1];
+        sim.step(c ? { cursor: true, mx: Math.round(c.x), my: Math.round(c.y), buttons: 0 } : idle());
+        for (const e of sim.state.events) {
+          if (e.type === 'caster_fizzle') fizzles++;
+          if (e.type !== 'caster_fire') continue;
+          checked++;
+          const shooter = sim.state.casters.find((k) => k.id === e.id)!;
+          const d = Math.hypot(shooter.x - sim.state.hero.x, shooter.y - sim.state.hero.y);
+          expect(d).toBeGreaterThanOrEqual(16);
+          expect(sim.state.alive).toBe(true); // nothing kills on the very tick it is fired
+        }
+      }
+    }
+    expect(fizzles).toBeGreaterThan(0); // the scenario really happened
+    expect(checked).toBeGreaterThan(0);
+  });
+
   for (const d of ['easy', 'medium', 'hard'] as Difficulty[]) {
     it(`${d}: runs with casters replay exactly`, () => {
       const sim = new Sim(4242, d);

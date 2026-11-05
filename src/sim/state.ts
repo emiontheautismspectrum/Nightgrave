@@ -95,6 +95,7 @@ export type SimEvent =
   | { type: 'telegraph'; id: number; rune: number }
   | { type: 'caster'; id: number; kind: CasterKind; source: number }
   | { type: 'caster_fire'; id: number; attack: CasterAttack }
+  | { type: 'caster_fizzle'; id: number }
   | { type: 'wave'; wave: number }
   | { type: 'death'; x: number; y: number; by: number };
 

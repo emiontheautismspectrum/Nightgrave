@@ -229,9 +229,16 @@ function summon(s: SimState, p: SimParams, kind: CasterKind): boolean {
   return true;
 }
 
+/** Hero closer than this to a caster when it fires: the cast fizzles (no point-blank shots, e.g. blades on the hero). */
+export const CASTER_POINT_BLANK = 16;
+
 /** The caster's single attack, launched from where it stands (telegraphed since c.start). */
 function casterAttack(s: SimState, p: SimParams, c: Caster, sp: number): void {
   const tele = s.tick - c.start;
+  if (dist2(c.x, c.y, s.hero.x, s.hero.y) < CASTER_POINT_BLANK * CASTER_POINT_BLANK) {
+    s.events.push({ type: 'caster_fizzle', id: c.id });
+    return;
+  }
   const [ax, ay] = aimAtHero(s, c.x, c.y, 0.08);
   const ox = c.x + ax * 6;
   const oy = c.y + ay * 6;

@@ -8,6 +8,7 @@ import { TICK_RATE, type Difficulty } from '../data/tuning';
 import { encodeReplay, type Replay } from '../sim/replay';
 import { dashCooldownLeft, isDashing, isFading, isParryActive, parryCooldownLeft, parryCooldownOf, Sim } from '../sim/sim';
 import { playCue } from './sfx';
+import { HOLLOWS, RUNES } from '../data/arena';
 import type { SimEvent } from '../sim/state';
 import { ARENA_PROPS, ATLAS, MANIFEST, bgKey, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
 import { InputCollector } from './input';
@@ -27,6 +28,8 @@ const FADE_ALPHA_WIDE = 0.45;
 const WIDE_PROP_PX = 40;
 const FADE_PER_MS = (1 - FADE_ALPHA) / 100;
 const FADE_PAD = 4;
+/** Base y of the portal altar prop: the shade and its ignite telegraph draw in front of it. */
+const ALTAR_BASE = ARENA_PROPS.props.find((p) => p.sprite === 'portal_altar')?.baseY ?? 0;
 const FONT = '"Press Start 2P", monospace';
 
 export type HeroKind = 'knight' | 'wisp';
@@ -114,7 +117,7 @@ export class GameScene extends Phaser.Scene {
       }));
     this.add.image(0, 0, bgKey('arena_ground')).setOrigin(0);
     // Runes rest on frame 0 (dim carved stone); they only glow as a rune-burst telegraph.
-    this.runes = L.runes.map((r, g) => this.add.sprite(r.x, r.y, ATLAS, frame(`rune_glow_${g}` as SpriteName)));
+    this.runes = RUNES.map((r, g) => this.add.sprite(r.x, r.y, ATLAS, frame(`rune_glow_${g}` as SpriteName)));
     this.runes.forEach((r) => r.setDepth(D_GROUND_TELE));
     // Placed decor + landmarks, y-sorted with the actors by their base y (where they touch the ground)
     for (const p of ARENA_PROPS.props) {
@@ -132,7 +135,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Telegraph copies drawn ABOVE the actors, so a hero standing on a rune still sees it light up. */
   private buildTelegraphOverlay(): void {
-    this.runeOverlay = MANIFEST.layout.runes.map((r, g) =>
+    this.runeOverlay = RUNES.map((r, g) =>
       this.add.sprite(r.x, r.y, ATLAS, frame(`rune_glow_${g}` as SpriteName)).setAlpha(0.65).setVisible(false).setDepth(D_FOG + 4),
     );
   }
@@ -352,18 +355,19 @@ export class GameScene extends Phaser.Scene {
       let v = this.casterViews.get(c.id);
       if (!v) {
         const shade = c.kind === 'shade';
-        const hollow = c.source >= 0 ? MANIFEST.layout.hollows[c.source] : undefined;
+        const hollow = c.source >= 0 ? HOLLOWS[c.source] : undefined;
+        // the portal ignite and the shade are drawn above the altar prop, so the first visual cue is never hidden
         const tele = shade
-          ? this.add.sprite(c.x, c.y, ATLAS, frame('portal_ignite')).setDepth(D_GROUND_TELE)
+          ? this.add.sprite(c.x, c.y, ATLAS, frame('portal_ignite')).setDepth(D_YSORT + ALTAR_BASE + 0.5)
           : this.add.sprite(hollow?.x ?? c.x, hollow?.y ?? c.y, ATLAS, frame('forest_eyes')).setDepth(D_FOG + 3);
         if (hollow) {
-          const o = 7; // eyes glow in the dark just outside the gap
+          const o = 7; // eyes glow in the dark just outside the gap (bottom: less, to stay above the boss bar)
           tele.setPosition(hollow.x + (hollow.side === 'left' ? -o : hollow.side === 'right' ? o : 0),
-            hollow.y + (hollow.side === 'top' ? -o : hollow.side === 'bottom' ? o : 0));
+            hollow.y + (hollow.side === 'top' ? -o : hollow.side === 'bottom' ? 3 : 0));
         }
         const body = this.add.sprite(c.x, c.y + 4, ATLAS, frame(shade ? 'shade_rise' : 'stalker_emerge')).setOrigin(0.5, 1);
         body.setFlipX(!shade && (hollow?.side === 'right' || (hollow?.side !== 'left' && c.x > VIEW_WIDTH / 2)));
-        body.setDepth(D_YSORT + c.y + 4);
+        body.setDepth(shade ? D_YSORT + ALTAR_BASE + 1 : D_YSORT + c.y + 4);
         const fx = this.add.sprite(c.x, c.y, ATLAS, frame(shade ? 'portal_smoke' : 'forest_leaf_ash')).setOrigin(0.5, 1);
         fx.setDepth(D_YSORT + c.y + 5).setVisible(false);
         v = { body, tele, fx };
@@ -402,8 +406,11 @@ export class GameScene extends Phaser.Scene {
     const st = this.sim.state;
     const boxes: [number, number, number, number, number][] = [];
     const h = st.hero;
-    if (st.alive) boxes.push([h.x - 8, h.y - 12, h.x + 8, h.y + 5, h.y + 4]);
-    for (const pr of st.projectiles) boxes.push([pr.x - 6, pr.y - 6, pr.x + 6, pr.y + 6, pr.y + 4]);
+    boxes.push([h.x - 8, h.y - 12, h.x + 8, h.y + 5, h.y + 4]); // also while dying: the death burst stays visible
+    for (const pr of st.projectiles) {
+      const hh = (this.orbs.get(pr.id)?.height ?? 12) / 2; // same base as the sprite's depth
+      boxes.push([pr.x - hh, pr.y - hh, pr.x + hh, pr.y + hh, pr.y + hh]);
+    }
     for (const c of st.casters) if (st.tick >= c.appear0) boxes.push([c.x - 10, c.y - 20, c.x + 10, c.y + 4, c.y + 4]);
     const dt = this.game.loop.delta;
     for (const p of this.props) {
