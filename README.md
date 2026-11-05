@@ -38,13 +38,24 @@ Missing files fall back to synthesized sounds; nothing else to configure.
 Cloudflare Pages (the game) + one Worker with D1 (the Hard daily board). Step by step: [DEPLOY.md](DEPLOY.md).
 Without `VITE_API_BASE` the game runs fully offline.
 
+## How scores are verified
+
+Only runs proven by re-simulation appear on the Hard daily board. The game sends the score together with its input log
+(compressed). The Worker checks plausibility and keeps the run as **pending**. Every 20 minutes a GitHub Action
+(`npm run verify:pending`) re-runs the same deterministic simulation from the seed and the inputs and compares the
+length and the score exactly; only a match is promoted to the board. A 10-minute run verifies in well under a second.
+
+Remaining risks: a verified run can still come from an automated player (a bot that plays the real game); the daily
+seed is a public hash of the date, so the next day's layout can be practised early. Proposed later fix: mix a server
+secret into the seed and publish it at 00:00 UTC (offline Hard runs would then be unranked).
+
 ## Architecture
 
 - `src/sim/` - pure deterministic simulation (60 Hz fixed step, seeded PRNG, replay = seed + difficulty + inputs).
 - `src/render/` - Phaser scenes, menus, input (mouse/keyboard/gamepad/touch), audio; they only read sim state.
 - `src/shared/` - pure code used by both the game and the server (daily seed, score bound, text rules, replay codec).
 - `server/` - Cloudflare Worker + D1 for the Hard daily board (`server/migrations/`, `server/wrangler.toml`).
-- `tools/` - deterministic Python art pipeline and checks (palette, noise, readability, layout, audio files).
+- `tools/` - deterministic Python art pipeline and checks; `tools/verify/` is the replay verifier (Node).
 
 ## Credits
 

@@ -36,7 +36,8 @@ The output contains a line like `database_id = "1234abcd-..."`. Open `server/wra
 npx wrangler d1 migrations apply nightgrave --remote
 ```
 
-Answer `y` when asked.
+Answer `y` when asked. This applies every file in `server/migrations/` (including `0002_verification.sql`); after
+pulling a new version, run it again before `npx wrangler deploy`.
 
 ## 5. Create two secrets
 
@@ -56,8 +57,14 @@ npx wrangler secret put ADMIN_TOKEN
 npx wrangler secret put IP_SALT
 ```
 
-Each command asks you to paste a value. `ADMIN_TOKEN` is your moderation password; `IP_SALT` makes the stored IP hashes
-useless to anyone else. Secrets are never stored in git.
+```bash
+npx wrangler secret put VERIFIER_TOKEN
+```
+
+Run the generator three times. Each command asks you to paste a value. `ADMIN_TOKEN` is your moderation password;
+`IP_SALT` makes the stored IP hashes useless to anyone else; `VERIFIER_TOKEN` lets the replay verifier (step 13) post
+its verdicts. The Worker refuses to run without all of them (at least 32 characters each, 16 for the salt).
+Secrets are never stored in git.
 
 ## 6. Set the allowed origins
 
@@ -154,6 +161,35 @@ VITE_API_BASE=http://localhost:8787 npm run dev
 
 `npm run e2e:board` (with `wrangler dev` running) plays a Hard run in a browser under the production CSP, submits it
 and checks it on the local board.
+
+## 13. Replay verification (GitHub Actions)
+
+Only VERIFIED runs appear on the board. A submitted run is first **pending**: the game says "Submitted. On the board
+after verification". A scheduled GitHub Action (`.github/workflows/verify.yml`) re-simulates every pending run with
+the game's own deterministic simulation and compares the result exactly (length, death on the last tick, score).
+Verified runs go on the board, forged or broken ones are rejected (the reason is stored for moderation).
+
+1. On github.com open the repository -> **Settings** -> **Secrets and variables** -> **Actions** ->
+   **New repository secret**, and add:
+   - `API_BASE` = your Worker address (e.g. `https://nightgrave-api.<your-subdomain>.workers.dev`, no trailing slash)
+   - `VERIFIER_TOKEN` = the same value you stored with `npx wrangler secret put VERIFIER_TOKEN`
+2. **Actions** tab -> **verify-replays** -> **Run workflow**. The log ends with `verify: nothing pending` or
+   `verify: N verified, M rejected, 0 errors`. Tokens and player text are never printed.
+3. Verify a single exported submission locally (moderation/debugging), a JSON with the fields of a pending item:
+
+```bash
+npm run verify:replay -- submission.json
+```
+
+**Minutes budget.** Public repositories have unlimited Actions minutes. A private repository has 2,000 free minutes per
+month, and every run is billed as at least 1 minute (a run takes ~30-40 s: checkout, cached `npm ci`, early exit
+when nothing is pending). Every 20 minutes = 72 runs/day = ~2,160 billed minutes/month: slightly OVER the free 2,000
+for a private repo. For a private repo change the schedule in `.github/workflows/verify.yml` to every 30 minutes
+(`*/30 * * * *`, ~1,440 minutes/month) or every hour (`0 * * * *`, ~720). Players then wait up to 30-60 minutes.
+
+**Updating the game.** The verifier rejects runs recorded with a different tuning or client version (`outdated`).
+Deploy new versions (Worker, Pages and the repository the Action runs from) right after 00:00 UTC, when the day's
+board is new, so as few pending runs as possible are caught between versions.
 
 ## Free-plan limits to keep in mind
 
