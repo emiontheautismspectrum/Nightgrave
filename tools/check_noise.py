@@ -8,7 +8,8 @@ Baselines are rendered from git, by exporting that commit's tools/ into a temp d
   STAGE0 (the first committed floor: ground + ritual platform + forest + fog + vignette, no sprites, as Stage 0 composed it)
   PREV   (the arena right before the v2 softening pass: same composition as the current arena, incl. placed props)
 Requirements (both metrics): new <= 1.3 x STAGE0 and new <= 0.6 x PREV. The Stage 0 baseline is a floor without
-sprites, so it is compared like-for-like with the new floor (no props) AND, as asked, with the full new arena.
+sprites, so it is compared like-for-like with the new floor (no props). The full arena with props is held to the
+approved v4 baseline (ARENA_BASELINE): at most 10% noisier, at most 10% flatter (see ASSETS_SPEC.md).
 Also: zero fine dither in ground, forest, fog and vignette layers: no 4x4 window may be a non-uniform period-2 lattice
 (1-px checkerboards, stripes, 25/50/75% bayer). The coarse 2x2-block pattern allowed on the fog edge has period 4.
 Placed arena props may have at most PROP_DITHER_MAX such windows each.
@@ -33,11 +34,14 @@ STAGE0_COMMIT = "7454e7f"  # "Stage 0: deterministic pixel-art pipeline, palette
 PREV_COMMIT = "ea8e8f4"  # the pre-V2 arena: the commit right before "art: arena v2 softening and layout"
 V2_COMMIT = "72c0155"  # the arena v2 ground (wagon close-up "previous version")
 V3_COMMIT = "e02b6b5"  # "art: arena v3 ground, giant tree, trees, wagon" (flatness baseline for v4)
-MIN_DEPTH_VS_V3 = 1.5
 JOINT_STONE_MAX = 1.35
 BUSY_RANGE = 8.0  # L* units
 PROP_DITHER_MAX = 4  # "a few pixels of texture" per prop sprite
 MAX_VS_STAGE0 = 1.3
+# Approved stone-courtyard arena (author sign-off after the Stage 4 fixups, commit "art: arena v4 fixups"):
+# absolute values of the full arena with props. A future change may be at most 10% noisier or 10% flatter.
+ARENA_BASELINE = {"energy": 1.744, "busy": 0.315, "depth": 3.00}
+BASELINE_TOLERANCE = 0.10
 MAX_VS_PREV = 0.6
 LAYERS = ("arena_ground", "forest_far", "forest_mid", "forest_mist", "forest_near", "forest_overhang", "fog_overlay",
           "vignette", "vignette_outer")
@@ -395,7 +399,8 @@ def main():
         checks = (
             ("new arena / previous arena", cur[i] / prev[i], MAX_VS_PREV),
             ("new floor / Stage 0 floor (like-for-like)", cur_floor[i] / s0[i], MAX_VS_STAGE0),
-            ("new arena (with props) / Stage 0 floor", cur[i] / s0[i], MAX_VS_STAGE0),
+            # the approved stone arena replaces the stale "arena with props vs Stage 0 floor" limit
+            ("new arena / approved v4 baseline", cur[i] / ARENA_BASELINE[label], round(1 + BASELINE_TOLERANCE, 2)),
         )
         for name, ratio, limit in checks:
             ok = ratio <= limit
@@ -404,10 +409,11 @@ def main():
     write_compare([("STAGE 0 FLOOR", s0_img, s0), ("PREVIOUS ARENA", prev_img, prev), ("NEW ARENA", cur_img, cur)])
     v2_dir, v3_dir = build_commit(V2_COMMIT), build_commit(V3_COMMIT)
     d_v3, d_new = depth(compose_floor(v3_dir)), depth(compose_floor(here))
-    ok = d_new >= MIN_DEPTH_VS_V3 * d_v3
+    lim = (1 - BASELINE_TOLERANCE) * ARENA_BASELINE["depth"]
+    ok = d_new >= lim - 1e-9
     failed |= not ok
-    print(f"ground depth (std of 32x32 block-mean L*, floor without props): v3 {d_v3:.2f}, new {d_new:.2f} "
-          f"= {d_new / d_v3:.2f}x (>= {MIN_DEPTH_VS_V3}x)  {'OK' if ok else 'FAIL'}")
+    print(f"ground depth (std of 32x32 block-mean L*, floor without props): v3 {d_v3:.2f}, new {d_new:.2f}; "
+          f"approved baseline {ARENA_BASELINE['depth']:.2f}, must stay >= {lim:.2f} (<= 10% flatter)  {'OK' if ok else 'FAIL'}")
     write_v4_compare([prev_img, compose_current(v3_dir), cur_img], compose_floor(here))
     write_wagon_closeup(os.path.join(v2_dir, "sprites", "hunter_wagon.png"), os.path.join(here, "sprites", "hunter_wagon.png"))
     failed |= stone_checks()

@@ -109,7 +109,13 @@ Arena softness rules (v2, refined in v3; everything in the arena group)
 11. Wagon (v3): gothic hunter's wagon ~56x40 in 3/4 view: arched dark-wood box, spiked roof rail, two tall leaf-shaped
    windows, iron-banded planks, two large spoked wheels (one broken), shafts on the ground, one hanging lantern (3f),
    torn cloth. No bones.
-Checks: `tools/check_noise.py` (noise vs Stage 0 and the pre-v2 arena, flatness vs v2, no fine dither),
+Noise baseline (re-baselined after the Stage 4 fixups, approved by the author): the stone-courtyard arena with props
+measures energy 1.744, busy 31.5% and ground depth 3.00 (std of 32x32 block-mean L*). These absolute values are the
+baseline in `check_noise.py` (`ARENA_BASELINE`). A future change fails if it is more than 10% noisier (energy or busy
+> 1.10x the baseline) or more than 10% flatter (depth < 0.90x). The older "arena with props <= 1.3x the Stage 0 floor"
+and "depth >= 1.5x v3" limits were written for a soft-earth floor and are retired; the like-for-like floor vs Stage 0
+(<= 1.3x) and the vs pre-v2 (<= 0.6x) limits stay.
+Checks: `tools/check_noise.py` (noise vs Stage 0, the pre-v2 arena and the approved v4 baseline, no fine dither),
 `tools/check_layout.py` (budgets, zones, hollows, bones), `tools/check_readability.py` (threats and hero contrast),
 `tools/validate_palette.py` (palette, reserved and ground-only colours, bright accents).
 
