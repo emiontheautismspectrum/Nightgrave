@@ -16,6 +16,17 @@ const STEP_MS = 1000 / TICK_RATE;
 const MAX_STEPS_PER_FRAME = 5;
 const RESTART_LOCKOUT_MS = 300;
 const FADE_MS = 120;
+// draw order (CLAUDE.md "Arena"): ground < ground telegraphs < y-sorted world < fog/vignette/overhang < HUD
+const D_GROUND_TELE = 3;
+const D_YSORT = 10;
+const D_FOG = 1000;
+const D_HUD = 2000;
+/** Translucency: props in front of an actor fade to this alpha (wide props a bit less), in ~100 ms. */
+const FADE_ALPHA = 0.35;
+const FADE_ALPHA_WIDE = 0.45;
+const WIDE_PROP_PX = 40;
+const FADE_PER_MS = (1 - FADE_ALPHA) / 100;
+const FADE_PAD = 4;
 const FONT = '"Press Start 2P", monospace';
 
 export type HeroKind = 'knight' | 'wisp';
@@ -47,7 +58,9 @@ export class GameScene extends Phaser.Scene {
   private runes: Phaser.GameObjects.Sprite[] = [];
   private runeOverlay: Phaser.GameObjects.Sprite[] = [];
   private parallax: { sprite: Phaser.GameObjects.TileSprite; k: number }[] = [];
-  private actors!: Phaser.GameObjects.Layer;
+  /** Placed props, y-sorted with the actors; `alpha` eases toward 1 or the translucency target. */
+  private props: { s: Phaser.GameObjects.Sprite; x0: number; y0: number; x1: number; y1: number; base: number; fade: number }[] = [];
+  private casterViews = new Map<number, { body: Phaser.GameObjects.Sprite; tele: Phaser.GameObjects.Sprite; fx: Phaser.GameObjects.Sprite }>();
   private orbs = new Map<number, Phaser.GameObjects.Sprite>();
   /** Ids destroyed by a parry this frame: removed instantly (the spark replaces them), others fade out. */
   private parried = new Set<number>();
@@ -75,17 +88,16 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     createAnimations(this);
     this.buildArena();
-    this.actors = this.add.layer();
+    // y-sorted world: props, casters, hero, projectiles and effects all use depth = Y_SORT + base y
     this.shadow = this.add.image(0, 0, ATLAS, frame('hero_shadow'));
     this.hero = this.add.sprite(0, 0, ATLAS, frame(`${this.cfg.hero}_idle`));
     this.pulse = this.add.sprite(0, 0, ATLAS, frame('parry_pulse')).setVisible(false);
-    this.actors.add([this.shadow, this.hero, this.pulse]);
-    // fog and vignette above the actors (both are light / clear inside the arena), then the thin near-forest overhang
-    this.fog = this.add.tileSprite(0, 0, VIEW_WIDTH, VIEW_HEIGHT, bgKey('fog_overlay')).setOrigin(0);
-    this.add.image(0, 0, bgKey('vignette')).setOrigin(0);
-    this.add.image(0, 0, bgKey('forest_near')).setOrigin(0);
+    // fog, vignette and the thin near-forest overhang above the world, then telegraph copies, reticle, HUD
+    this.fog = this.add.tileSprite(0, 0, VIEW_WIDTH, VIEW_HEIGHT, bgKey('fog_overlay')).setOrigin(0).setDepth(D_FOG);
+    this.add.image(0, 0, bgKey('vignette')).setOrigin(0).setDepth(D_FOG + 1);
+    this.add.image(0, 0, bgKey('forest_near')).setOrigin(0).setDepth(D_FOG + 2);
     this.buildTelegraphOverlay();
-    this.reticle = this.add.image(0, 0, ATLAS, frame('cursor_reticle'));
+    this.reticle = this.add.image(0, 0, ATLAS, frame('cursor_reticle')).setDepth(D_HUD);
     this.buildHud();
     this.input2 = new InputCollector(this);
     this.newRun();
@@ -103,17 +115,25 @@ export class GameScene extends Phaser.Scene {
     this.add.image(0, 0, bgKey('arena_ground')).setOrigin(0);
     // Runes rest on frame 0 (dim carved stone); they only glow as a rune-burst telegraph.
     this.runes = L.runes.map((r, g) => this.add.sprite(r.x, r.y, ATLAS, frame(`rune_glow_${g}` as SpriteName)));
-    // Placed decor + landmarks, in base-y order. (Y-sorting with actors and translucency arrive in Part C.)
+    this.runes.forEach((r) => r.setDepth(D_GROUND_TELE));
+    // Placed decor + landmarks, y-sorted with the actors by their base y (where they touch the ground)
     for (const p of ARENA_PROPS.props) {
       const s = this.add.sprite(p.x, p.y, ATLAS, frame(p.sprite as SpriteName, p.frame)).setOrigin(0).setFlipX(p.flip);
+      s.setDepth(D_YSORT + p.baseY);
       if (p.anim) s.play({ key: p.anim, startFrame: (p.x + p.y) % MANIFEST.sprites[p.anim as SpriteName].frames });
+      if (p.kind === 'eyes') {
+        s.setDepth(D_FOG + 3); // ambient forest eyes glow above the overhang
+        continue;
+      }
+      const fade = p.w > WIDE_PROP_PX ? FADE_ALPHA_WIDE : FADE_ALPHA;
+      this.props.push({ s, x0: p.x, y0: p.y, x1: p.x + p.w, y1: p.y + p.h, base: p.baseY, fade });
     }
   }
 
   /** Telegraph copies drawn ABOVE the actors, so a hero standing on a rune still sees it light up. */
   private buildTelegraphOverlay(): void {
     this.runeOverlay = MANIFEST.layout.runes.map((r, g) =>
-      this.add.sprite(r.x, r.y, ATLAS, frame(`rune_glow_${g}` as SpriteName)).setAlpha(0.65).setVisible(false),
+      this.add.sprite(r.x, r.y, ATLAS, frame(`rune_glow_${g}` as SpriteName)).setAlpha(0.65).setVisible(false).setDepth(D_FOG + 4),
     );
   }
 
@@ -136,6 +156,8 @@ export class GameScene extends Phaser.Scene {
     const bg = this.add.rectangle(0, 0, 200, 56, 0x0b0d12).setStrokeStyle(1, 0x3a4558);
     this.panelText = this.add.text(0, 0, '', { ...style, align: 'center', lineSpacing: 6 }).setOrigin(0.5);
     this.panel = this.add.container(VIEW_WIDTH / 2, VIEW_HEIGHT / 2, [bg, this.panelText]).setVisible(false);
+    for (const o of [this.hudScore, this.hudMult, this.hudWave, this.banner, this.hudDaily, this.panel, ...Object.values(this.icons)])
+      o.setDepth(D_HUD);
   }
 
   private newRun(): void {
@@ -144,6 +166,9 @@ export class GameScene extends Phaser.Scene {
     this.hudDaily.setText(run.label);
     for (const s of this.orbs.values()) s.destroy();
     this.orbs.clear();
+    for (const v of this.casterViews.values()) for (const o of [v.body, v.tele, v.fx]) o.destroy();
+    this.casterViews.clear();
+    for (const p of this.props) p.s.setAlpha(1);
     this.tweens.killTweensOf(this.banner);
     this.banner.setAlpha(0);
     this.acc = 0;
@@ -192,7 +217,7 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'dash_start': {
         const t = this.add.sprite(h.x, h.y, ATLAS, frame('dash_trail')).setFlipX(e.dirX < 0);
-        this.actors.addAt(t, 0);
+        t.setDepth(D_YSORT + h.y + 3);
         t.play('dash_trail').once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => t.destroy());
         this.hero.play(`${this.cfg.hero}_dash`);
         playCue('dash');
@@ -223,8 +248,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private burst(anim: SpriteName, x: number, y: number): void {
-    const s = this.add.sprite(Math.round(x), Math.round(y), ATLAS, frame(anim));
-    this.actors.add(s);
+    const s = this.add.sprite(Math.round(x), Math.round(y), ATLAS, frame(anim)).setDepth(D_YSORT + y + 8);
     s.play(anim).once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => s.destroy());
   }
 
@@ -253,9 +277,10 @@ export class GameScene extends Phaser.Scene {
     const h = st.hero;
     const hx = Math.round(h.x);
     const hy = Math.round(h.y);
-    this.hero.setPosition(hx, hy - 4).setFlipX(h.facing < 0);
-    this.shadow.setPosition(hx, hy + 5);
-    this.pulse.setPosition(hx, hy - 2);
+    this.hero.setPosition(hx, hy - 4).setFlipX(h.facing < 0).setDepth(D_YSORT + hy + 4);
+    this.shadow.setPosition(hx, hy + 5).setDepth(D_YSORT + hy + 3.9);
+    this.pulse.setPosition(hx, hy - 2).setDepth(D_YSORT + hy + 4.1);
+    this.drawCasters();
     if (st.alive) {
       const anim = this.hero.anims.currentAnim?.key ?? '';
       const busy = this.hero.anims.isPlaying && (anim.endsWith('_parry') || anim.endsWith('_pulse'));
@@ -275,10 +300,9 @@ export class GameScene extends Phaser.Scene {
       if (!s) {
         s = this.add.sprite(0, 0, ATLAS, frame(pr.kind)).play(pr.kind).setAlpha(0);
         this.tweens.add({ targets: s, alpha: 1, duration: FADE_MS }); // render-only fade-in at the rim
-        this.actors.add(s);
         this.orbs.set(pr.id, s);
       }
-      s.setPosition(Math.round(pr.x), Math.round(pr.y));
+      s.setPosition(Math.round(pr.x), Math.round(pr.y)).setDepth(D_YSORT + pr.y + s.height / 2);
       if (pr.kind === 'wraith') s.setFlipX(pr.vx < 0);
       if (isFading(st, pr) && s.anims.currentAnim?.key !== 'wraith_fade') s.play('wraith_fade');
     }
@@ -300,6 +324,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.parried.clear();
+    this.updateTranslucency();
 
     const ptr = this.input.activePointer;
     this.reticle.setVisible(this.input2.mode === 'cursor' && st.alive).setPosition(Math.round(ptr.worldX), Math.round(ptr.worldY));
@@ -315,6 +340,84 @@ export class GameScene extends Phaser.Scene {
     icon.setFrame(frame(name, cooling ? 1 : 0));
     ring.setVisible(cooling);
     if (cooling) ring.setFrame(frame('icon_ring', Math.min(11, Math.floor((1 - left / total) * 12))));
+  }
+
+  /** Casters are drawn purely from sim timestamps (phase progress), so the visuals can never desync. */
+  private drawCasters(): void {
+    const st = this.sim.state;
+    const t = st.tick;
+    const seen = new Set<number>();
+    for (const c of st.casters) {
+      seen.add(c.id);
+      let v = this.casterViews.get(c.id);
+      if (!v) {
+        const shade = c.kind === 'shade';
+        const hollow = c.source >= 0 ? MANIFEST.layout.hollows[c.source] : undefined;
+        const tele = shade
+          ? this.add.sprite(c.x, c.y, ATLAS, frame('portal_ignite')).setDepth(D_GROUND_TELE)
+          : this.add.sprite(hollow?.x ?? c.x, hollow?.y ?? c.y, ATLAS, frame('forest_eyes')).setDepth(D_FOG + 3);
+        if (hollow) {
+          const o = 7; // eyes glow in the dark just outside the gap
+          tele.setPosition(hollow.x + (hollow.side === 'left' ? -o : hollow.side === 'right' ? o : 0),
+            hollow.y + (hollow.side === 'top' ? -o : hollow.side === 'bottom' ? o : 0));
+        }
+        const body = this.add.sprite(c.x, c.y + 4, ATLAS, frame(shade ? 'shade_rise' : 'stalker_emerge')).setOrigin(0.5, 1);
+        body.setFlipX(!shade && (hollow?.side === 'right' || (hollow?.side !== 'left' && c.x > VIEW_WIDTH / 2)));
+        body.setDepth(D_YSORT + c.y + 4);
+        const fx = this.add.sprite(c.x, c.y, ATLAS, frame(shade ? 'portal_smoke' : 'forest_leaf_ash')).setOrigin(0.5, 1);
+        fx.setDepth(D_YSORT + c.y + 5).setVisible(false);
+        v = { body, tele, fx };
+        this.casterViews.set(c.id, v);
+      }
+      const shade = c.kind === 'shade';
+      const prog = (a: number, b: number, n: number) => Math.min(n - 1, Math.floor(((t - a) / Math.max(1, b - a)) * n));
+      v.tele.setVisible(t < c.appear0 || (shade && t < c.appear));
+      if (t < c.appear0) v.tele.setFrame(frame(shade ? 'portal_ignite' : 'forest_eyes', shade ? prog(c.start, c.appear0, 4) : 1 + ((t >> 3) & 1)));
+      else if (shade) v.tele.setFrame(frame('portal_ignite', 3));
+      v.body.setVisible(t >= c.appear0);
+      if (t < c.appear0) continue;
+      if (t < c.appear) v.body.setFrame(frame(shade ? 'shade_rise' : 'stalker_emerge', prog(c.appear0, c.appear, 6)));
+      else if (t < c.castStart) v.body.setFrame(frame(shade ? 'shade_idle' : 'stalker_idle', (t >> 3) & 3));
+      else if (t < c.fire) v.body.setFrame(frame(shade ? 'shade_cast' : 'stalker_cast', prog(c.castStart, c.fire, 3)));
+      else {
+        const f = prog(c.fire, c.end, 6);
+        v.body.setFrame(frame(shade ? 'shade_dissolve' : 'stalker_vanish', f));
+        v.fx.setVisible(true).setFrame(frame(shade ? 'portal_smoke' : 'forest_leaf_ash', f));
+      }
+    }
+    for (const [id, v] of this.casterViews) {
+      if (seen.has(id)) continue;
+      v.body.destroy();
+      v.tele.destroy();
+      v.fx.destroy();
+      this.casterViews.delete(id);
+    }
+  }
+
+  /**
+   * Translucency (render-only): a prop drawn IN FRONT of the hero, a caster or a projectile (its base is lower on
+   * screen) and overlapping that actor's box (+4 px) fades to ~35% alpha (~45% for wide props) within ~100 ms.
+   */
+  private updateTranslucency(): void {
+    const st = this.sim.state;
+    const boxes: [number, number, number, number, number][] = [];
+    const h = st.hero;
+    if (st.alive) boxes.push([h.x - 8, h.y - 12, h.x + 8, h.y + 5, h.y + 4]);
+    for (const pr of st.projectiles) boxes.push([pr.x - 6, pr.y - 6, pr.x + 6, pr.y + 6, pr.y + 4]);
+    for (const c of st.casters) if (st.tick >= c.appear0) boxes.push([c.x - 10, c.y - 20, c.x + 10, c.y + 4, c.y + 4]);
+    const dt = this.game.loop.delta;
+    for (const p of this.props) {
+      let behind = false;
+      for (const [x0, y0, x1, y1, base] of boxes) {
+        if (base < p.base && x1 + FADE_PAD > p.x0 && x0 - FADE_PAD < p.x1 && y1 + FADE_PAD > p.y0 && y0 - FADE_PAD < p.y1) {
+          behind = true;
+          break;
+        }
+      }
+      const target = behind ? p.fade : 1;
+      const a = p.s.alpha;
+      if (a !== target) p.s.setAlpha(a < target ? Math.min(target, a + FADE_PER_MS * dt) : Math.max(target, a - FADE_PER_MS * dt));
+    }
   }
 
   private moving(): boolean {

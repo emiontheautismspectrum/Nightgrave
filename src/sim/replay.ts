@@ -1,3 +1,4 @@
+import { ARENA_LAYOUT } from '../data/arena';
 import { TUNING, type Difficulty } from '../data/tuning';
 import { sanitizeInput, type InputFrame } from './input';
 import { Sim, type SimOptions } from './sim';
@@ -7,7 +8,7 @@ export const REPLAY_VERSION = 1;
 
 /** FNV-1a fingerprint of TUNING: a replay only plays back under the tuning it was recorded with. */
 export function tuningHash(): string {
-  const src = JSON.stringify(TUNING);
+  const src = JSON.stringify(TUNING) + JSON.stringify(ARENA_LAYOUT); // spawn geometry is part of the rules
   let h = 0x811c9dc5;
   for (let i = 0; i < src.length; i++) h = Math.imul(h ^ src.charCodeAt(i), 0x01000193) >>> 0;
   return h.toString(16).padStart(8, '0');

@@ -1,17 +1,28 @@
 import { describe, expect, it } from 'vitest';
+import props from '../assets/data/arena_props.json';
 import manifest from '../assets/atlas/manifest.json';
+import { HOLLOWS, PORTAL, RUNES } from '../src/data/arena';
 import { TUNING } from '../src/data/tuning';
 
 describe('sim arena matches the generated art', () => {
-  it('play centre equals the hero spawn of the arena layout', () => {
-    expect([TUNING.arena.centerX, TUNING.arena.centerY]).toEqual(manifest.layout.heroSpawn);
+  const A = TUNING.arena;
+  it('arena rectangle and hero spawn equal the art layout', () => {
+    expect([A.x0, A.y0, A.x1, A.y1]).toEqual(manifest.layout.arena);
+    expect([A.centerX, A.centerY]).toEqual(manifest.layout.heroSpawn);
   });
-  it('the (interim) play circle stays inside the arena rectangle', () => {
-    const [x0, y0, x1, y1] = manifest.layout.arena as [number, number, number, number];
-    const { centerX: cx, centerY: cy, playRadius: r } = TUNING.arena;
-    expect(cx - r).toBeGreaterThanOrEqual(x0);
-    expect(cx + r).toBeLessThanOrEqual(x1);
-    expect(cy - r).toBeGreaterThanOrEqual(y0);
-    expect(cy + r).toBeLessThanOrEqual(y1);
+  it('portal, hollows and runes come from the same layout the props were placed with', () => {
+    expect([PORTAL.x, PORTAL.y]).toEqual(props.layout.portal);
+    expect(HOLLOWS.map((h) => [h.side, h.x, h.y])).toEqual(props.layout.hollows.map((h) => [h.side, h.x, h.y]));
+    expect(RUNES).toEqual(props.layout.runes);
+  });
+  it('8 hollows, 2 per side, each on its side of the rectangle', () => {
+    expect(HOLLOWS).toHaveLength(8);
+    for (const side of ['top', 'bottom', 'left', 'right'] as const) expect(HOLLOWS.filter((h) => h.side === side)).toHaveLength(2);
+    for (const h of HOLLOWS) {
+      if (h.side === 'top') expect(h.y).toBe(A.y0);
+      if (h.side === 'bottom') expect(h.y).toBe(A.y1);
+      if (h.side === 'left') expect(h.x).toBe(A.x0);
+      if (h.side === 'right') expect(h.x).toBe(A.x1);
+    }
   });
 });

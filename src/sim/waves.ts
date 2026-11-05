@@ -2,11 +2,11 @@
  * Wave director: decides what spawns when. Everything is driven by the sim's seeded PRNG and tick
  * counter, so the same seed + inputs always produce the same threats.
  */
-import { RUNES } from '../data/arena';
+import { HOLLOWS, PORTAL, RUNES } from '../data/arena';
 import { dcos, dsin, PI, rotate } from './dmath';
 import type { SimParams } from './params';
 import { nextFloat, range } from './rng';
-import type { Projectile, ProjectileKind, SimState } from './state';
+import type { Caster, CasterAttack, CasterKind, Projectile, ProjectileKind, SimState } from './state';
 
 export interface DirectorOptions {
   /** Test-only: start the run at this wave (all threat types unlocked). Not part of replays. */
@@ -68,20 +68,40 @@ export function spawnProjectile(
   return pr;
 }
 
-/** A point on the spawn ring at least fairDistance from the hero (deterministic retries, then the far side). */
-function edgePoint(s: SimState, p: SimParams): [number, number] {
+/** Point at distance `t` along the perimeter of the spawn rectangle (arena rect grown by spawnOffset). */
+function perimeterPoint(p: SimParams, t: number): [number, number] {
+  const o = p.spawnOffset;
+  const x0 = p.x0 - o;
+  const y0 = p.y0 - o;
+  const w = p.x1 - p.x0 + 2 * o;
+  const h = p.y1 - p.y0 + 2 * o;
+  if (t < w) return [x0 + t, y0];
+  t -= w;
+  if (t < h) return [x0 + w, y0 + t];
+  t -= h;
+  if (t < w) return [x0 + w - t, y0 + h];
+  t -= w;
+  return [x0, y0 + h - t];
+}
+
+/** A point just outside the arena at least fairDistance from the hero (seeded retries, then the farthest corner). */
+export function edgePoint(s: SimState, p: SimParams): [number, number] {
   const fair2 = p.fairDistance * p.fairDistance;
+  const o = p.spawnOffset;
+  const per = 2 * (p.x1 - p.x0 + 2 * o) + 2 * (p.y1 - p.y0 + 2 * o);
   for (let i = 0; i < 6; i++) {
-    const a = nextFloat(s) * 2 * PI;
-    const x = p.cx + dcos(a) * p.spawnRadius;
-    const y = p.cy + dsin(a) * p.spawnRadius;
+    const [x, y] = perimeterPoint(p, nextFloat(s) * per);
     if (dist2(x, y, s.hero.x, s.hero.y) >= fair2) return [x, y];
   }
-  const dx = s.hero.x - p.cx;
-  const dy = s.hero.y - p.cy;
-  const d = Math.sqrt(dx * dx + dy * dy);
-  if (d < 1e-6) return [p.cx + p.spawnRadius, p.cy];
-  return [p.cx - (dx / d) * p.spawnRadius, p.cy - (dy / d) * p.spawnRadius];
+  const corners: [number, number][] = [
+    [p.x0 - o, p.y0 - o],
+    [p.x1 + o, p.y0 - o],
+    [p.x1 + o, p.y1 + o],
+    [p.x0 - o, p.y1 + o],
+  ];
+  let best = corners[0]!;
+  for (const c of corners) if (dist2(c[0], c[1], s.hero.x, s.hero.y) > dist2(best[0], best[1], s.hero.x, s.hero.y)) best = c;
+  return best;
 }
 
 /** Unit vector from (x, y) towards the hero, rotated by a random error in [-spread, spread]. */
@@ -174,13 +194,86 @@ function wraiths(s: SimState, p: SimParams, sp: number): void {
   }
 }
 
-type PatternKey = 'orbFan' | 'runeBurst' | 'blades' | 'wraiths' | 'heavyOrbs';
+// ------------------------------------------------------------------ casters
+
+const SHADE_ATTACKS: CasterAttack[] = ['orbFan', 'wraith', 'shardFan'];
+const STALKER_ATTACKS: CasterAttack[] = ['orbFan', 'shardFan', 'blade'];
+
+function summon(s: SimState, p: SimParams, kind: CasterKind): boolean {
+  if (s.casters.length >= p.casterMax) return false;
+  let source = -1;
+  let x = PORTAL.x;
+  let y = PORTAL.y;
+  if (kind === 'shade') {
+    if (s.casters.some((c) => c.source === -1)) return false;
+  } else {
+    const free = HOLLOWS.map((_h, i) => i).filter((i) => !s.casters.some((c) => c.source === i));
+    if (free.length === 0) return false;
+    source = free[Math.floor(nextFloat(s) * free.length)] ?? free[0]!;
+    const h = HOLLOWS[source]!;
+    const k = p.hollowInset;
+    x = h.side === 'left' ? h.x + k : h.side === 'right' ? h.x - k : h.x;
+    y = h.side === 'top' ? h.y + k : h.side === 'bottom' ? h.y - k : h.y;
+  }
+  const attacks = kind === 'shade' ? SHADE_ATTACKS : STALKER_ATTACKS;
+  const attack = attacks[Math.floor(nextFloat(s) * attacks.length)] ?? 'orbFan';
+  const idle = p.casterIdleMin + Math.floor(nextFloat(s) * (p.casterIdleMax - p.casterIdleMin + 1));
+  const start = s.tick;
+  const appear0 = start + p.casterTele;
+  const appear = appear0 + p.casterRise;
+  const castStart = appear + idle;
+  const fire = castStart + p.casterCast;
+  const c: Caster = { id: s.nextId++, kind, source, x, y, start, appear0, appear, castStart, fire, end: fire + p.casterDissolve, attack };
+  s.casters.push(c);
+  s.events.push({ type: 'caster', id: c.id, kind, source });
+  return true;
+}
+
+/** The caster's single attack, launched from where it stands (telegraphed since c.start). */
+function casterAttack(s: SimState, p: SimParams, c: Caster, sp: number): void {
+  const tele = s.tick - c.start;
+  const [ax, ay] = aimAtHero(s, c.x, c.y, 0.08);
+  const ox = c.x + ax * 6;
+  const oy = c.y + ay * 6;
+  if (c.attack === 'orbFan' || c.attack === 'shardFan') {
+    const shard = c.attack === 'shardFan';
+    const n = shard ? p.shardFanCount : countFor(p.patterns.orbFan, s.wave);
+    const arc = shard ? p.shardFanArc : p.patterns.orbFan.arc;
+    const v = (shard ? p.shardSpeed : p.smallSpeed) * sp;
+    for (let i = 0; i < n; i++) {
+      const [dx, dy] = rotate(ax, ay, n === 1 ? 0 : -arc / 2 + (arc * i) / (n - 1));
+      spawnProjectile(s, p, shard ? 'rune_shard' : 'orb_small', ox, oy, dx * v, dy * v, {}, tele);
+    }
+  } else if (c.attack === 'wraith') {
+    const v = p.wraithSpeed * sp;
+    const expires = s.tick + p.wraithLife;
+    spawnProjectile(s, p, 'wraith', ox, oy, ax * v, ay * v, { homing: p.wraithSteer, expires, fadeEnd: expires + p.wraithFade }, tele);
+  } else {
+    const v = p.bladeSpeed * sp;
+    spawnProjectile(s, p, 'blade', ox, oy, ax * v, ay * v, {}, tele);
+  }
+  s.events.push({ type: 'caster_fire', id: c.id, attack: c.attack });
+}
+
+function runCasters(s: SimState, p: SimParams, sp: number): void {
+  const keep: Caster[] = [];
+  for (const c of s.casters) {
+    if (s.tick === c.fire) casterAttack(s, p, c, sp);
+    if (s.tick < c.end) keep.push(c);
+  }
+  s.casters = keep;
+}
+
+type PatternKey = 'orbFan' | 'runeBurst' | 'blades' | 'wraiths' | 'heavyOrbs' | 'shade' | 'stalker';
 const PATTERNS: [PatternKey, (s: SimState, p: SimParams, sp: number) => void][] = [
   ['orbFan', orbFan],
   ['runeBurst', runeBurst],
   ['blades', blades],
   ['wraiths', wraiths],
   ['heavyOrbs', heavyOrbs],
+  // a summon that cannot happen (cap reached, source busy) falls back to an orb fan
+  ['shade', (s, p, sp) => void (summon(s, p, 'shade') || orbFan(s, p, sp))],
+  ['stalker', (s, p, sp) => void (summon(s, p, 'stalker') || orbFan(s, p, sp))],
 ];
 
 function pickPattern(s: SimState, p: SimParams): (s: SimState, p: SimParams, sp: number) => void {
@@ -223,6 +316,7 @@ export function runDirector(s: SimState, p: SimParams, opts: DirectorOptions): v
     }
   }
   s.telegraphs = pending;
+  runCasters(s, p, sp);
 
   s.streamTimer -= 1;
   if (s.streamTimer <= 0) {

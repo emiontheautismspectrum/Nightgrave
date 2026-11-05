@@ -29,6 +29,30 @@ export interface Projectile {
   fadeEnd: number;
 }
 
+export type CasterKind = 'shade' | 'stalker';
+export type CasterAttack = 'orbFan' | 'shardFan' | 'wraith' | 'blade';
+
+/**
+ * A summoner (emitter only: never hittable, never lethal, no collision). All phase boundaries are absolute ticks:
+ * [start, appear0) telegraph, [appear0, appear) rise/emerge, [appear, castStart) idle, [castStart, fire) wind-up,
+ * fire = the single attack, [fire, end) dissolve; removed at `end`.
+ */
+export interface Caster {
+  id: number;
+  kind: CasterKind;
+  /** -1 = the portal altar; otherwise the index into HOLLOWS. */
+  source: number;
+  x: number;
+  y: number;
+  start: number;
+  appear0: number;
+  appear: number;
+  castStart: number;
+  fire: number;
+  end: number;
+  attack: CasterAttack;
+}
+
 /** A rune lighting up before it fires a radial ring of rune shards. */
 export interface Telegraph {
   id: number;
@@ -69,6 +93,8 @@ export type SimEvent =
   | { type: 'parry_whiff'; x: number; y: number }
   | { type: 'spawn'; id: number; kind: ProjectileKind; dist: number; telegraphTicks: number }
   | { type: 'telegraph'; id: number; rune: number }
+  | { type: 'caster'; id: number; kind: CasterKind; source: number }
+  | { type: 'caster_fire'; id: number; attack: CasterAttack }
   | { type: 'wave'; wave: number }
   | { type: 'death'; x: number; y: number; by: number };
 
@@ -101,6 +127,7 @@ export interface SimState {
   /** Tick of the next set piece. */
   patternAt: number;
   telegraphs: Telegraph[];
+  casters: Caster[];
   /** Events emitted during the most recent tick only (render reads them). */
   events: SimEvent[];
 }

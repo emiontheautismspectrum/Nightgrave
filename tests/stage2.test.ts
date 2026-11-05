@@ -69,8 +69,9 @@ describe('determinism with every threat type', () => {
       const run = () => {
         const sim = new Sim(seed, 'hard', { startWave: 3 });
         const kinds = new Set<ProjectileKind>();
-        const frames = mulberryInputs(seed, 60 * 60);
-        for (const e of collect(sim, (s, t) => (t % 2 ? botInput(s) : (frames[t] ?? idle())), 60 * 60))
+        const frames = mulberryInputs(seed, 60 * 150);
+        // mostly the bot (so the run lives long enough to see every kind), with scripted noise mixed in
+        for (const e of collect(sim, (s, t) => (t % 7 ? botInput(s) : (frames[t] ?? idle())), 60 * 150))
           if (e.type === 'spawn') kinds.add(e.kind);
         return { sim, kinds };
       };

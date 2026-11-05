@@ -153,12 +153,15 @@ describe('dash', () => {
     expect(sim.state.hero.dashStart).toBe(p.dashCooldown);
   });
 
-  it('stays inside the play circle when dashing into its edge', () => {
+  it('stays inside the arena rectangle when dashing into its edge', () => {
     const sim = quiet();
     const p = sim.params;
     for (let i = 0; i < 200; i++) sim.step({ cursor: false, mx: -100, my: 0, buttons: i === 150 ? BTN_DASH : 0 });
-    expect(sim.state.hero.x).toBeCloseTo(p.cx - p.playRadius, 9);
-    expect(sim.state.hero.y).toBeCloseTo(p.cy, 9);
+    expect(sim.state.hero.x).toBe(p.x0 + p.heroInset);
+    expect(sim.state.hero.y).toBe(p.cy);
+    for (let i = 0; i < 400; i++) sim.step({ cursor: false, mx: 100, my: 100, buttons: 0 });
+    expect(sim.state.hero.x).toBe(p.x1 - p.heroInset);
+    expect(sim.state.hero.y).toBe(p.y1 - p.heroInset);
   });
 });
 
@@ -218,7 +221,10 @@ describe('input handling', () => {
     for (let i = 0; i < 300; i++) sim.step(junk[i % junk.length] as InputFrame);
     const h = sim.state.hero;
     for (const v of [h.x, h.y, h.dirX, h.dirY]) expect(Number.isFinite(v)).toBe(true);
-    expect(Math.sqrt((h.x - p.cx) ** 2 + (h.y - p.cy) ** 2)).toBeLessThanOrEqual(p.playRadius + 1e-9);
+    expect(h.x).toBeGreaterThanOrEqual(p.x0 + p.heroInset);
+    expect(h.x).toBeLessThanOrEqual(p.x1 - p.heroInset);
+    expect(h.y).toBeGreaterThanOrEqual(p.y0 + p.heroInset);
+    expect(h.y).toBeLessThanOrEqual(p.y1 - p.heroInset);
   });
 
   it('diagonal axis input is normalised (no faster diagonal movement)', () => {

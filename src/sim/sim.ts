@@ -46,6 +46,7 @@ export function createState(seed: number, difficulty: Difficulty, p: SimParams =
     streamTimer: 0,
     patternAt: p.graceTicks + Math.round(p.gapMin),
     telegraphs: [],
+    casters: [],
     events: [],
   };
 }
@@ -69,14 +70,10 @@ export function score(s: SimState, p: SimParams): number {
   return Math.floor((s.survivalTicks * p.survivalPerSecond) / TICK_RATE) + Math.floor(s.parryScoreHundredths / 100);
 }
 
-/** Project a point onto the disc (cx, cy, r) if it lies outside it. */
-export function clampToCircle(x: number, y: number, cx: number, cy: number, r: number): [number, number] {
-  const dx = x - cx;
-  const dy = y - cy;
-  const d2 = dx * dx + dy * dy;
-  if (d2 <= r * r) return [x, y];
-  const d = Math.sqrt(d2);
-  return [cx + (dx / d) * r, cy + (dy / d) * r];
+/** Clamp a point into the hero's allowed area: the arena rectangle shrunk by heroInset. */
+export function clampToArena(x: number, y: number, p: SimParams): [number, number] {
+  const i = p.heroInset;
+  return [x < p.x0 + i ? p.x0 + i : x > p.x1 - i ? p.x1 - i : x, y < p.y0 + i ? p.y0 + i : y > p.y1 - i ? p.y1 - i : y];
 }
 
 // ------------------------------------------------------------------ the tick
@@ -102,7 +99,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   let iy = 0;
   let want = 0;
   if (input.cursor) {
-    const [tx, ty] = clampToCircle(input.mx, input.my, p.cx, p.cy, p.playRadius);
+    const [tx, ty] = clampToArena(input.mx, input.my, p);
     const dx = tx - h.x;
     const dy = ty - h.y;
     const d = Math.sqrt(dx * dx + dy * dy);
@@ -151,7 +148,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       h.dirY = iy;
     }
   }
-  [h.x, h.y] = clampToCircle(h.x + mx, h.y + my, p.cx, p.cy, p.playRadius);
+  [h.x, h.y] = clampToArena(h.x + mx, h.y + my, p);
   if (mx > 0.01) h.facing = 1;
   else if (mx < -0.01) h.facing = -1;
 
@@ -203,11 +200,11 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   }
 
   // 8. remove faded and far-away projectiles
-  const dr2 = p.despawnRadius * p.despawnRadius;
+  const m = p.despawnMargin;
   s.projectiles = s.projectiles.filter(
     (pr) =>
       (pr.fadeEnd < 0 || t < pr.fadeEnd) &&
-      (pr.x - p.cx) * (pr.x - p.cx) + (pr.y - p.cy) * (pr.y - p.cy) < dr2,
+      pr.x > p.x0 - m && pr.x < p.x1 + m && pr.y > p.y0 - m && pr.y < p.y1 + m,
   );
 
   if (s.alive) s.survivalTicks++;

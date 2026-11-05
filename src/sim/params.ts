@@ -5,9 +5,13 @@ export interface SimParams {
   difficulty: Difficulty;
   cx: number;
   cy: number;
-  playRadius: number;
-  spawnRadius: number;
-  despawnRadius: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  heroInset: number;
+  spawnOffset: number;
+  despawnMargin: number;
   heroSpeed: number; // px per tick
   heroRadius: number;
   parryRadius: number;
@@ -59,6 +63,16 @@ export interface SimParams {
   gapMax: number;
   runeTelegraph: number; // ticks
   patterns: typeof TUNING.patterns;
+  casterMax: number;
+  casterTele: number; // ticks
+  casterRise: number;
+  casterIdleMin: number;
+  casterIdleMax: number;
+  casterCast: number;
+  casterDissolve: number;
+  hollowInset: number;
+  shardFanCount: number;
+  shardFanArc: number;
 }
 
 export const ticks = (seconds: number): number => Math.max(1, Math.round(seconds * TICK_RATE));
@@ -72,9 +86,13 @@ export function makeParams(difficulty: Difficulty): SimParams {
     difficulty,
     cx: T.arena.centerX,
     cy: T.arena.centerY,
-    playRadius: T.arena.playRadius,
-    spawnRadius: T.arena.spawnRadius,
-    despawnRadius: T.arena.despawnRadius,
+    x0: T.arena.x0,
+    y0: T.arena.y0,
+    x1: T.arena.x1,
+    y1: T.arena.y1,
+    heroInset: T.arena.heroInset,
+    spawnOffset: T.arena.spawnOffset,
+    despawnMargin: T.arena.despawnMargin,
     heroSpeed: T.hero.speed / TICK_RATE,
     heroRadius: T.hero.radius,
     parryRadius: T.parry.radius,
@@ -125,5 +143,15 @@ export function makeParams(difficulty: Difficulty): SimParams {
     gapMax: T.patterns.gapMaxSeconds * TICK_RATE,
     runeTelegraph: ticks(T.patterns.runeBurst.telegraphSeconds),
     patterns: T.patterns,
+    casterMax: T.casters.maxActive,
+    casterTele: ticks(T.casters.telegraphSeconds),
+    casterRise: ticks(T.casters.riseSeconds),
+    casterIdleMin: ticks(T.casters.casterIdleMinSeconds),
+    casterIdleMax: ticks(T.casters.casterIdleMaxSeconds),
+    casterCast: Math.max(15, ticks(T.casters.castSeconds)), // CLAUDE.md: wind-up >= 15 ticks
+    casterDissolve: ticks(T.casters.dissolveSeconds),
+    hollowInset: T.casters.hollowInset,
+    shardFanCount: T.casters.shardFan.count,
+    shardFanArc: T.casters.shardFan.arc,
   };
 }

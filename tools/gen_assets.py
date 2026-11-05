@@ -91,6 +91,11 @@ def main():
     }
     write_json(os.path.join(ASSETS, "atlas", "manifest.json"), manifest)
     write_json(os.path.join(ASSETS, "data", "arena_props.json"), {"props": art["props"], "layout": art["layout"]})
+    # gameplay-relevant layout for the sim (portal, hollows, runes, arena rect): read by src/data/arena.ts
+    lay = art["layout"]
+    write_json(os.path.join(ASSETS, "data", "arena_layout.json"), {
+        "arena": lay["arena"], "heroSpawn": lay["heroSpawn"], "calmZone": lay["calmZone"], "portal": lay["portal"],
+        "portalClearRadius": lay["portalClearRadius"], "hollows": lay["hollows"], "runes": lay["runes"]})
 
     title = read_title().upper()
     pv = lambda n: os.path.join(ASSETS, "preview", n)  # noqa: E731

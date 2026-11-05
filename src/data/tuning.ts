@@ -8,11 +8,11 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
 
 export const TUNING = {
   /**
-   * INTERIM (until the arena rectangle lands in the sim, Part C): a circle centred on the hero spawn, inside the
-   * 384x216 arena rectangle of the revised art. centerX/Y must match the art (manifest heroSpawn); a test enforces it. playRadius = how far the hero's centre may go; projectiles enter at spawnRadius
-   * (outside the platform rim) and are removed beyond despawnRadius.
+   * Playable rectangle (x0..x1, y0..y1) of the 480x270 screen; must match the art (arena_layout.json, test-enforced).
+   * The hero's centre is clamped `heroInset` px inside it. Edge spawns appear `spawnOffset` px outside the rectangle;
+   * projectiles are removed `despawnMargin` px outside it.
    */
-  arena: { width: 480, height: 270, centerX: 240, centerY: 135, playRadius: 104, spawnRadius: 120, despawnRadius: 150 },
+  arena: { x0: 48, y0: 27, x1: 432, y1: 243, centerX: 240, centerY: 135, heroInset: 4, spawnOffset: 10, despawnMargin: 24 },
   hero: { speed: 150, radius: 3 },
   /**
    * cooldownSeconds applies after a parry that destroyed something; a whiff (hit nothing) costs
@@ -44,7 +44,7 @@ export const TUNING = {
    * Fairness: nothing may appear closer than minSpawnDistance to the hero unless it was telegraphed
    * for at least minTelegraphSeconds (rune bursts are; edge spawns pick a far point instead).
    */
-  fairness: { minSpawnDistance: 64, minTelegraphSeconds: 0.25 },
+  fairness: { minSpawnDistance: 60, minTelegraphSeconds: 0.25 },
   /** A wave every `seconds`. Per wave: +speedStep speed and +densityStep density, capped. */
   waves: { seconds: 15, graceSeconds: 1, speedStep: 0.05, densityStep: 0.06, speedCap: 1.6, densityCap: 2.2 },
   /** Single aimed small orbs trickling in between set pieces (interval is divided by density). */
@@ -58,6 +58,25 @@ export const TUNING = {
     blades: { weight: 2, unlockWave: 1, count: 1, countPerWave: 0.34, maxCount: 4 },
     wraiths: { weight: 1.5, unlockWave: 2, count: 1, countPerWave: 0.25, maxCount: 3 },
     heavyOrbs: { weight: 1, unlockWave: 1, count: 2, countPerWave: 0.2, maxCount: 4 },
+    /** Casters (see `casters`): a shade rises at the portal altar, a stalker steps out of a forest hollow. */
+    shade: { weight: 2, unlockWave: 0 },
+    stalker: { weight: 2.5, unlockWave: 1 },
+  },
+  /**
+   * Casters are emitters only (never hittable or lethal). Phases: telegraph (portal ignite / eyes) -> rise/emerge ->
+   * idle (seeded casterIdleMin..Max) -> cast wind-up (>= 15 ticks) -> ONE attack -> dissolve.
+   */
+  casters: {
+    maxActive: 2,
+    telegraphSeconds: 0.4,
+    riseSeconds: 0.5,
+    casterIdleMinSeconds: 1.0,
+    casterIdleMaxSeconds: 3.0,
+    castSeconds: 0.3,
+    dissolveSeconds: 0.4,
+    /** The stalker stands this far inside the arena from its hollow. */
+    hollowInset: 8,
+    shardFan: { count: 6, arc: 1.2 },
   },
   difficulty: {
     easy: { speed: 0.8, density: 0.7 },
