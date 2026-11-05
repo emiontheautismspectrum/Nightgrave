@@ -3,7 +3,7 @@
  * Per run: varint count, one flag byte (bit0 cursor, bits1-2 buttons), zigzag varint mx, zigzag varint my.
  * Pure (no DOM): btoa/atob exist in browsers, Workers and Node.
  */
-import { sanitizeInput, type InputFrame } from '../sim/input';
+import { AXIS_MAX, sanitizeInput, type InputFrame } from '../sim/input';
 
 export const MAX_REPLAY_BYTES = 256 * 1024;
 
@@ -41,7 +41,7 @@ export function encodeInputLog(frames: readonly InputFrame[]): string {
 }
 
 /** Decode an untrusted base64 log. Returns null on any malformed input (never throws). */
-export function decodeInputLog(b64: string, maxTicks = 60 * 60 * 120): InputFrame[] | null {
+export function decodeInputLog(b64: string, maxTicks = 60 * 60 * 120, strict = false): InputFrame[] | null {
   let bin: string;
   try {
     if (typeof b64 !== 'string' || b64.length > Math.ceil((MAX_REPLAY_BYTES * 4) / 3) + 4) return null;
@@ -70,7 +70,12 @@ export function decodeInputLog(b64: string, maxTicks = 60 * 60 * 120): InputFram
     const mx = readVar();
     const my = readVar();
     if (mx === null || my === null) return null;
-    const f = sanitizeInput({ cursor: (flags & 1) === 1, mx: unzig(mx), my: unzig(my), buttons: flags >> 1 });
+    const cursor = (flags & 1) === 1;
+    const x = unzig(mx);
+    const y = unzig(my);
+    // strict (the verifier): a cursor must lie on the 480x270 screen, an axis within +-AXIS_MAX; never "fixed up"
+    if (strict && (cursor ? x < 0 || x > 480 || y < 0 || y > 270 : Math.abs(x) > AXIS_MAX || Math.abs(y) > AXIS_MAX)) return null;
+    const f = sanitizeInput({ cursor, mx: x, my: y, buttons: flags >> 1 });
     for (let k = 0; k < n; k++) frames.push({ ...f });
   }
   return frames;

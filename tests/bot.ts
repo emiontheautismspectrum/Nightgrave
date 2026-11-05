@@ -112,3 +112,9 @@ export const median = (xs: number[]): number => {
   const m = a.length >> 1;
   return a.length % 2 ? (a[m] ?? 0) : ((a[m - 1] ?? 0) + (a[m] ?? 0)) / 2;
 };
+
+/** The bot's frame clamped like a real client's (the cursor always lies on the 480x270 screen). */
+export function botInputClamped(sim: Sim, opts: BotOptions = {}): InputFrame {
+  const f = botInput(sim, opts);
+  return f.cursor ? { ...f, mx: Math.max(0, Math.min(480, f.mx)), my: Math.max(0, Math.min(270, f.my)) } : f;
+}

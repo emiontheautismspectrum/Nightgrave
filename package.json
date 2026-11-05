@@ -12,7 +12,9 @@
     "bot": "vite-node scripts/botsim.ts",
     "audio:check": "python3 tools/check_audio.py",
     "smoke": "VITE_SMOKE=1 npm run build && node tests-e2e/smoke.cjs && npm run build",
-    "e2e:board": "node tests-e2e/board_e2e.cjs"
+    "e2e:board": "node tests-e2e/board_e2e.cjs",
+    "verify:pending": "vite-node tools/verify/pending.ts",
+    "verify:replay": "vite-node tools/verify/replay.ts"
   },
   "dependencies": {
     "@fontsource/press-start-2p": "5.2.7",
