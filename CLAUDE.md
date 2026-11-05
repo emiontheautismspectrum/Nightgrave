@@ -52,10 +52,13 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Portal altar at (120,78) with a 20 px clear radius, standing alone in the clearing; a few graves nearby (8-12 total in
   2-3 loose clusters plus singles) and 2-3 short broken fence fragments. No fenced graveyard.
 - Landmarks (base centre = where the sprite touches the ground; small, low-amplitude render-only loops, at most 4 animated
-  landmarks in any 200x120 window): giant ancient dead tree (top-right, trunk ~(378,125)) with a runed sword stuck in a
-  small stone base at its foot (~(378,140)) and 3 fallen weapons; gallows (138,150) with cage and crows; cursed well
-  (362,172) with a bent gas lamp (386,162) and the beast ribcage bottom-right; hunter's wagon at the top edge (~(270,44))
-  half behind the forest; hunter's cabin with workshop lower-left. Original designs only (mood references, no copying).
+  landmarks in any 200x120 window): colossal ancient tree (top-right, base (380,118)) with sinuous ground roots and pale
+  glowing mushrooms, a runed sword stuck in a small stone base at its foot (378,140) and 3 fallen weapons; gallows
+  (138,150) with cage and crows; cursed well (362,172) with a bent gas lamp (386,162); gothic hunter's wagon at the top
+  edge (270,44) half behind the forest; hunter's cabin with workshop lower-left. No bones in the lower-right; bones and
+  skulls only near the altar and graves (<= 4). Original designs only (mood references, no copying).
+- Ground (v3): one colour story (teal-green floor, desaturated loam paths, cool moonlit patches), depth from large flat
+  shapes (value zones, moonbeams, top-left -> bottom-right falloff, cast shadows); the centre is one tone calmer and darker.
 - Draw order: forest far/mid (parallax) -> ground + edge + decals -> ground telegraphs -> y-sorted props, casters, hero,
   projectiles, effects -> fog -> vignette -> forest near overhang (max 8 px into the arena) -> UI.
 - Translucency: a prop/overhang drawn in front of the hero, a caster or a projectile (box + 4 px) fades to ~35% alpha

@@ -5,7 +5,7 @@ Output: `assets/sprites/*.png`, one atlas `assets/atlas/nightgrave.png` + `night
 
 ## Style rules (strict)
 - Internal resolution 480x270. Nearest-neighbor only. No anti-aliasing, no gradients, no sub-pixel.
-- Fixed 19-color palette (below). Every pixel must use a palette color (a validator script must enforce this).
+- Fixed 22-color palette (below). Every pixel must use a palette color (a validator script must enforce this).
 - 1 px outline in a darker shade of the fill. Light comes from the top-left. Max 3 shades per material.
 - Hero and its effects use warm amber/ember. Hostile things use violet (parryable) or blood red (unparryable).
 - Everything threatening must read in under 100 ms against the dark floor.
@@ -15,6 +15,10 @@ Output: `assets/sprites/*.png`, one atlas `assets/atlas/nightgrave.png` + `night
 bg0 #0b0d12, bg1 #12161d, fog #1c2330, stone_dark #262e3d, stone #3a4558, moss #2b3a2e, forest #0f1a15, bone #d9d2c0,
 amber #ffb347, ember #ff7a2f, gold #ffd86b, blood #d12b3a, blood_dark #6e1423, violet #9b6bff, violet_dark #3d2a78, teal #4fd1c5.
 Decor-only: moon #7f93b8 (rim light, reflections), earth #2b221d (dirt, roots), dry #5e4b34 (dead grass, bone shadow, bark).
+Ground-only (v3): fern #1d3229 (teal-green floor), loam #2f241c (worn paths, desaturated), mist #1d2b38 (soft moonlit
+floor). Darker than first suggested (#2f4a3a / #243447) so a blade keeps >= 2.5 contrast on every ground tone. Allowed in
+ground tiles/decals, roots, shadows, ferns, grass, leaves, and as small moss/fern accents (<= 10% of pixels) on props;
+never in hero, threat, pickup, caster or UI sprites.
 
 Reserved gameplay colors: amber, ember, gold, blood, blood_dark, violet, violet_dark, teal. Arena decor (sprites in the
 `arena` group and all arena backgrounds) must not use them. Exceptions: rune glows and portal flames (telegraph frames),
@@ -54,30 +58,45 @@ Arena v2 (480x270; layout + seeds in `tools/arena_layout.py`, composed by `tools
 - Decor variants (2 frames = 2 shade swaps; flips per instance): gravestones (intact, broken, crosses, slabs, half-sunk),
   dead trees, bones, skulls, grass, thorns, stones, roots, leaves, mushrooms, short fence fragments, gas lamps,
   fallen weapons, workshop props.
-- Landmarks: giant_tree (ancient dead tree, trunk 56-64 px), rune_sword (ornate, 40+ px blade, 4f low pulse) +
-  rune_sword_base; gallows_tree + gallows_cage 4f + crow 4f; hunter_wagon 3f + horse_skeleton; cursed_well + well_wisp 6f;
-  beast_ribcage; hunter_cabin + cabin_smoke 6f + cabin_window 3f; portal_altar + altar_flame 4f / altar_flame_tele 4f
-  + altar_chain 2f.
+- Landmarks: giant_tree (colossal, ~72 px trunk) + giant_tree_crack 4f + glow_mushrooms 3f, rune_sword (ornate, 40+ px
+  blade, 4f low pulse) + rune_sword_base; gallows_tree + gallows_cage 4f + crow 4f; hunter_wagon 56x40 3f; cursed_well +
+  well_wisp 6f; hunter_cabin + cabin_smoke 6f + cabin_window 3f; portal_altar + altar_flame 4f / altar_flame_tele 4f
+  + altar_chain 2f. (v3 removed the beast ribcage and the horse skeleton.)
 - Casters: shade 16x20 (idle 4f, rise 6f, cast 3f, dissolve 6f), stalker 20x24 (idle 4f, emerge 6f, cast 3f, vanish 6f),
   portal_ignite 40x40 4f, portal_smoke 24x32 6f, forest_eyes 8x4 3f (rest + bright 2f), forest_leaf_ash 16x16 6f.
 
-Arena softness rules (v2; everything in the arena group)
+Arena softness rules (v2, refined in v3; everything in the arena group)
 1. Value hierarchy: ground darkest, props mid-dark, threats/pickups brighter, hero brightest. No bone/moon-bright pixels
-   in props except landmark accents (<= 2% of that sprite's pixels). Prop outlines are a DARKER shade of the fill;
-   the 1 px top-left rim, where used, is a mid tone (`stone` or `moss`), never `moon`/`bone`.
-2. No fine dithering in ground, forest, fog, vignette: large flat tonal patches (>= 4x4 px). Only the fog edge may use a
-   coarse 2x2 pattern. Fog and vignette are a few flat steps in wide bands. Props avoid dithering (a few texture pixels
-   on bark/stone at most; never on hero or threat sprites).
-3. Ground = forest floor (forest, moss, earth, bg1 patches, sparse tiny low-contrast details). No bricks/flagstones.
-4. Density budget in the arena rect: small decor <= 25, non-landmark trees <= 6, gravestones 8-12, >= 45% of the arena
-   area free of any prop box (flat decals do not count). Landmarks and their attached props are exempt. Seeded
-   Poisson-disc spacing per category, loose clusters.
-5. Soft edge instead of a curb (moss, roots, a few half-buried ring stones); ground just outside the rect slightly darker.
-6. Forest ring: solid silhouettes in 3 flat tones, mist as flat bands, no vertical noise columns; hollows read as dark gaps.
+   in props except landmark accents (<= 2% of that landmark's pixels). Prop outlines are a DARKER shade of the fill.
+2. No fine dithering anywhere in ground, forest, fog, vignette; large flat tonal patches. Coarse 2x2 only on the fog edge.
+3. Ground (v3) = ONE colour story: deep teal-green forest floor (forest / fern), warm desaturated loam only on worn paths
+   and small patches, cool moonlight (mist) only as soft lit areas. Depth from large flat organic shapes (>= 6x6 px):
+   lit / mid / shade value zones, 3-4 diagonal moonbeam patches from the top-left, a wide value falloff from the
+   top-left (lighter) to the bottom-right (darker), flat cast shadows under every prop (lower-right, 40-60% of its width),
+   worn loam paths (altar -> left of centre -> cabin; a short one toward the well), low-contrast clustered details
+   (ferns, grass clumps, leaf clusters, mossy rocks, root tendrils, pale mushrooms). The centre is the same floor, one
+   tone calmer and slightly darker (no lighter blob). The rune circle stays faint; rune glyphs are original angular
+   arcane marks (no letters, digits or console symbols).
+4. Density budget in the arena rect: small decor <= 25, non-landmark trees <= 6, gravestones 8-12 (never overlapping),
+   bones/skulls <= 4 and only near the altar and graves, >= 45% of the arena free of prop boxes.
+5. Soft edge (moss, roots, half-buried ring stones); ground just outside the rect slightly darker.
+6. Forest ring: 3 parallax layers of real tree silhouettes (tapered trunks with branches, varied widths and heights; no
+   rectangles, no round blobs) in 3 flat tones with flat translucent mist bands; branches overlap the cabin, the wagon and
+   the arena edges in the overhang layer (thin, fading like props when an actor is near).
 7. Landmark animations at low amplitude; at most 4 animated landmarks in any 200x120 window.
 8. Translucency 35% (45% for props wider than 40 px), render-only.
-Checks: `tools/check_noise.py` (noise vs Stage 0 and vs the previous arena, no fine checkerboards),
-`tools/check_readability.py` (threat contrast on ground and over props), `tools/validate_palette.py`.
+9. Giant tree (v3): base centre (380,118), ~72 px trunk with deep grooves and knots, a thin pale glowing crack (4f), 6-8
+   sinuous roots as ground relief (lit top-left edge, dark underside, 60-110 px, tips at x >= 320), 5-7 tiny pale glowing
+   mushroom clusters in root crevices (3f); crown in the forest layers; one tone darker than v2.
+10. Small trees (v3): 5 variants 28-44 px (leaning, forked, broken top, hanging vines, low and twisted): thick tapered
+   trunk in 3 flat tones, 3-6 sturdy branches ending in clustered twig masses, knotted base with root flares.
+11. Wagon (v3): gothic hunter's wagon ~56x40 in 3/4 view: arched dark-wood box, spiked roof rail, two tall leaf-shaped
+   windows, iron-banded planks, two large spoked wheels (one broken), shafts on the ground, one hanging lantern (3f),
+   torn cloth. No bones.
+Checks: `tools/check_noise.py` (noise vs Stage 0 and the pre-v2 arena, flatness vs v2, no fine dither),
+`tools/check_layout.py` (budgets, zones, hollows, bones), `tools/check_readability.py` (threats and hero contrast),
+`tools/validate_palette.py` (palette, reserved and ground-only colours, bright accents).
+
 
 UI
 - icon_parry 16x16, icon_dash 16x16 (ready/cooldown), panel_9slice 24x24, button_9slice 24x24
@@ -90,5 +109,5 @@ UI
 3. `assets/preview/style_board.png`: one image showing all sprites on the arena at 3x scale for approval.
    `assets/preview/stress_board.png`: hero + ~80 projectiles of all types over the arena at 3x (readability check).
    Arena previews: `arena_board.png` (3x scene), `noise_compare.png` (2x), `squint_test.png`, `translucency_demo.png`,
-   `variation_board.png`, `animation_strips.png` (4x).
+   `variation_board.png`, `animation_strips.png` (4x), `arena_v3_compare.png`, `ground_closeup.png`, `wagon_closeup.png`.
 4. Atlas + JSON consumed by the game through a single `src/render/assets.ts` loader.
