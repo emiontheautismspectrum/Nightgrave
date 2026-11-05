@@ -53,6 +53,8 @@ interface Touch {
   y: number;
   t0: number;
   moved: number;
+  /** The screen layout changed under this finger: its next move only sets a new baseline. */
+  rebase?: boolean;
 }
 
 export interface TouchOptions {
@@ -99,9 +101,21 @@ export class TouchModel {
     return role;
   }
 
+  /** The screen space changed (full arena <-> zoomed portrait view): held fingers re-anchor without moving the cursor. */
+  rebase(): void {
+    for (const t of this.touches.values()) t.rebase = true;
+  }
+
   move(id: number, x: number, y: number): void {
     const tc = this.touches.get(id);
     if (!tc) return;
+    if (tc.rebase) {
+      tc.rebase = false;
+      tc.x = x;
+      tc.y = y;
+      tc.moved = TAP_PX; // never a tap after a re-layout
+      return;
+    }
     const dx = x - tc.x;
     const dy = y - tc.y;
     tc.x = x;

@@ -17,8 +17,9 @@
 
       <h2>On your device</h2>
       <p>The game keeps its settings, your local best scores, the name you last used on the board and a random player
-        ID in your browser's local storage, and a "the intro was shown" flag in session storage. This never leaves your
-        device except as described below. Clearing this site's data in your browser deletes it.</p>
+        ID in your browser's local storage, and a "the intro was shown" flag in session storage. Only the random player ID
+        is ever sent: to look up your own place on today's board (the board panel does this while it is shown; the
+        lookup is not stored) and with a run you submit. Clearing this site's data in your browser deletes all of it.</p>
 
       <h2>The online board (Hard only)</h2>
       <p>Only when you choose to submit a Hard run to today's board, the server stores:</p>
@@ -29,8 +30,8 @@
         <li>the random player ID from your browser (it ties your runs of a day together; it is never shown);</li>
         <li>the date and time of the run.</li>
       </ul>
-      <p>To limit abuse, the server also counts requests per salted hash of your IP address (and per player ID).
-        Your IP address itself is not stored; these counters are deleted within a day.</p>
+      <p>To limit abuse, the server also counts requests per salted hash of your IP address, and submissions per
+        player ID. Your IP address itself is not stored; these counters are deleted within two days.</p>
       <p>Board entries are kept for 30 days and then deleted automatically. Names and messages are public on the board.</p>
 
       <h2>Deletion</h2>

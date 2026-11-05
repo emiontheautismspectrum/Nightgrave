@@ -257,12 +257,14 @@ describe('POST /api/daily/me and the daily reset', () => {
     handle(new Request('https://api.test/api/daily/me', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': ip }, body: JSON.stringify(body) }), env, NOW);
   it("returns only the caller's own standing (verified, rank, pending); unknown -> nulls; never other players", async () => {
     await submit(RUN.log, RUN.score, { playerId: pid(1) });
-    expect(await (await me({ date: DATE, playerId: pid(1) })).json()).toEqual({ verifiedScore: null, verifiedRank: null, pending: true });
+    expect(await (await me({ date: DATE, playerId: pid(1) })).json()).toMatchObject({ verifiedScore: null, verifiedRank: null, pending: true });
     await runVerifier();
     const r = (await (await me({ date: DATE, playerId: pid(1) })).json()) as Record<string, unknown>;
-    expect(r).toEqual({ verifiedScore: RUN.score, verifiedRank: 1, pending: false });
+    expect(r).toMatchObject({ verifiedScore: RUN.score, verifiedRank: 1, pending: false });
+    expect(Object.keys(r).sort()).toEqual(['pending', 'serverNow', 'verifiedRank', 'verifiedScore']); // nothing else, never a playerId
+    expect(Date.parse(r.serverNow as string)).toBeGreaterThan(0);
     const other = await (await me({ date: DATE, playerId: pid(2) })).text();
-    expect(JSON.parse(other)).toEqual({ verifiedScore: null, verifiedRank: null, pending: false });
+    expect(JSON.parse(other)).toMatchObject({ verifiedScore: null, verifiedRank: null, pending: false });
     expect(other).not.toContain(pid(1));
     expect((await me({ date: DATE, playerId: 'nope' })).status).toBe(400);
     expect((await me({ date: DATE, playerId: pid(1), extra: 1 })).status).toBe(400);

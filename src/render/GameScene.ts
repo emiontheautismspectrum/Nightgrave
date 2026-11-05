@@ -156,6 +156,10 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     createAnimations(this);
+    this.uiCam = null; // the camera manager destroyed the old one on shutdown (a scene restart reuses this instance)
+    this.zoomed = false;
+    // the world / HUD camera split is assigned right before every render (objects created anywhere this frame too)
+    this.events.on(Phaser.Scenes.Events.PRE_RENDER, () => this.filterCameras());
     this.buildArena();
     // y-sorted world: props, casters, hero, projectiles and effects all use depth = Y_SORT + base y
     this.shadow = this.add.image(0, 0, ATLAS, frame('hero_shadow'));
@@ -212,6 +216,7 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       setInRun(false);
       this.submit?.close();
+      this.uiCam = null;
       document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('focus', onFocus);
@@ -293,6 +298,7 @@ export class GameScene extends Phaser.Scene {
       this.markGfx.clear();
     }
     this.input2.touch.view = z ? 'zoomed' : 'full';
+    this.input2.touch.rebase(); // a finger held across the switch must not jump by the change of screen space
     this.layoutHud();
     requestRelayout();
   }
@@ -351,7 +357,11 @@ export class GameScene extends Phaser.Scene {
         );
       }
     }
-    // HUD objects (depth >= D_HUD) draw only on the fixed UI camera, the world only on the follow camera
+  }
+
+  /** HUD objects (depth >= D_HUD) draw only on the fixed UI camera, the world only on the follow camera. */
+  private filterCameras(): void {
+    if (!this.zoomed || !this.uiCam) return;
     const mainId = this.cameras.main.id;
     const uiId = this.uiCam.id;
     for (const o of this.children.list) o.cameraFilter = (o as unknown as { depth: number }).depth >= D_HUD ? mainId : uiId;
@@ -589,6 +599,7 @@ export class GameScene extends Phaser.Scene {
     if (!st.alive) {
       // Presses during the guard are discarded every frame, so the press held at death cannot skip the panel.
       const confirmed = this.input2.takeConfirm();
+      if (boardOverlayOpen()) this.menu.pollPad(delta); // gamepad B closes the board overlay
       if (confirmed && canRestart(this.time.now, this.deadAt) && !this.menu.active && !boardOverlayOpen()) this.newRun();
       this.draw();
       this.updateZoomed(delta);
@@ -702,6 +713,7 @@ export class GameScene extends Phaser.Scene {
     this.deadAt = this.time.now;
     this.menu.hide();
     const hero = this.cfg.hero;
+    this.syncView(); // the death panel is drawn on the full arena right away
     const view = this.runZoomed ? ('zoomed' as const) : ('full' as const);
     const meta = { hero, input: [...this.input2.sources], view };
     // a dev start-wave run is not a real run: no replay (startWave is not recorded) and never saved
@@ -827,6 +839,7 @@ export class GameScene extends Phaser.Scene {
     if (import.meta.env.DEV || import.meta.env.VITE_SMOKE === '1') (window as unknown as { __ngDebug?: object }).__ngDebug = {
       x: st.hero.x, y: st.hero.y, tick: st.tick, alive: st.alive, parryStart: st.hero.parryStart, paused: this.driver.paused,
       menu: this.menu.active, hint: !!this.hint, dashStart: st.hero.dashStart, zoomed: this.zoomed, runZoomed: this.runZoomed,
+      uiCam: !!this.uiCam && this.cameras.cameras.includes(this.uiCam) && this.uiCam.visible,
       game: [this.scale.width, this.scale.height], cam: this.zoomed ? Object.values(this.follow.rect()) : null, markers: this.markerCount,
       step: (n: number) => {
         for (let i = 0; i < n; i++) this.driver.advance(1000 / TICK_RATE, () => this.input2.sample(), this.onTick);

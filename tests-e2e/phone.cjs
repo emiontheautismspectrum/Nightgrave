@@ -154,6 +154,16 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
       await sleep(700);
       await s.tapText('RESUME');
       await sleep(300);
+      if (portrait) {
+        // quit to the title and play again: the HUD camera must be rebuilt (the old one died with the scene)
+        await s.tapGame(203, 10); // pause button (zoomed HUD)
+        ok(await s.tapText('QUIT TO TITLE'), 'QUIT TO TITLE tapped');
+        await sleep(700);
+        ok(await s.tapText('PLAY'), 'PLAY tapped again');
+        await sleep(900);
+        d = await s.dbg();
+        ok(d && d.zoomed && d.uiCam && d.game[0] === 216, 'after quit + play: zoomed view with a live HUD camera', d && `uiCam ${d.uiCam}`);
+      }
       ok(s.errs.length === 0, 'run: no page errors', s.errs.join(' | '));
       await s.ctx.close();
 

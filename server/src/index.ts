@@ -196,7 +196,9 @@ async function postMe(req: Request, env: Env, now: number): Promise<Response> {
   if (!(await allow(env, `get:${await ipHash(req, env)}`, 60_000, LIMITS.getPerMinutePerIp, now))) return json({ error: 'rate' }, 429, req, env);
   const row = await env.DB.prepare('SELECT id, score, achieved_at, verified, p_replay FROM entries WHERE date = ?1 AND player_id = ?2')
     .bind(o.date, o.playerId).first<{ id: number; score: number; achieved_at: number; verified: number; p_replay: string | null }>();
-  if (!row) return json({ verifiedScore: null, verifiedRank: null, pending: false }, 200, req, env);
+  // serverNow: an uncached clock (the GET board can be up to 30 s old at the edge)
+  const serverNow = new Date(now).toISOString();
+  if (!row) return json({ verifiedScore: null, verifiedRank: null, pending: false, serverNow }, 200, req, env);
   let verifiedRank: number | null = null;
   if (row.verified === 1) {
     const above = await env.DB.prepare(
@@ -204,7 +206,7 @@ async function postMe(req: Request, env: Env, now: number): Promise<Response> {
     ).bind(o.date, row.score, row.achieved_at, row.id).first<{ n: number }>();
     verifiedRank = (above?.n ?? 0) + 1;
   }
-  return json({ verifiedScore: row.verified === 1 ? row.score : null, verifiedRank, pending: row.p_replay !== null }, 200, req, env);
+  return json({ verifiedScore: row.verified === 1 ? row.score : null, verifiedRank, pending: row.p_replay !== null, serverNow }, 200, req, env);
 }
 
 /** Parse and validate a submission. Returns a reason code or the clean fields. */

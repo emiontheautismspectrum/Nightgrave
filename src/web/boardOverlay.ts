@@ -13,6 +13,7 @@ export const boardOverlayOpen = (): boolean => !!root && !root.hidden;
 
 export function closeBoardOverlay(): void {
   if (root) root.hidden = true;
+  panel?.stop();
 }
 
 export function openBoardOverlay(): void {

@@ -55,12 +55,13 @@ export function pageMeta(siteUrlEnv: string | undefined): Plugin {
           ].join('\n    ')
         : '';
       return html
-        .replace(/%NG_TITLE%/g, title)
-        .replace(/%NG_DESCRIPTION%/g, desc)
-        .replace(/%NG_OWNER%/g, attr(owner()))
-        .replace('<!--ng-site-url-->', extra)
-        .replace('<!--ng-footer-->', footerHtml())
-        .replace('<!--ng-contact-->', contactHtml());
+        // replacer functions: a '$' in a constant is never read as a replacement pattern
+        .replace(/%NG_TITLE%/g, () => title)
+        .replace(/%NG_DESCRIPTION%/g, () => desc)
+        .replace(/%NG_OWNER%/g, () => attr(owner()))
+        .replace('<!--ng-site-url-->', () => extra)
+        .replace('<!--ng-footer-->', () => footerHtml())
+        .replace('<!--ng-contact-->', () => contactHtml());
     },
   };
 }

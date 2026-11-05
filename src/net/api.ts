@@ -111,6 +111,9 @@ export async function fetchMe(date: string, playerId: string): Promise<MyStandin
   try {
     const r = (await request('/api/daily/me', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, playerId }) })) as Record<string, unknown>;
     if (!r || typeof r !== 'object') return null;
+    // uncached server time: corrects the offset taken from the (edge-cached) board
+    const t = typeof r.serverNow === 'string' && r.serverNow.length <= 40 ? Date.parse(r.serverNow) : NaN;
+    if (Number.isFinite(t)) clockOffset = t - Date.now();
     return { verifiedScore: int(r.verifiedScore), verifiedRank: int(r.verifiedRank), pending: r.pending === true };
   } catch {
     return null;

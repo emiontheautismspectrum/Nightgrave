@@ -305,13 +305,14 @@ export class MenuView {
     this.fresh = false;
     const gp = this.scene.input.gamepad;
     const pad = gp && gp.total > 0 ? gp.pad1 : null;
-    if (!pad || !this.active) return false;
+    if (!pad) return false;
     if (boardOverlayOpen()) {
       // the phone board overlay is on top: B closes it; every button must be released before the menu reacts again
       if (pad.isButtonDown(PAD.b)) closeBoardOverlay();
       this.padPrev = { a: true, b: true, start: true, up: true, down: true, left: true, right: true };
       return false;
     }
+    if (!this.active) return false;
     const now: Record<string, boolean> = {
       a: pad.isButtonDown(PAD.a),
       b: pad.isButtonDown(PAD.b),

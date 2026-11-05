@@ -63,9 +63,10 @@ export function edgeMarkers(s: SimState, p: SimParams, v: ViewRect, horizonTicks
   for (const pr of s.projectiles) {
     if (pr.fadeEnd >= 0 && t >= pr.fadeEnd) continue;
     const d = Math.max(0, Math.hypot(pr.x - h.x, pr.y - h.y) - pr.radius - p.heroRadius);
-    const sp = Math.max(1e-6, Math.hypot(pr.vx, pr.vy), pr.speed);
+    // closing speed: the threat's own speed plus the hero's (the hero may run towards it); straight and curving
+    // shots can turn back towards the hero, so this is distance-in-time, not just "approaching"
+    const sp = Math.max(1e-6, Math.hypot(pr.vx, pr.vy), pr.speed) + p.heroSpeed;
     const ticks = d / sp;
-    // straight and curving shots can turn back towards the hero: distance-in-time, not just "approaching"
     if (ticks > horizonTicks) continue;
     add(`p${pr.id}`, pr.x, pr.y, pr.parryable ? 'violet' : 'red', bySize(ticks, 30, 60));
   }

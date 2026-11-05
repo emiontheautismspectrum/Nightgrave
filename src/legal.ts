@@ -42,7 +42,8 @@ const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/"/g, '&quot
 /** Static footer markup (escaped; written into the HTML at build time, no script involved). */
 export function footerHtml(): string {
   const links = legalLinks()
-    .map((l) => `<a href="${esc(l.href)}"${l.external && !l.href.startsWith('mailto:') ? ' target="_blank" rel="noopener noreferrer"' : ''}>${esc(l.label)}</a>`)
+    // a new tab for everything but mail: a footer click never ends a run in progress
+    .map((l) => `<a href="${esc(l.href)}"${l.href.startsWith('mailto:') ? '' : ' target="_blank" rel="noopener noreferrer"'}>${esc(l.label)}</a>`)
     .join(' ');
   return `<span class="ft-copy">${esc(copyrightLine())}</span> <span class="ft-links">${links}</span>`;
 }
@@ -51,5 +52,6 @@ export function footerHtml(): string {
 export function contactHtml(): string {
   const mail = contactEmail();
   if (mail) return `write to <a href="mailto:${esc(mail)}">${esc(mail)}</a>`;
+  if (!/^https:\/\//.test(SOURCE_URL)) return 'contact the site operator';
   return `open an issue in the <a href="${esc(SOURCE_URL)}" target="_blank" rel="noopener noreferrer">source repository</a>`;
 }

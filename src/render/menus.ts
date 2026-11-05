@@ -137,7 +137,8 @@ export function bestPage(back: () => void, show: (p: MenuPage) => void, d: Diffi
 /** Open one of the static pages / links in a new tab (from a tap or key press: a user gesture). */
 function openLink(href: string): void {
   try {
-    window.open(new URL(href, location.href).toString(), '_blank', 'noopener,noreferrer');
+    if (href.startsWith('mailto:')) location.href = href; // a mail link in a new tab leaves an empty tab behind
+    else window.open(new URL(href, location.href).toString(), '_blank', 'noopener,noreferrer');
   } catch {
     /* blocked pop-up: nothing else to do */
   }

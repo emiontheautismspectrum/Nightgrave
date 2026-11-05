@@ -63,6 +63,12 @@ export class BoardPanel {
     this.timer = window.setInterval(() => this.tick(), 1000);
   }
 
+  /** Stop the countdown and the refresh (a hidden panel or a closed overlay never polls). */
+  stop(): void {
+    if (this.timer) window.clearInterval(this.timer);
+    this.timer = 0;
+  }
+
   private now(): number {
     return hasServerClock() ? serverNowMs() : Date.now(); // offline: the local UTC clock
   }
@@ -71,7 +77,9 @@ export class BoardPanel {
     this.countdown.textContent = `RESETS IN ${untilReset(this.now())}`;
     const today = getServerDate() ?? utcDateKey(new Date());
     // a new UTC day on an open page: switch by itself; otherwise refresh every 60 s, never during a run
-    if ((today !== this.shownDate && this.shownDate !== '') || Date.now() - this.lastFetch > 60_000) {
+    // the day switch retries at most every 15 s (a failing API is not hammered once per second after midnight)
+    const since = Date.now() - this.lastFetch;
+    if ((today !== this.shownDate && this.shownDate !== '' && since > 15_000) || since > 60_000) {
       if (!isInRun()) void this.refresh();
     }
   }

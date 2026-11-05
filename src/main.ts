@@ -79,7 +79,10 @@ function applyLayout(game: Phaser.Game): void {
     st.width = `${L.panel.w}px`;
     st.height = L.panel.h ? `${L.panel.h}px` : '';
     board.start();
-  } else if (board) board.root.style.display = 'none';
+  } else if (board) {
+    board.root.style.display = 'none';
+    board.stop();
+  }
   if (footer) {
     footer.style.top = `${L.footerY}px`;
     footer.hidden = phone;
