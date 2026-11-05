@@ -316,6 +316,29 @@ def place_all(sprites):
 
 # ---------------------------------------------------------------- tones (no dithering anywhere)
 
+def drop_small(a, min_area):
+    """Remove 4-connected opaque components smaller than min_area px (e.g. trunk stubs left by a cut)."""
+    h_, w_ = a.shape
+    seen = np.zeros((h_, w_), dtype=bool)
+    op = a != C.T
+    for y0, x0 in zip(*np.nonzero(op)):
+        if seen[y0, x0]:
+            continue
+        stack, comp = [(int(y0), int(x0))], []
+        seen[y0, x0] = True
+        while stack:
+            y, x = stack.pop()
+            comp.append((y, x))
+            for yy, xx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
+                if 0 <= yy < h_ and 0 <= xx < w_ and op[yy, xx] and not seen[yy, xx]:
+                    seen[yy, xx] = True
+                    stack.append((yy, xx))
+        if len(comp) < min_area:
+            ys, xs = zip(*comp)
+            a[list(ys), list(xs)] = C.T
+    return a
+
+
 def majority(a, r=2, iters=2):
     """Mode filter over (2r+1)^2 windows: removes specks and thin noise -> large flat patches."""
     vals = np.unique(a)
@@ -578,6 +601,22 @@ def stone_layout():
     junction[:-1, :-1] = (lab[:-1, :-1] != lab[1:, 1:]) & (lab[:-1, 1:] != lab[1:, :-1])
     joint = jr.copy()
     joint[1:, 1:] |= junction[:-1, :-1]
+    # v4 fixup: joint width varies 1-2 px per stone pair (deterministic hash of the pair)
+    def wide(a_, b_):
+        lo, hi = np.minimum(a_, b_), np.maximum(a_, b_)
+        return ((lo * 73856093) ^ (hi * 19349663)) % 100 < 40
+    dh = (lab[:, :-1] != lab[:, 1:]) & wide(lab[:, :-1], lab[:, 1:]) & (lab[:, :-1] >= 0) & (lab[:, 1:] >= 0)
+    dv = (lab[:-1, :] != lab[1:, :]) & wide(lab[:-1, :], lab[1:, :]) & (lab[:-1, :] >= 0) & (lab[1:, :] >= 0)
+    joint[:, 1:] |= dh
+    joint[1:, :] |= dv
+    # rounded stone corners: every junction eats a 1-2 px rounded notch out of the stones meeting there
+    jy_, jx_ = np.nonzero(junction)
+    for y_, x_ in zip(jy_.tolist(), jx_.tolist()):
+        rad = 1 if (x_ * 31 + y_ * 17) % 3 else 2
+        for oy in range(-rad, rad + 2):
+            for ox in range(-rad, rad + 2):
+                if (ox - 0.5) ** 2 + (oy - 0.5) ** 2 <= (rad + 0.3) ** 2 and 0 <= y_ + oy < H and 0 <= x_ + ox < W:
+                    joint[y_ + oy, x_ + ox] = True
     # per-stone base tone from the value field at its centroid, with a calm irregular rhythm
     vi = v[np.clip(cys.astype(int), 0, H - 1), np.clip(cxs.astype(int), 0, W - 1)]
     tone = np.clip(np.round(-0.3 + vi * 5.0), 1, 4).astype(int)  # use the whole ramp: shade bg1 .. lit stone_dark
@@ -606,14 +645,14 @@ def stone_layout():
             break
     # missing stones (soil / moss showing): rare in the mid ring, frequent at the forest edge and under the tree
     dcell = np.minimum.reduce([cxs - AX0, AX1 - cxs, cys - AY0, AY1 - cys])
-    p_missing = np.where(dcell < 30, 0.65 * (1 - np.clip(dcell, 0, 30) / 30), 0.04)
+    p_missing = np.where(dcell < 30, 0.65 * (1 - np.clip(dcell, 0, 30) / 30), 0.0)  # fixup: no lone soil/moss stones
     p_missing = np.where(np.hypot(cxs - gx, cys - gy) < 58, np.maximum(p_missing, 0.5), p_missing)
     p_missing[calm | path_cell] = 0
     p_missing[:32] = 0  # altar plaza is intact
     missing = r.random(n) < p_missing
     sunken = (~missing) & ~calm & (r.random(n) < 0.12)
     broken = (~missing) & ~calm & (r.random(n) < 0.05)
-    lit_edge = (~missing) & (tone < 4) & (r.random(n) < 0.12)
+    lit_edge = (~missing) & (tone < 4) & (r.random(n) < 0.12) & False  # v4 fixup: replaced by the worn dark part
     return dict(lab=lab, tone=tone, joint=joint, missing=missing, sunken=sunken, broken=broken, lit_edge=lit_edge,
                 cx=cxs, cy=cys, calm=calm, path=path_cell, n=n, v=v, din=din)
 
@@ -644,8 +683,11 @@ def ground(sprites, decals_, props, ritual, return_masks=False):
     # lit top-left edge only on stones with no darker neighbour (joint -> lit edge stays within 2 steps)
     st_lit = S["lit_edge"][lab] & ((left != lab) | (up != lab)) & ~joint & (nb_min0 == tone[lab])
     g[st_lit & cover] = ci_stone[np.minimum(4, tone[lab] + 1)][st_lit & cover]
-    st_sunk = S["sunken"][lab] & ((right != lab) | (down != lab) | np.roll(joint, -1, 1) | np.roll(joint, -1, 0)) & ~joint
-    g[st_sunk & cover] = ci_stone[np.maximum(0, tone[lab] - 1)][st_sunk & cover]
+    # worn stones: the bottom-right part of every stone is one step darker (its second and last tone)
+    rad_i = np.sqrt(np.bincount(lab[lab >= 0].ravel(), minlength=S["n"]) / math.pi)
+    u = ((xx - S["cx"][lab]) + (yy - S["cy"][lab])) / math.sqrt(2)
+    worn = (u > 0.25 * rad_i[lab]) & ~joint & ~(S["calm"][lab] & (tone[lab] <= 2)) & (lab >= 0)
+    g[worn & cover] = ci_stone[np.maximum(0, tone[lab] - 1)][worn & cover]
     # joints: one step darker than the darker of the two stones they separate
     # joint = one step below its own stone, never lighter than any stone pixel actually drawn next to it
     order = {int(c): i for i, c in enumerate(ci_stone)}
@@ -676,25 +718,37 @@ def ground(sprites, decals_, props, ritual, return_masks=False):
     out = cover & (sd + edge_noise * 0.5 > 0.5)
     g[out] = np.where(soil[out] > 0.5, C.ci("bg0"), C.ci("forest"))
     decal |= edge_floor
-    # broken low curb at the rect: fragments with gaps (stone_dark top, mist face)
+    # broken low curb at the rect (v4 fixup): irregular worn stones 4-14 px with 2-12 px gaps, 2-3 px tall,
+    # low contrast (fog top, bg1 face), rounded ends, some partly covered by moss
     hollows = [L.hollow_point(s_, p_) for s_, p_ in L.HOLLOWS]
     for side in range(4):
-        pos = 0
+        pos = int(r.integers(0, 6))
         length = (AX1 - AX0) if side < 2 else (AY1 - AY0)
         while pos < length:
-            seg = int(r.integers(10, 26))
-            gap = int(r.integers(6, 20))
+            seg = int(r.integers(4, 15))
+            gap = int(r.integers(2, 13))
+            thick = int(r.integers(2, 4))
+            shift = int(r.integers(-1, 2))
+            top = C.ci("fog") if r.random() < 0.6 else C.ci("bg1")
+            moss_from = seg - int(r.integers(2, seg)) if r.random() < 0.35 else seg  # moss creeps over one end
             for k in range(pos, min(length, pos + seg)):
+                kk = k - pos
                 if side < 2:
-                    x, y = AX0 + k, (AY0 if side == 0 else AY1 - 3)
+                    x, y = AX0 + k, (AY0 + shift if side == 0 else AY1 - thick + shift)
                 else:
-                    x, y = (AX0 if side == 2 else AX1 - 3), AY0 + k
+                    x, y = (AX0 + shift if side == 2 else AX1 - thick + shift), AY0 + k
                 if any(math.hypot(x - hx, y - hy) < 14 for hx, hy in hollows):
                     continue
-                for t in range(3):
+                end = kk == 0 or kk == seg - 1
+                for t in range(thick):
+                    if end and t == 0:
+                        continue  # rounded ends
                     px, py = (x, y + t) if side < 2 else (x + t, y)
                     if 0 <= px < W and 0 <= py < H:
-                        g[py, px] = C.ci("stone_dark") if t == 0 else C.ci("mist" if t == 1 else "bg1")
+                        col = top if t == 0 else C.ci("bg1")
+                        if kk >= moss_from:
+                            col = C.ci("fern")
+                        g[py, px] = col
                         decal[py, px] = True
             pos += seg + gap
     # fern moss: soft patches 8-20 px at stone corners in the mid ring and the edges, weeds in joints
@@ -955,10 +1009,13 @@ def forest_near():
 
     for ang in (-2.3, -1.9, -1.4, -1.0, -0.6):
         climb(gx + math.cos(ang) * 10, AY0 - 2, ang, rr.uniform(16, 26), 7, 3)
-    keep = np.ones((H, W), dtype=bool)
-    eb = L.EDGE_BAND - 4
-    keep[AY0 - eb:AY1 + eb, AX0 - eb:AX1 + eb] = False
-    a[~keep] = C.T
+    # cut the trunks along an irregular contour (a straight cut leaves square blocks), then drop small stubs
+    xx_, yy_ = C.grid(W, H)
+    eb = L.EDGE_BAND - 4 + (C.value_noise(W, H, 10, rng(18)) - 0.5) * 10
+    ddx = np.maximum(0, np.maximum(AX0 - xx_, xx_ - AX1))
+    ddy = np.maximum(0, np.maximum(AY0 - yy_, yy_ - AY1))
+    a[np.maximum(ddx, ddy) < eb] = C.T
+    a = drop_small(a, 160)
     m = L.OVERHANG_MAX
     for _ in range(18):
         side = int(r.integers(0, 4))
