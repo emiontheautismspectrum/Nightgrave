@@ -32,6 +32,10 @@ export const LIMITS = {
   adminPerMinutePerIp: 20,
   cacheSeconds: 30,
   keepDays: 30,
+  /** Global cap of pending submissions (a flood cannot starve verification); above it submit answers 503 busy. */
+  maxPending: 500,
+  /** Pending submissions older than this are dropped by the cron (e.g. stuck between versions). */
+  pendingTtlMs: 2 * 86_400_000,
 };
 
 const FIELDS: Record<string, 'string' | 'number'> = {
@@ -253,6 +257,8 @@ async function postSubmit(req: Request, env: Env, now: number): Promise<Response
   const ip = await ipHash(req, env);
   if (!(await allow(env, `submit:${ip}`, 3_600_000, LIMITS.submitPerHourPerIp, now))) return reject('rate', 429, req, env);
   if (!(await allow(env, `player:${v.playerId}`, 86_400_000, LIMITS.submitPerDayPerPlayer, now))) return reject('rate', 429, req, env);
+  const queued = await env.DB.prepare('SELECT COUNT(*) AS n FROM entries WHERE p_replay IS NOT NULL').first<{ n: number }>();
+  if ((queued?.n ?? 0) >= LIMITS.maxPending) return reject('busy', 503, req, env);
   // the run goes into the player's PENDING slot, only if it beats BOTH their verified score and their current pending
   // score (a weaker run never replaces a stronger pending one); the verified part stays on the board meanwhile
   const res = await env.DB.prepare(
@@ -316,7 +322,7 @@ async function verifyPending(req: Request, env: Env): Promise<Response> {
   return json({ items }, 200, req, env);
 }
 
-const REASONS = new Set(['score_mismatch', 'length_mismatch', 'invalid_input', 'outdated', 'error']);
+const REASONS = new Set(['score_mismatch', 'length_mismatch', 'invalid_input', 'outdated', 'error', 'duplicate']);
 
 async function verifyResult(req: Request, env: Env, idPart: string | undefined): Promise<Response> {
   const m = /^(\d{1,15})-(\d{1,15})$/.exec(idPart ?? '');
@@ -334,14 +340,25 @@ async function verifyResult(req: Request, env: Env, idPart: string | undefined):
   const row = await env.DB.prepare('SELECT date FROM entries WHERE id = ?1 AND p_seq = ?2 AND p_replay IS NOT NULL').bind(id, seq).first<{ date: string }>();
   if (!row) return json({ ok: false, error: 'stale' }, 409, req, env); // superseded or already decided
   if (o.status === 'verified') {
+    // the same replay can be verified only once per date (a shared run copied under another playerId is refused)
+    const p = await env.DB.prepare('SELECT p_replay FROM entries WHERE id = ?1 AND p_seq = ?2').bind(id, seq).first<{ p_replay: string }>();
+    const sha = await sha256Hex(p?.p_replay ?? '');
+    const dup = await env.DB.prepare('SELECT 1 AS x FROM entries WHERE date = ?1 AND verified = 1 AND replay_sha = ?2 AND id <> ?3').bind(row.date, sha, id).first();
+    if (dup) {
+      await env.DB.prepare(
+        `UPDATE entries SET reject_reason = 'duplicate', p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL,
+           p_duration = NULL, p_replay = NULL, p_tuning = NULL, p_client = NULL, p_at = NULL WHERE id = ?1 AND p_seq = ?2`,
+      ).bind(id, seq).run();
+      return json({ ok: false, error: 'duplicate' }, 409, req, env);
+    }
     // promote ONLY this exact submission (id + version): a newer pending run that arrived meanwhile stays pending
     const r = await env.DB.prepare(
       `UPDATE entries SET verified = 1, score = p_score, name = p_name, message = p_message, hero = p_hero,
-         duration_ticks = p_duration, replay = p_replay, achieved_at = p_at, reject_reason = NULL,
+         duration_ticks = p_duration, replay = p_replay, achieved_at = p_at, reject_reason = NULL, replay_sha = ?3,
          p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL, p_duration = NULL, p_replay = NULL,
          p_tuning = NULL, p_client = NULL, p_at = NULL
        WHERE id = ?1 AND p_seq = ?2 AND p_replay IS NOT NULL AND (verified = 0 OR p_score > score)`,
-    ).bind(id, seq).run();
+    ).bind(id, seq, sha).run();
     if ((r.meta?.changes ?? 0) === 0) return json({ ok: false, error: 'stale' }, 409, req, env);
     await purge(row.date);
     return json({ ok: true }, 200, req, env);
@@ -416,6 +433,12 @@ export async function cleanup(env: Env, now = Date.now()): Promise<void> {
   const oldest = addDays(utcDateKey(new Date(now)), -LIMITS.keepDays);
   await env.DB.prepare('DELETE FROM entries WHERE date < ?1').bind(oldest).run();
   await env.DB.prepare('DELETE FROM ratelimit WHERE window < ?1').bind(now - 86_400_000).run();
+  // pending submissions that never got a verdict (e.g. stuck between versions) expire
+  await env.DB.prepare(
+    `UPDATE entries SET reject_reason = 'expired', p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL,
+       p_duration = NULL, p_replay = NULL, p_tuning = NULL, p_client = NULL, p_at = NULL
+     WHERE p_replay IS NOT NULL AND p_at < ?1`,
+  ).bind(now - LIMITS.pendingTtlMs).run();
 }
 
 export default {

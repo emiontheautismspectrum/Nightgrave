@@ -61,7 +61,10 @@ export class InputCollector {
     const canvas = scene.game.canvas;
     const toGame = (e: PointerEvent): [number, number] => {
       const r = canvas.getBoundingClientRect();
-      return [((e.clientX - r.left) * scene.scale.width) / (r.width || 1), ((e.clientY - r.top) * scene.scale.height) / (r.height || 1)];
+      // clamped to the screen: a drag past the canvas edge must never produce an off-screen cursor in the replay
+      const gx = ((e.clientX - r.left) * scene.scale.width) / (r.width || 1);
+      const gy = ((e.clientY - r.top) * scene.scale.height) / (r.height || 1);
+      return [Math.max(0, Math.min(scene.scale.width, gx)), Math.max(0, Math.min(scene.scale.height, gy))];
     };
     const on = (type: string, fn: (e: PointerEvent) => void) => {
       canvas.addEventListener(type, fn as EventListener);

@@ -8,7 +8,7 @@ import { CLIENT_VERSION, tuningFingerprint } from '../../src/shared/version';
 import { dailySeed } from '../../src/shared/daily';
 import { Sim } from '../../src/sim/sim';
 
-export type Reason = 'score_mismatch' | 'length_mismatch' | 'invalid_input' | 'outdated';
+export type Reason = 'score_mismatch' | 'length_mismatch' | 'invalid_input' | 'outdated' | 'error';
 export interface PendingItem {
   id: string;
   date: string;

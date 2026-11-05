@@ -118,6 +118,8 @@ export function reasonText(reason: string | undefined): string {
       return 'NOT ALLOWED WORDS';
     case 'too_high':
       return 'SCORE NOT PLAUSIBLE';
+    case 'busy':
+      return 'BOARD BUSY: TRY AGAIN LATER';
     case 'not_best':
       return 'YOUR BEST (OR PENDING) TODAY IS HIGHER';
     default:

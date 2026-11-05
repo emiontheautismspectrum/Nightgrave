@@ -173,3 +173,34 @@ describe('verification speed', () => {
     expect(36_000 / tps).toBeLessThan(1);
   });
 });
+
+describe('review hardening', () => {
+  it('a shared replay copied under another playerId is refused as a duplicate', async () => {
+    await submit(RUN.log, RUN.score, { playerId: pid(1) });
+    expect(await runVerifier()).toEqual(['verified']);
+    await submit(RUN.log, RUN.score, { playerId: pid(2), name: 'Copycat' });
+    const [it] = await pending();
+    const r = await v('POST', `/api/verify/result/${it!.id}`, { status: 'verified' });
+    expect(r.status).toBe(409);
+    expect((await board()).top.map((e) => e.name)).toEqual(['Honest']);
+    expect(await pending()).toEqual([]);
+  });
+  it('a full pending queue answers busy', async () => {
+    const { LIMITS } = await import('../src/index');
+    const old = LIMITS.maxPending;
+    LIMITS.maxPending = 3;
+    try {
+      for (let i = 0; i < 3; i++) await submit(RUN.log, RUN.score, { playerId: pid(50 + i) });
+      const r = await submit(RUN.log, RUN.score, { playerId: pid(60) });
+      expect(((await r.json()) as { reason: string }).reason).toBe('busy');
+    } finally {
+      LIMITS.maxPending = old;
+    }
+  });
+  it('the cron expires pending runs that never got a verdict', async () => {
+    const { cleanup } = await import('../src/index');
+    await submit(RUN.log, RUN.score);
+    await cleanup(env, NOW + 3 * 86_400_000);
+    expect(await pending()).toEqual([]);
+  });
+});

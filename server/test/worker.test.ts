@@ -26,7 +26,8 @@ function body(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     date: DATE, seed: dailySeed(DATE), difficulty: 'hard', score: 100, durationTicks: ticks, hero: 'knight', name: 'Tester',
     playerId: pid(1), tuningFingerprint: tuningFingerprint(), clientVersion: CLIENT_VERSION,
-    replay: encodeInputLog(Array.from({ length: ticks }, () => ({ cursor: true, mx: 240, my: 135, buttons: 0 }))),
+    // a distinct replay per player (identical replays are refused as duplicates on promotion)
+    replay: encodeInputLog(Array.from({ length: ticks }, () => ({ cursor: true, mx: 40 + (Number(String(over.playerId ?? pid(1)).slice(-4)) % 400), my: 135, buttons: 0 }))),
     ...over,
   };
 }
