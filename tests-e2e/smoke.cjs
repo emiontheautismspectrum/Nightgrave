@@ -125,7 +125,6 @@ async function desktop(browser) {
   d = await dbg(page);
   ok(d && d.x > 270, `desktop: the hero follows the mouse (x ${d && d.x.toFixed(0)})`);
   ok(d && d.parryStart === ps0, 'desktop: dismissing the card did not trigger a parry');
-  await page.screenshot({ path: path.join(OUT, 'dash_chevron_full.png') });
   const ps = d.parryStart;
   await page.mouse.down();
   await page.mouse.up();
