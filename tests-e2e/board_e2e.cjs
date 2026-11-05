@@ -3,7 +3,7 @@
  * Needs `npx wrangler dev --port 8787` running in server/ (local D1, migrations applied).
  * Builds the game with VITE_API_BASE=http://localhost:8787 (+ VITE_SMOKE for the state snapshot), serves dist on
  * :5173 (an allowed origin), applies dist/_headers' CSP to every document, plays a Hard run until death, submits a
- * name and checks the entry on the API. Fails on any CSP violation. Run: npm run e2e:board
+ * name, runs the replay verifier (npm run verify:pending) and checks the verified entry on the API. Fails on any CSP violation. Run: npm run e2e:board
  */
 const { chromium } = require('playwright');
 const { spawn, execSync } = require('node:child_process');
@@ -66,7 +66,14 @@ const ok = (c, m) => (c ? console.log('ok  ', m) : fail(m));
     await page.keyboard.press('Enter');
     await sleep(1500);
     await page.screenshot({ path: path.join(require('node:os').tmpdir(), 'board_submit.png') });
+    // not on the board before verification: run the verifier (the same script the GitHub Action runs)
+    const before = await (await fetch(`${API}/api/daily`)).json();
+    const mineCount = (b) => b.top.filter((e) => e.name === 'E2E Tester').length;
+    const token = /VERIFIER_TOKEN=(.*)/.exec(fs.readFileSync(path.join(ROOT, 'server', '.dev.vars'), 'utf8'))[1].trim();
+    const out = execSync('npm run -s verify:pending', { cwd: ROOT, env: { ...process.env, API_BASE: API, VERIFIER_TOKEN: token } }).toString();
+    ok(/1 verified|[1-9]\d* verified/.test(out), `verifier verified the run (${out.trim().split('\n').pop()})`);
     const board = await (await fetch(`${API}/api/daily`)).json();
+    ok(mineCount(board) === mineCount(before) + 1 || mineCount(before) >= 10, 'the run was not shown while pending and appears once verified');
     const mine = board.top.find((e) => e.name === 'E2E Tester');
     ok(!!mine, `the run is on today's board (rank ${mine && mine.rank}, score ${mine && mine.score})`);
     // the title shows today's champion

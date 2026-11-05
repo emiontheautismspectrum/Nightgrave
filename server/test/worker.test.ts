@@ -7,6 +7,7 @@ import { CLIENT_VERSION, tuningFingerprint } from '../../src/shared/version';
 import { makeD1 } from './d1shim';
 
 const ORIGIN = 'https://nightgrave.pages.dev';
+export const VTOKEN = 'verifier-token-0123456789abcdef-0123';
 const NOW = Date.parse('2026-11-05T12:00:00Z');
 const DATE = '2026-11-05';
 let env: Env;
@@ -16,7 +17,7 @@ let ipN = 0;
 beforeEach(() => {
   const d = makeD1();
   raw = d.raw;
-  env = { DB: d.DB as Env['DB'], ADMIN_TOKEN: 'secret-admin-token-0123456789abcdef', IP_SALT: 'salt-0123456789abcdef', ALLOWED_ORIGINS: `${ORIGIN},http://localhost:5173` };
+  env = { DB: d.DB as Env['DB'], ADMIN_TOKEN: 'secret-admin-token-0123456789abcdef', IP_SALT: 'salt-0123456789abcdef', VERIFIER_TOKEN: VTOKEN, ALLOWED_ORIGINS: `${ORIGIN},http://localhost:5173` };
 });
 
 const pid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -36,13 +37,20 @@ function post(b: unknown, opts: { now?: number; ip?: string; origin?: string | n
 }
 const get = (q = '', now = NOW, ip = '1.1.1.1', origin: string | null = ORIGIN) =>
   handle(new Request(`https://api.test/api/daily${q}`, { headers: { 'CF-Connecting-IP': ip, ...(origin ? { Origin: origin } : {}) } }), env, now);
+const vreq = (method: string, path: string, body?: unknown, token: string | null = VTOKEN) =>
+  handle(new Request(`https://api.test${path}`, { method, headers: { ...(token !== null ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }), env, NOW);
+/** Server mechanics only: mark every pending submission as verified through the verifier endpoints. */
+async function promoteAll(): Promise<void> {
+  const { items } = (await (await vreq('GET', '/api/verify/pending?limit=50')).json()) as { items: { id: string }[] };
+  for (const it of items) await vreq('POST', `/api/verify/result/${it.id}`, { status: 'verified' });
+}
 const reason = async (r: Response) => ((await r.json()) as { reason?: string }).reason;
 
 describe('POST /api/submit: every rejection path', () => {
   it('accepts a valid run and returns its rank', async () => {
     const r = await post(body());
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ accepted: true, rank: 1 });
+    expect(await r.json()).toEqual({ accepted: true, pending: true, provisionalRank: 1 });
     expect(r.headers.get('Content-Type')).toBe('application/json; charset=utf-8');
     expect(r.headers.get('X-Content-Type-Options')).toBe('nosniff');
   });
@@ -112,13 +120,15 @@ describe('date and grace window', () => {
 describe('board: best per player, ordering, champion', () => {
   it('keeps each player best run; top 10 ordered by score, ties won by the earlier submission', async () => {
     await post(body({ playerId: pid(1), score: 300, name: 'Alpha' }), { now: NOW });
-    await post(body({ playerId: pid(1), score: 200, name: 'Alpha' }), { now: NOW + 1 }); // lower: kept 300
+    await post(body({ playerId: pid(1), score: 200, name: 'Alpha' }), { now: NOW + 1 }); // lower than pending: refused
     const lower = await post(body({ playerId: pid(1), score: 250 }), { now: NOW + 2 });
-    expect(await lower.json()).toEqual({ accepted: false, rank: 1, reason: 'not_best' });
+    expect(await lower.json()).toEqual({ accepted: false, pending: false, provisionalRank: null, reason: 'not_best' });
+    await promoteAll();
     await post(body({ playerId: pid(2), score: 300, name: 'Bravo' }), { now: NOW + 10 }); // tie, later
     await post(body({ playerId: pid(3), score: 400, name: 'Charlie', message: 'Hello: night!' }), { now: NOW + 20 });
     await post(body({ playerId: pid(4), score: 100, name: 'Delta', message: 'only rank one shows' }), { now: NOW + 30 });
     for (let i = 5; i < 16; i++) await post(body({ playerId: pid(i), score: 10 + i, name: `Pl${i}` }), { now: NOW + 40 + i });
+    await promoteAll();
     const b = (await (await get('', NOW + 100)).json()) as { top: { rank: number; name: string; score: number }[]; champion: unknown };
     expect(b.top.length).toBe(10);
     expect(b.top.slice(0, 4).map((e) => [e.rank, e.name, e.score])).toEqual([[1, 'Charlie', 400], [2, 'Alpha', 300], [3, 'Bravo', 300], [4, 'Delta', 100]]);
@@ -126,7 +136,7 @@ describe('board: best per player, ordering, champion', () => {
     expect(JSON.stringify(b)).not.toContain('only rank one shows');
     // a better run updates the entry (and its time)
     const up = await post(body({ playerId: pid(1), score: 500, name: 'Alpha' }), { now: NOW + 200 });
-    expect(await up.json()).toEqual({ accepted: true, rank: 1 });
+    expect(await up.json()).toEqual({ accepted: true, pending: true, provisionalRank: 1 });
   });
 
   it('SQL injection strings are stored and returned as plain text', async () => {
@@ -134,6 +144,7 @@ describe('board: best per player, ordering, champion', () => {
     const r = await post(body({ name: "x'); DROP TABLE entries;--" }));
     expect(await reason(r)).toBe('name'); // ; and ) are not allowed in names anyway
     expect((await post(body({ name: 'O-Brien.x', message: "it's ' OR '1' -- x" }))).status).toBe(200);
+    await promoteAll();
     const b = (await (await get()).json()) as { champion: { message: string } };
     expect(b.champion.message).toBe("it's ' OR '1' -- x");
     expect(raw.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'entries'").get()).toEqual({ n: 1 });
