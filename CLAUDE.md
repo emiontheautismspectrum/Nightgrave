@@ -18,6 +18,14 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Keyboard: WASD/arrows move, J or Z = Parry, K or Shift = Dash.
 - Gamepad: left stick move, A = Parry, B or RT = Dash.
 - Never require the mouse button to move.
+- Touch (phones/tablets, landscape): relative drag anywhere moves a virtual cursor from the hero (sensitivity 0.5-3.0,
+  default 1.5; lifting keeps it, the next drag continues); the hero follows it like the mouse. PARRY = large round button
+  in the bottom of the right margin (~36 px), DASH = smaller button above it (~28 px); "Left-handed" mirrors them to the
+  left margin; buttons never overlap the arena (x 48..432). A tap with a second finger on the arena = PARRY (setting, on
+  by default); a single tap of the only finger does nothing. Touch becomes the same per-tick cursor input as the mouse
+  (replays identical); the input source is replay metadata only. Pause button at the right end of the top HUD band;
+  portrait shows "Rotate your device" and pauses.
+- Pause: Esc, P, gamepad Start or the pause button; auto-pause on focus loss / hidden tab.
 
 ## Core mechanics (all values live in `src/data/tuning.ts`, tunable)
 - Parry: short pulse, radius ~28 px, active ~0.15 s, cooldown ~0.4 s. Destroys parryable projectiles inside the pulse, grants points and builds the multiplier.
