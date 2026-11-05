@@ -32,14 +32,23 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   in Settings. A small amber chevron next to the hero shows where a dash would go.
 
 ## Core mechanics (all values live in `src/data/tuning.ts`, tunable)
-- Parry: short pulse, radius ~28 px, active ~0.15 s, cooldown ~0.4 s. Destroys parryable projectiles inside the pulse, grants points and builds the multiplier.
-- Dash: rare. ~80 px, ~0.2 s of invulnerability, cooldown ~3 s. Needed against unparryable threats.
-- Multiplier: +0.25 per successful parry, cap x5, resets after 5 s without a parry. A hit kills the run.
+- Parry (a skill, Polish 2): pulse radius 22 px, active 0.10 s, cooldown 0.9 s after a successful parry and 1.4 s after
+  a whiff. Destroys at most 3 parryable projectiles per pulse (nearest first) while they are inside it during the active
+  window; each scores as before.
+- Dash: rare. ~80 px over 0.2 s, invulnerable only for the first 0.12 s, cooldown 3 s. Needed against unparryable threats.
+- Multiplier: +0.25 per pulse, but only for a CLOSE parry (a kill within the inner 60% of the radius; a far parry scores
+  but neither steps nor resets it); cap x5; resets after 3 s without a successful parry. A hit kills the run.
+- Ember charge (boss drop): +0.01 s parry window per charge, cap +0.04 s (max window 0.14 s).
 - Score: survival 10 pts/s + parry 25 x multiplier + pickups + boss kill fixed 1000.
 
 ## Threats
 - Orb (straight, parryable), Rune burst (radial ring from ground runes, parryable),
   Blade (spinning arcs, UNPARRYABLE, dash/dodge only), Wraith (slow homing shadow, parryable, fades).
+- Polish 2 threats: ARMORED ORB (violet + bone rim, wave 2+): two parries (the first cracks it and pushes it 6 px away,
+  no points). SPLITTING ORB (violet, wave 3+): a parry bursts it into 3 small orbs flying outward, never inside the
+  hero's hit radius and never toward him. BLOOD SIGIL (red ground hazard, wave 5+): 0.6 s outline telegraph, 1.5 s
+  lethal fill, fade; unparryable, dash i-frames pass; at most 2, never under the hero, the arena always keeps a path.
+  Bosses keep their own patterns (no new threats in boss fights). Base projectile speeds are +30% vs Stage 4.
 - Visual language: parryable = violet, unparryable = blood red. Must be readable at a glance.
 - Waves every ~15 s. Endless scaling: +5% speed, +6% density per wave, with caps.
 - Casters summon attacks (they are emitters only: not hittable, not lethal, no collision). Their attacks are the
@@ -99,7 +108,8 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Shield is NOT in MVP (planned later as a bonus).
 
 ## Difficulty
-- Easy / Medium / Hard differ only by projectile speed and density (Easy 0.8x/0.7x, Medium 1.0x/1.0x, Hard 1.25x/1.4x).
+- Easy / Medium / Hard differ only by projectile speed and density (Polish 2: Easy 0.65x/0.5x, Medium 0.85x/0.75x,
+  Hard 1.1x/1.2x), calibrated with the skilled bot (`npx vite-node tools/bot/balance.ts 50`).
 - Only HARD has the online "Today's best" board.
 
 ## Leaderboard (Hard only)
