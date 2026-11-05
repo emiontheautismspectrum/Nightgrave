@@ -316,8 +316,8 @@ def main():
     props = json.load(open(os.path.join(here, "data", "arena_props.json")))["props"]
     manifest = json.load(open(os.path.join(here, "atlas", "manifest.json")))["sprites"]
     prop_hits = {}
-    for name in sorted({p["sprite"] for p in props if p["kind"] != "eyes"}):
-        if manifest[name]["group"] != "arena":
+    for name in sorted({p["sprite"] for p in props if p["kind"] != "eyes"} | {f"rune_glow_{g}" for g in range(8)}):
+        if manifest[name]["group"] != "arena" and not name.startswith("rune_glow"):
             continue
         c = fine_dither(os.path.join(here, "sprites", f"{name}.png"), manifest[name]["w"])
         if c:

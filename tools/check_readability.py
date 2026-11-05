@@ -143,6 +143,17 @@ def main():
         put(img, rgb("vignette_outer"), al.get("vignette_outer", 1.0))
         put(img, rgb("forest_near"))
         put(img, rgb("forest_overhang"), OVERHANG_FADE)
+    # telegraph pass: every rune lit (brightest telegraph frame) -> threats must stay readable over glowing runes too
+    with_tele = base.copy()
+    for g_, rr_ in enumerate(lay["runes"]):
+        sh_ = np.array(Image.open(os.path.join(ASSETS, "sprites", f"rune_glow_{g_}.png")).convert("RGBA"))
+        fr = sh_[:, 3 * sh_.shape[0]:4 * sh_.shape[0]]
+        layer = np.zeros((H, W, 4), dtype=np.uint8)
+        x_, y_ = rr_["x"] - fr.shape[1] // 2, rr_["y"] - fr.shape[0] // 2
+        layer[y_:y_ + fr.shape[0], x_:x_ + fr.shape[1]] = fr
+        put(with_tele, layer)
+    put(with_tele, fog, fa)
+    lum_t = lum_rgb(with_tele)
     lum_g, lum_p = lum_rgb(base), lum_rgb(with_props)
 
     failed = False
@@ -153,13 +164,14 @@ def main():
         frames = [sheet[:, i * h:(i + 1) * h] for i in range(sheet.shape[1] // h)]
         r = sweep(lum_g, fog_mask, fog_rgb, fa, frames, hue)
         rp = sweep(lum_p, fog_mask, fog_rgb, fa, frames, hue)
-        ok = r.min() >= TARGET[hue]
+        rt = sweep(lum_t, fog_mask, fog_rgb, fa, frames, hue)
+        ok = r.min() >= TARGET[hue] and rt.min() >= TARGET[hue]
         below = (rp < TARGET[hue]).mean()
         goal_ok = below < GOAL_OVER_PROPS[hue]
         failed |= not ok
         print(f"  {name:11s} ({hue:6s}) ground: min {r.min():.2f} p1 {np.percentile(r, 1):.2f} median {np.median(r):.2f}"
               f" (>= {TARGET[hue]}) {'OK' if ok else 'FAIL'} | over props: {below * 100:.1f}% below target"
-              f" (goal < {GOAL_OVER_PROPS[hue] * 100:.0f}%) {'OK' if goal_ok else 'MISSED'}")
+              f" (goal < {GOAL_OVER_PROPS[hue] * 100:.0f}%) {'OK' if goal_ok else 'MISSED'} | lit runes: min {rt.min():.2f}")
     # hero: body (all opaque pixels except its dark outline) vs the ground under it, everywhere in the arena
     for name in ("knight_idle", "wisp_idle"):
         sheet = load_idx(os.path.join(ASSETS, "sprites", f"{name}.png"))

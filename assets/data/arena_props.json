@@ -687,7 +687,7 @@
   },
   {
    "anim": "glow_mushrooms",
-   "baseY": 128,
+   "baseY": 129,
    "flip": false,
    "frame": 0,
    "h": 5,
@@ -695,8 +695,8 @@
    "shade": 0,
    "sprite": "glow_mushrooms",
    "w": 7,
-   "x": 347,
-   "y": 123
+   "x": 344,
+   "y": 124
   },
   {
    "baseY": 129,
@@ -724,6 +724,32 @@
    "y": 128
   },
   {
+   "anim": "glow_mushrooms",
+   "baseY": 138,
+   "flip": false,
+   "frame": 1,
+   "h": 5,
+   "kind": "glow",
+   "shade": 0,
+   "sprite": "glow_mushrooms",
+   "w": 7,
+   "x": 390,
+   "y": 133
+  },
+  {
+   "anim": "glow_mushrooms",
+   "baseY": 139,
+   "flip": false,
+   "frame": 2,
+   "h": 5,
+   "kind": "glow",
+   "shade": 0,
+   "sprite": "glow_mushrooms",
+   "w": 7,
+   "x": 398,
+   "y": 134
+  },
+  {
    "baseY": 140,
    "flip": false,
    "frame": 0,
@@ -734,6 +760,19 @@
    "w": 5,
    "x": 350,
    "y": 130
+  },
+  {
+   "anim": "glow_mushrooms",
+   "baseY": 140,
+   "flip": false,
+   "frame": 1,
+   "h": 5,
+   "kind": "glow",
+   "shade": 0,
+   "sprite": "glow_mushrooms",
+   "w": 7,
+   "x": 352,
+   "y": 135
   },
   {
    "anim": "rune_sword",
@@ -750,19 +789,6 @@
   },
   {
    "anim": "glow_mushrooms",
-   "baseY": 140,
-   "flip": false,
-   "frame": 1,
-   "h": 5,
-   "kind": "glow",
-   "shade": 0,
-   "sprite": "glow_mushrooms",
-   "w": 7,
-   "x": 393,
-   "y": 135
-  },
-  {
-   "anim": "glow_mushrooms",
    "baseY": 141,
    "flip": false,
    "frame": 2,
@@ -771,34 +797,8 @@
    "shade": 0,
    "sprite": "glow_mushrooms",
    "w": 7,
-   "x": 400,
+   "x": 357,
    "y": 136
-  },
-  {
-   "anim": "glow_mushrooms",
-   "baseY": 143,
-   "flip": false,
-   "frame": 1,
-   "h": 5,
-   "kind": "glow",
-   "shade": 0,
-   "sprite": "glow_mushrooms",
-   "w": 7,
-   "x": 348,
-   "y": 138
-  },
-  {
-   "anim": "glow_mushrooms",
-   "baseY": 143,
-   "flip": false,
-   "frame": 2,
-   "h": 5,
-   "kind": "glow",
-   "shade": 0,
-   "sprite": "glow_mushrooms",
-   "w": 7,
-   "x": 354,
-   "y": 138
   },
   {
    "baseY": 143,

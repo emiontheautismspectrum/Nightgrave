@@ -360,18 +360,21 @@ def giant_roots():
                 x, y = gx + math.cos(ang) * 30, gy + math.sin(ang) * 6
             else:
                 x, y = pts[-1][0] + math.cos(a_) * length / 25, pts[-1][1] + math.sin(a_) * length / 25 * 0.6
-            x = max(x, L.ROOT_MIN_X + 1)
+            if x < L.ROOT_MIN_X + 1:  # a root ends where it reaches the limit (no clamped stubs)
+                break
             y = min(max(y, AY0 + 4), AY1 - 3)
             pts.append((x, y, 9.5 - 7.5 * t))
         roots.append(pts)
-        if i % 2 == 0:  # one branch per alternate root
+        if i % 2 == 0 and len(pts) > 14:  # one branch per alternate root
             k0 = int(r.integers(9, 14))
             bx, by, bt = pts[k0]
             bang = ang + (0.7 if i % 4 == 0 else -0.7)
             br = [(bx, by, bt * 0.7)]
             for k in range(12):
-                br.append((max(br[-1][0] + math.cos(bang) * 2.6, L.ROOT_MIN_X + 1),
-                           min(max(br[-1][1] + math.sin(bang) * 1.6, AY0 + 4), AY1 - 3), bt * 0.7 * (1 - k / 13) + 1.5))
+                nx = br[-1][0] + math.cos(bang) * 2.6
+                if nx < L.ROOT_MIN_X + 1:
+                    break
+                br.append((nx, min(max(br[-1][1] + math.sin(bang) * 1.6, AY0 + 4), AY1 - 3), bt * 0.7 * (1 - k / 13) + 1.5))
             roots.append(br)
     return roots
 
@@ -383,6 +386,8 @@ def root_mushroom_spots():
     mains = roots[:L.GIANT_TREE_ROOTS + (L.GIANT_TREE_ROOTS + 1) // 2]
     for i in range(len(mains) - 1):
         for k in (5, 8, 3):
+            if k >= min(len(mains[i]), len(mains[i + 1])):
+                continue
             a_, b_ = mains[i][k], mains[i + 1][k]
             x, y = (a_[0] + b_[0]) / 2, (a_[1] + b_[1]) / 2 + 2
             if x >= CZ[2] + 6 or not CZ[1] - 6 <= y <= CZ[3] + 6:  # never in the calm zone
