@@ -26,6 +26,10 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   (replays identical); the input source is replay metadata only. Pause button at the right end of the top HUD band;
   portrait shows "Rotate your device" and pauses.
 - Pause: Esc, P, gamepad Start or the pause button; auto-pause on focus loss / hidden tab.
+- Hints (render-only, never in the sim or the replay): one controls line under PLAY for the active device; on the first
+  run per device a card with the controls and "Violet: parry it. Red: dodge or dash." (any input after 250 ms closes it,
+  without acting); two one-time contextual hints ("Parry!", "Can't parry - dash!") away from the hero; "Show tips again"
+  in Settings. A small amber chevron next to the hero shows where a dash would go.
 
 ## Core mechanics (all values live in `src/data/tuning.ts`, tunable)
 - Parry: short pulse, radius ~28 px, active ~0.15 s, cooldown ~0.4 s. Destroys parryable projectiles inside the pulse, grants points and builds the multiplier.

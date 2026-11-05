@@ -133,3 +133,17 @@ UI
    Arena previews: `arena_board.png` (3x scene), `noise_compare.png` (2x), `squint_test.png`, `translucency_demo.png`,
    `variation_board.png`, `animation_strips.png` (4x), `arena_v3_compare.png`, `ground_closeup.png`, `wagon_closeup.png`.
 4. Atlas + JSON consumed by the game through a single `src/render/assets.ts` loader.
+
+## Polish part 1: heroes, reach ring, dash chevron, text
+- Knight: idle 4f (breathing: chest rises 1 px on frames 2-3, cape sway, a 1 px amber glint travelling along the visor
+  slit), run 6f (head bob on frames 3 and 6, cape flutter, visor glint), parry pose 3f with a 60 ms render-only hit-stop
+  when it hits. Effects: `knight_bash` 32x32x4 (shield arc flash in the facing direction: bone -> gold with an amber
+  edge, then bone/amber metallic chips), `knight_cloak_trail` 16x16x3 (stone_dark/fog cloak streaks + one bone glint),
+  `dust_puff` 8x8x4 (stone/fog, render-only on sharp turns). The Wisp keeps `parry_pulse` (flare) and `dash_trail`
+  (flame streak).
+- Parry reach ring (both heroes): a 1 px amber circle at 45% alpha, radius = TUNING parry radius (read at runtime, so it
+  follows any tuning change), shown only while the parry is active. The hitbox is the same circle for both heroes.
+- Dash chevron: a 6 px amber triangle with a dark notch, ~10 px from the hero centre, pointing where a dash would go
+  (the sim's own dashDirection); 100% when the dash is ready, 35% on cooldown, hidden during the dash.
+- Text: Phaser BitmapText from `public/fonts/px8.png` (tools/gen_font.py: Press Start 2P at 8 px, no anti-aliasing,
+  Latin + Greek + Cyrillic; 16 px = 2x nearest); white glyphs tinted to palette colours.
