@@ -432,21 +432,35 @@ export class GameScene extends Phaser.Scene {
     this.bossView.onEvent(e, this.sim.state);
     switch (e.type) {
       case 'parry_start': {
-        const scale = Math.max(1, Math.round(this.sim.params.parryRadius / 12));
-        this.pulse.setVisible(true).setScale(scale).play('parry_pulse');
-        this.pulse.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => this.pulse.setVisible(false));
+        if (this.cfg.hero === 'knight') {
+          // Knight: shield bash in the facing direction (arc flash + metallic sparks)
+          const f = h.facing;
+          const b = this.add.sprite(Math.round(h.x + f * 9), Math.round(h.y - 2), ATLAS, frame('knight_bash')).setFlipX(f < 0).setAlpha(0.9);
+          b.setDepth(D_YSORT + h.y + 4.1).play('knight_bash').once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => b.destroy());
+        } else {
+          // Wisp: round flare pulse
+          const scale = Math.max(1, Math.round(this.sim.params.parryRadius / 12));
+          this.pulse.setVisible(true).setScale(scale).play('parry_pulse');
+          this.pulse.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => this.pulse.setVisible(false));
+        }
         this.hero.play(this.cfg.hero === 'knight' ? 'knight_parry' : 'wisp_pulse');
         break;
       }
       case 'parry_hit':
         this.parried.add(e.id);
         if (!this.lowFx()) this.burst('parry_spark', e.x, e.y);
+        if (this.cfg.hero === 'knight' && this.hero.anims.isPlaying) {
+          // render-only hit-stop: the parry pose holds for a moment (the sim never pauses)
+          this.hero.anims.pause();
+          this.time.delayedCall(60, () => this.hero.anims.resume());
+        }
         this.vibrate(12);
         break;
       case 'dash_start': {
-        const t = this.add.sprite(h.x, h.y, ATLAS, frame('dash_trail')).setFlipX(e.dirX < 0);
+        const trail = this.cfg.hero === 'knight' ? 'knight_cloak_trail' : 'dash_trail'; // cloak vs flame streak
+        const t = this.add.sprite(h.x, h.y, ATLAS, frame(trail)).setFlipX(e.dirX < 0);
         t.setDepth(D_YSORT + h.y + 3);
-        t.play('dash_trail').once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => t.destroy());
+        t.play(trail).once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => t.destroy());
         this.hero.play(`${this.cfg.hero}_dash`);
         break;
       }
@@ -606,6 +620,12 @@ export class GameScene extends Phaser.Scene {
     g.clear();
     const st = this.sim.state;
     const p = this.sim.params;
+    // the true parry reach (radius from TUNING, follows any change automatically), both heroes, while the parry is active
+    if (st.alive && isParryActive(st, p)) {
+      g.lineStyle(1, 0xffb347, 0.45);
+      g.strokeCircle(Math.round(st.hero.x), Math.round(st.hero.y - 2), p.parryRadius);
+    }
+    this.dust(st);
     if (!st.alive || isDashing(st, p)) return;
     const h = st.hero;
     const [dx, dy] = dashDirection(h, this.input2.peek(), p);
@@ -621,6 +641,21 @@ export class GameScene extends Phaser.Scene {
     g.fillTriangle(r(cx + dx * 3), r(cy + dy * 3), r(cx - dx * 2 + px * 3), r(cy - dy * 2 + py * 3), r(cx - dx * 2 - px * 3), r(cy - dy * 2 - py * 3));
     g.fillStyle(0x0b0d12, ready ? 1 : 0.35);
     g.fillTriangle(r(cx), r(cy), r(cx - dx * 3 + px * 2), r(cy - dy * 3 + py * 2), r(cx - dx * 3 - px * 2), r(cy - dy * 3 - py * 2));
+  }
+
+  private lastDir = { x: 1, y: 0, at: 0 };
+  /** Knight: small dust puffs on sharp direction changes (render-only). */
+  private dust(st: { alive: boolean; hero: { x: number; y: number; dirX: number; dirY: number } }): void {
+    if (this.cfg.hero !== 'knight' || !st.alive || this.lowFx()) return;
+    const h = st.hero;
+    const dot = h.dirX * this.lastDir.x + h.dirY * this.lastDir.y;
+    if (dot < 0 && this.moving() && this.time.now - this.lastDir.at > 150) {
+      const d = this.add.sprite(Math.round(h.x - h.dirX * 4), Math.round(h.y + 4), ATLAS, frame('dust_puff')).setDepth(D_YSORT + h.y + 3.5);
+      d.play('dust_puff').once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => d.destroy());
+      this.lastDir.at = this.time.now;
+    }
+    this.lastDir.x = h.dirX;
+    this.lastDir.y = h.dirY;
   }
 
   /** Touch buttons in the side margin: semi-transparent circles with cooldown rings (replace the desktop icons). */

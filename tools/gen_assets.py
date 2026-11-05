@@ -20,7 +20,7 @@ from nglib import canvas as C  # noqa: E402
 from nglib import spec  # noqa: E402
 from nglib.pack import pack  # noqa: E402
 
-SCREENSHOT_PREFIXES = ("boss_fight_", "menu_", "death_panel", "touch_layout")
+SCREENSHOT_PREFIXES = ("boss_fight_", "menu_", "death_panel", "touch_layout", "crisp_", "dash_chevron", "best_scores", "first_run_hint")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
 
@@ -131,6 +131,29 @@ def write_web_manifest(title, game):
         fp.write("\n")
 
 
+def heroes_compare(game):
+    """Knight (left) and Wisp (right), every animation (+ their parry and dash effects), at 4x."""
+    from nglib.palette import RGB
+    pal = np.array(RGB + [(28, 35, 48)], dtype=np.uint8)
+    left = ["knight_idle", "knight_run", "knight_parry", "knight_dash", "knight_death", "knight_bash", "knight_cloak_trail", "dust_puff"]
+    right = ["wisp_idle", "wisp_pulse", "wisp_dash", "wisp_death", "parry_pulse", "dash_trail"]
+    def column(names):
+        rows = []
+        for n in names:
+            fr = game[n]
+            h = max(f.shape[0] for f in fr) + 2
+            row = np.full((h, 6 * 34), len(RGB), dtype=np.int16)
+            for i, f in enumerate(fr[:6]):
+                row[1:1 + f.shape[0], i * 34 + 1:i * 34 + 1 + f.shape[1]] = np.where(f < 0, len(RGB), f)
+            rows.append(row)
+        return np.concatenate(rows, 0)
+    a, b = column(left), column(right)
+    h = max(a.shape[0], b.shape[0])
+    pad = lambda m: np.concatenate([m, np.full((h - m.shape[0], m.shape[1]), len(RGB), dtype=np.int16)], 0)  # noqa: E731
+    out = np.concatenate([pad(a), np.full((h, 6), C.ci("bg0"), dtype=np.int16), pad(b)], 1)
+    return np.repeat(np.repeat(pal[out], 4, 0), 4, 1)
+
+
 def main():
     # gameplay/menu screenshots are captured from the running game (tests-e2e/smoke.cjs), not generated: keep them
     pdir = os.path.join(ASSETS, "preview")
@@ -195,6 +218,7 @@ def main():
     save(AP.variation_board(art), pv("variation_board.png"))
     save(AP.animation_strips(art), pv("animation_strips.png"))
     rgb(boss_board(art, game), "boss_board.png")
+    rgb(heroes_compare(game), "heroes_compare.png")
     write_web_manifest(read_title(), game)
     import gen_font  # noqa: E402  pixel-exact bitmap font for the game's text
     gen_font.main()

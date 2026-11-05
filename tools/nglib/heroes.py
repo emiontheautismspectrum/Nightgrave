@@ -47,11 +47,20 @@ def _legs(a, lx=5, rx=8, ly=0, ry=0):
             C.put(a, x + k, 14 + dy, "stone_dark")
 
 
-def _knight(dy=0, dx=0, legs=(5, 8, 0, 0), flutter=()):
+def _knight(dy=0, dx=0, legs=(5, 8, 0, 0), flutter=(), glint=None, breath=0, head=0):
+    """glint: x of a 1 px amber visor glint (or None); breath: chest rises 1 px; head: extra helmet bob."""
     a = C.new(16, 16)
     body = _knight_body()
     for x, y, ch in flutter:
         body[y, x] = C.ci(LEGEND[ch])
+    if glint is not None:
+        body[4, glint] = C.ci("amber")
+    if breath:  # breathing: shoulders/chest one row higher, the helmet follows
+        body[:12] = np.concatenate([body[1:12], body[11:12]], 0) if breath > 0 else body[:12]
+    if head:  # the helmet (rows 1-5) dips one px on its own: it overlaps the neck row, the body stays
+        top = body[1:6].copy()
+        body[1] = C.T
+        body[2:7] = np.where(top != C.T, top, body[2:7])
     C.paste(a, body, dx, dy)
     _legs(a, *legs)
     return a
@@ -62,7 +71,9 @@ def _finish(a):
 
 
 def knight_idle():
-    return [_finish(_knight(dy=d, flutter=CAPE_FLUTTER[f])) for d, f in ((0, 0), (0, 4), (1, 5), (1, 0))]
+    """Breathing (chest rises on 1-2), the cape sways, a 1 px amber glint travels along the visor slit."""
+    spec = ((0, 0, 7, 0), (0, 5, 8, 1), (0, 1, 9, 1), (1, 5, None, 0))
+    return [_finish(_knight(dy=d, flutter=CAPE_FLUTTER[f], glint=g, breath=b)) for d, f, g, b in spec]
 
 
 def knight_run():
@@ -72,7 +83,8 @@ def knight_run():
         l = int(round(ph * 1.4))
         bob = 1 if i in (1, 4) else 0
         legs = (5 + l, 8 - l, -1 if l > 0 else 0, -1 if l < 0 else 0)
-        frames.append(_finish(_knight(dy=bob, legs=legs, flutter=CAPE_FLUTTER[i])))
+        frames.append(_finish(_knight(dy=bob, legs=legs, flutter=CAPE_FLUTTER[i], glint=8 if i % 3 == 0 else None,
+                                      head=1 if i in (2, 5) else 0)))
     return frames
 
 

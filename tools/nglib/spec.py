@@ -11,6 +11,7 @@ SPRITES = {
     "blade": (16, 16, 4), "wraith": (16, 16, 4), "wraith_fade": (16, 16, 4),
     # effects
     "parry_pulse": (24, 24, 4), "parry_spark": (4, 4, 8), "dash_trail": (16, 16, 3),
+    "knight_bash": (32, 32, 4), "knight_cloak_trail": (16, 16, 3), "dust_puff": (8, 8, 4),
     "hit_flash": (16, 16, 2), "death_burst": (32, 32, 6), "ember_particle": (2, 2, 4),
     "cursor_reticle": (9, 9, 1),
     # UI

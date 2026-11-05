@@ -56,6 +56,68 @@ def dash_trail():
     return frames
 
 
+def knight_bash():
+    """Knight shield bash (32x32, facing right; flipped in code): a bright shield arc flash in front, then metallic
+    sparks (bone and amber) flying out. Distinct from the Wisp's round flare pulse."""
+    frames = []
+    xx, yy = C.grid(32, 32)
+    ang = np.arctan2(yy - 16, xx - 16)
+    for i in range(4):
+        a = C.new(32, 32)
+        r = 7 + i * 2
+        front = np.abs(ang) < (0.9 - i * 0.1)
+        d = np.sqrt((xx - 16) ** 2 + (yy - 16) ** 2)
+        if i < 3:  # a thick shield-shaped arc flash in front
+            a[front & (d >= r - 2.6) & (d <= r)] = C.ci("bone" if i == 0 else "gold")
+            a[front & (d > r) & (d <= r + 1.2)] = C.ci("amber")
+        for k in range(7):  # metallic sparks: 2x2 bone / amber chips flying outward
+            t = (k - 3) * 0.3
+            rr = r + 3 + i * 2 + (k % 2) * 2
+            x, y = int(16 + math.cos(t) * rr), int(16 + math.sin(t) * rr)
+            if i >= 1:
+                col = "bone" if k % 2 else "amber"
+                C.put(a, x, y, col)
+                if i == 1 or k % 2 == 0:
+                    C.put(a, x + 1, y, col)
+                    C.put(a, x, y + 1, "amber")
+        if i == 3:
+            a = C.dither_out(a, 0.5, ox=i)
+        frames.append(a)
+    return frames
+
+
+def knight_cloak_trail():
+    """Knight dash: dark cloak streaks with one bone glint (the Wisp keeps the flame streak, dash_trail)."""
+    frames = []
+    rows = [(5, "stone_dark"), (7, "fog"), (9, "stone_dark"), (11, "fog")]
+    for i, keep in enumerate((1.0, 0.5, 0.25)):
+        a = C.new(16, 16)
+        for k, (y, col) in enumerate(rows):
+            x0 = (k * 3) % 4 + i * 3
+            for x in range(x0, 15 - (k % 2) * 3):
+                C.put(a, x, y, col)
+        C.put(a, 12 - i * 2, 7, "bone")
+        a = C.outline(a, color="bg0") if i == 0 else a
+        if keep < 1.0:
+            a = C.dither_out(a, keep, ox=i, oy=1)  # oy=1: the streaks sit on odd rows
+        frames.append(a)
+    return frames
+
+
+def dust_puff():
+    """Small dust puff on sharp direction changes (render-only), 8x8, 4 frames."""
+    frames = []
+    for i in range(4):
+        a = C.new(8, 8)
+        r = 1.5 + i * 0.8
+        for cx, cy in ((3, 5), (5, 5)):
+            C.disc(a, cx, cy - i * 0.5, r, "stone" if i < 2 else "fog")
+        if i >= 2:
+            a = C.dither_out(a, 0.5 if i == 2 else 0.25, ox=i)
+        frames.append(a)
+    return frames
+
+
 def hit_flash():
     frames = []
     for i in range(2):
@@ -188,6 +250,7 @@ def parry_fizzle():
 
 SPRITES = {
     "parry_pulse": parry_pulse, "parry_spark": parry_spark, "dash_trail": dash_trail,
+    "knight_bash": knight_bash, "knight_cloak_trail": knight_cloak_trail, "dust_puff": dust_puff,
     "hit_flash": hit_flash, "death_burst": death_burst, "ember_particle": ember_particle,
     "cursor_reticle": cursor_reticle, "icon_parry": icon_parry, "icon_dash": icon_dash,
     "icon_ring": icon_ring, "parry_fizzle": parry_fizzle,

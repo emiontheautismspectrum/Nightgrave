@@ -462,6 +462,12 @@
    "h": 32,
    "w": 32
   },
+  "dust_puff": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 8,
+   "w": 8
+  },
   "ember_particle": {
    "frames": 4,
    "group": "gameplay",
@@ -737,6 +743,18 @@
    "group": "gameplay",
    "h": 20,
    "w": 20
+  },
+  "knight_bash": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 32,
+   "w": 32
+  },
+  "knight_cloak_trail": {
+   "frames": 3,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
   },
   "knight_dash": {
    "frames": 2,
