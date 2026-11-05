@@ -4,6 +4,7 @@
  */
 import { HOLLOWS, PORTAL, RUNES } from '../data/arena';
 import { dcos, dsin, PI, rotate } from './dmath';
+import { isBossWave, runBoss, startBoss } from './boss';
 import type { SimParams } from './params';
 import { nextFloat, range } from './rng';
 import type { Caster, CasterAttack, CasterKind, Projectile, ProjectileKind, SimState } from './state';
@@ -11,6 +12,8 @@ import type { Caster, CasterAttack, CasterKind, Projectile, ProjectileKind, SimS
 export interface DirectorOptions {
   /** Test-only: start the run at this wave (all threat types unlocked). Not part of replays. */
   startWave?: number;
+  /** Test-only: disable bosses (boss waves play as normal waves). Default true. */
+  bosses?: boolean;
 }
 
 const dist2 = (ax: number, ay: number, bx: number, by: number): number => (ax - bx) * (ax - bx) + (ay - by) * (ay - by);
@@ -31,7 +34,7 @@ export function spawnProjectile(
   y: number,
   vx: number,
   vy: number,
-  extra: Partial<Pick<Projectile, 'homing' | 'turnC' | 'turnS' | 'expires' | 'fadeEnd'>> = {},
+  extra: Partial<Pick<Projectile, 'homing' | 'turnC' | 'turnS' | 'expires' | 'fadeEnd' | 'boss'>> = {},
   telegraphTicks = 0,
 ): Projectile {
   const radius =
@@ -56,6 +59,7 @@ export function spawnProjectile(
     turnS: extra.turnS ?? 0,
     expires: extra.expires ?? -1,
     fadeEnd: extra.fadeEnd ?? -1,
+    boss: extra.boss ?? 0,
   };
   s.projectiles.push(pr);
   s.events.push({
@@ -297,17 +301,7 @@ function pickPattern(s: SimState, p: SimParams): (s: SimState, p: SimParams, sp:
 
 // ------------------------------------------------------------------ per-tick director
 
-export function runDirector(s: SimState, p: SimParams, opts: DirectorOptions): void {
-  if (s.tick < p.graceTicks) return;
-  const wave = (opts.startWave ?? 0) + Math.floor((s.tick - p.graceTicks) / p.waveTicks);
-  if (wave !== s.wave) {
-    s.wave = wave;
-    s.events.push({ type: 'wave', wave });
-  }
-  const sp = waveSpeed(p, wave);
-  const dens = waveDensity(p, wave);
-
-  // rune telegraphs that are due fire their ring now
+function fireTelegraphs(s: SimState, p: SimParams): void {
   const pending = [];
   for (const t of s.telegraphs) {
     if (s.tick < t.fire) {
@@ -323,6 +317,44 @@ export function runDirector(s: SimState, p: SimParams, opts: DirectorOptions): v
     }
   }
   s.telegraphs = pending;
+}
+
+export function runDirector(s: SimState, p: SimParams, opts: DirectorOptions): void {
+  if (s.tick < p.graceTicks) return;
+  const startWave = opts.startWave ?? 0;
+  // boss fight (incl. its death sequence) and the break after it: the wave clock is paused, nothing new is set up;
+  // rune telegraphs and casters already on the field still finish
+  if (s.boss || s.breakUntil > s.tick) {
+    fireTelegraphs(s, p);
+    runCasters(s, p, waveSpeed(p, s.wave));
+    runBoss(s, p, spawnProjectile);
+    return;
+  }
+  if (s.breakUntil >= 0 && s.breakUntil <= s.tick) {
+    // the break just ended: resume with fresh timers so nothing fires on the first tick
+    s.breakUntil = -1;
+    s.streamTimer = p.streamInterval / waveDensity(p, s.wave + 1);
+    s.patternAt = s.tick + Math.round(p.gapMin / waveDensity(p, s.wave + 1));
+  }
+  const wave = startWave + Math.floor(s.waveClock / p.waveTicks);
+  if (wave !== s.wave) {
+    s.wave = wave;
+    s.events.push({ type: 'wave', wave });
+  }
+  if (opts.bosses !== false && isBossWave(p, wave) && s.bossWave !== wave) {
+    // the boss replaces this wave; the wave clock stays paused until it is defeated and the break is over
+    s.bossWave = wave;
+    startBoss(s, p, wave);
+    s.waveClock = (wave - startWave + 1) * p.waveTicks;
+    fireTelegraphs(s, p);
+    runCasters(s, p, waveSpeed(p, wave));
+    return;
+  }
+  s.waveClock++;
+  const sp = waveSpeed(p, wave);
+  const dens = waveDensity(p, wave);
+
+  fireTelegraphs(s, p);
   runCasters(s, p, sp);
 
   s.streamTimer -= 1;
@@ -337,7 +369,7 @@ export function runDirector(s: SimState, p: SimParams, opts: DirectorOptions): v
 }
 
 /** Advance one projectile by a tick (curve, homing, move). */
-export function moveProjectile(s: SimState, pr: Projectile): void {
+export function moveProjectile(s: SimState, pr: Projectile, f = 1): void {
   if (pr.turnS !== 0) {
     const vx = pr.vx * pr.turnC - pr.vy * pr.turnS;
     pr.vy = pr.vx * pr.turnS + pr.vy * pr.turnC;
@@ -357,8 +389,8 @@ export function moveProjectile(s: SimState, pr: Projectile): void {
       }
     }
   }
-  pr.x += pr.vx;
-  pr.y += pr.vy;
+  pr.x += pr.vx * f;
+  pr.y += pr.vy * f;
 }
 
 /** Fading projectiles (an expired wraith) are visible but harmless and cannot be parried. */

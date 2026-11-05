@@ -96,7 +96,10 @@ def main():
     lay = art["layout"]
     write_json(os.path.join(ASSETS, "data", "arena_layout.json"), {
         "arena": lay["arena"], "heroSpawn": lay["heroSpawn"], "calmZone": lay["calmZone"], "portal": lay["portal"],
-        "portalClearRadius": lay["portalClearRadius"], "hollows": lay["hollows"], "runes": lay["runes"]})
+        "portalClearRadius": lay["portalClearRadius"], "hollows": lay["hollows"], "runes": lay["runes"],
+        # ground anchors of solid-looking props (pickups never spawn on them): [x, baseY, radius]
+        "propAnchors": [[pr["x"] + pr["w"] // 2, pr["baseY"], max(4, min(20, pr["w"] // 2))] for pr in art["props"]
+                        if pr["kind"] in ("landmark", "grave", "tree")]})
     os.makedirs(os.path.join(ASSETS, "data"), exist_ok=True)
 
     title = read_title().upper()

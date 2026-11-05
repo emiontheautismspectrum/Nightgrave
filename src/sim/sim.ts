@@ -1,6 +1,8 @@
 import { TICK_RATE, type Difficulty } from '../data/tuning';
 import { AXIS_MAX, BTN_DASH, BTN_PARRY, sanitizeInput, type InputFrame } from './input';
-import { makeParams, type SimParams } from './params';
+import { beamHits, onBossParry } from './boss';
+import { makeParams, ticks, type SimParams } from './params';
+import { isDouble, isSlow, runPickups } from './pickups';
 import { toSeed } from './rng';
 import { NEVER, type Projectile, type SimState } from './state';
 import { isFading, moveProjectile, runDirector, type DirectorOptions } from './waves';
@@ -47,13 +49,31 @@ export function createState(seed: number, difficulty: Difficulty, p: SimParams =
     patternAt: p.graceTicks + Math.round(p.gapMin),
     telegraphs: [],
     casters: [],
+    waveClock: 0,
+    boss: null,
+    beams: [],
+    bossMet: { eye: 0, lich: 0 },
+    bossesDefeated: 0,
+    bossWave: -1,
+    breakUntil: -1,
+    bossScore: 0,
+    emberCharges: 0,
+    pickup: null,
+    pickupAt: ticks(p.pickups.firstSeconds),
+    pickupScore: 0,
+    slowUntil: -1,
+    doubleUntil: -1,
+    doubleTicks: 0,
     events: [],
   };
 }
 
 // ------------------------------------------------------------------ queries (render + tests)
 
-export const isParryActive = (s: SimState, p: SimParams): boolean => s.tick - s.hero.parryStart < p.parryActive;
+/** Parry active ticks, lengthened by ember charges (capped). */
+export const parryActiveTicks = (s: SimState, p: SimParams): number =>
+  p.parryActiveByCharge[Math.min(s.emberCharges, p.parryActiveByCharge.length - 1)] ?? p.parryActive;
+export const isParryActive = (s: SimState, p: SimParams): boolean => s.tick - s.hero.parryStart < parryActiveTicks(s, p);
 export const isDashing = (s: SimState, p: SimParams): boolean => s.tick - s.hero.dashStart < p.dashTicks;
 export const isInvulnerable = (s: SimState, p: SimParams): boolean => s.tick - s.hero.dashStart < p.dashInvuln;
 /** Cooldown of the current/last parry: short after a hit, long after a whiff. */
@@ -65,9 +85,17 @@ export const dashCooldownLeft = (s: SimState, p: SimParams): number =>
   Math.max(0, p.dashCooldown - (s.tick - s.hero.dashStart));
 export { isFading };
 
-/** Total score as an integer: survival points + parry points (pickups and bosses arrive in Stage 4). */
+/**
+ * Total score as an integer: survival (Double Score ticks count twice) + parry points (doubled under Double Score at
+ * award time) + pickup points + boss kills (fixed, never multiplied).
+ */
 export function score(s: SimState, p: SimParams): number {
-  return Math.floor((s.survivalTicks * p.survivalPerSecond) / TICK_RATE) + Math.floor(s.parryScoreHundredths / 100);
+  return (
+    Math.floor(((s.survivalTicks + s.doubleTicks) * p.survivalPerSecond) / TICK_RATE) +
+    Math.floor(s.parryScoreHundredths / 100) +
+    s.pickupScore +
+    s.bossScore
+  );
 }
 
 /** Clamp a point into the hero's allowed area: the arena rectangle shrunk by heroInset. */
@@ -153,8 +181,12 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   else if (mx < -0.01) h.facing = -1;
 
   // 5. spawn + move projectiles
-  if (opts.spawner !== false) runDirector(s, p, opts);
-  for (const pr of s.projectiles) moveProjectile(s, pr);
+  if (opts.spawner !== false) {
+    runDirector(s, p, opts);
+    runPickups(s, p);
+  }
+  const f = isSlow(s) ? p.pickups.slowTime.factor : 1; // Slow Time: projectiles only (beams and timers unaffected)
+  for (const pr of s.projectiles) moveProjectile(s, pr, f);
 
   // 6. multiplier decay, then parry (parry is resolved before hits, so it always wins vs parryables)
   if (s.lastParryTick >= 0 && t - s.lastParryTick >= p.multReset) s.multiplier = p.multStart;
@@ -167,7 +199,8 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       if (pr.parryable && !isFading(s, pr) && dx * dx + dy * dy <= r * r) {
         // first kill of this pulse: full points, then the multiplier steps (once per pulse)
         const first = !h.parryHit;
-        const points = (first ? p.parryBase : p.extraKillPoints) * s.multiplier; // hundredths of a point
+        const dbl = isDouble(s) ? p.pickups.doubleScore.factor : 1;
+        const points = (first ? p.parryBase : p.extraKillPoints) * s.multiplier * dbl; // hundredths of a point
         s.parryScoreHundredths += points;
         s.events.push({ type: 'parry_hit', id: pr.id, x: pr.x, y: pr.y, points: points / 100, multiplier: s.multiplier / 100 });
         if (first) {
@@ -176,11 +209,12 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
         }
         s.lastParryTick = t;
         h.parryHit = true;
+        if (pr.boss > 0) onBossParry(s, p, pr.boss);
       } else keep.push(pr);
     }
     s.projectiles = keep;
     // the last active tick of a parry that hit nothing: tell the renderer it was a whiff
-    if (t - h.parryStart === p.parryActive - 1 && !h.parryHit) s.events.push({ type: 'parry_whiff', x: h.x, y: h.y });
+    if (t - h.parryStart === parryActiveTicks(s, p) - 1 && !h.parryHit) s.events.push({ type: 'parry_whiff', x: h.x, y: h.y });
   }
 
   // 7. hits: one hit = death (fading projectiles are harmless)
@@ -197,6 +231,11 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
         break;
       }
     }
+    if (s.alive && beamHits(s, p)) {
+      s.alive = false;
+      s.deathTick = t;
+      s.events.push({ type: 'death', x: h.x, y: h.y, by: -1 });
+    }
   }
 
   // 8. remove faded and far-away projectiles
@@ -207,7 +246,10 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       pr.x > p.x0 - m && pr.x < p.x1 + m && pr.y > p.y0 - m && pr.y < p.y1 + m,
   );
 
-  if (s.alive) s.survivalTicks++;
+  if (s.alive) {
+    s.survivalTicks++;
+    if (isDouble(s)) s.doubleTicks++;
+  }
   s.tick++;
 }
 

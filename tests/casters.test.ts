@@ -90,7 +90,7 @@ describe('casters', () => {
     let fizzles = 0;
     let checked = 0;
     for (let seed = 1; seed <= 60; seed++) {
-      const sim = new Sim(seed * 13, 'hard', { startWave: 3 });
+      const sim = new Sim(seed * 13, 'hard', { startWave: 3, bosses: false });
       for (let t = 0; t < 60 * 40 && sim.state.alive; t++) {
         // walk onto the newest caster (portal or a stalker spot) and stand there
         const c = sim.state.casters[sim.state.casters.length - 1];

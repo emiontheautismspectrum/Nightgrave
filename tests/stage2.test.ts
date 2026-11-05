@@ -47,7 +47,7 @@ describe('fairness: nothing appears near the hero without a >= 0.25 s telegraph'
         let spawns = 0;
         for (const startWave of [0, 3, 8]) {
           for (let seed = 1; seed <= 6; seed++) {
-            const sim = new Sim(seed * 31 + startWave, d, { startWave });
+            const sim = new Sim(seed * 31 + startWave, d, { startWave, bosses: false });
             const p = sim.params;
             for (const e of collect(sim, player, 60 * 90)) {
               if (e.type !== 'spawn') continue;
@@ -67,7 +67,7 @@ describe('determinism with every threat type', () => {
   for (const seed of [3, 1234, 99991]) {
     it(`seed ${seed}: two runs from wave 3 are identical and include all five kinds`, () => {
       const run = () => {
-        const sim = new Sim(seed, 'hard', { startWave: 3 });
+        const sim = new Sim(seed, 'hard', { startWave: 3, bosses: false });
         const kinds = new Set<ProjectileKind>();
         const frames = mulberryInputs(seed, 60 * 150);
         // mostly the bot (so the run lives long enough to see every kind), with scripted noise mixed in

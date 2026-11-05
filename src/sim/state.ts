@@ -27,6 +27,78 @@ export interface Projectile {
   expires: number;
   /** Tick at which a fading projectile is removed; -1 = never. */
   fadeEnd: number;
+  /** Boss attack serial that launched it (0 = not a boss projectile). */
+  boss: number;
+}
+
+export type BossKind = 'eye' | 'lich';
+export type BossPattern = 'ring' | 'beam' | 'spawns' | 'fan' | 'wraiths' | 'triple';
+
+/** A boss attack in progress: [windStart, fire) wind-up (telegraph), launched at `fire`. */
+export interface BossAttack {
+  pattern: BossPattern;
+  /** Lich: teleport out from `tpOut`, appears at the new spot at `tpIn`, wind-up starts at `windStart`. */
+  tpOut: number;
+  tpIn: number;
+  windStart: number;
+  fire: number;
+  /** Beam: unit start direction, rotation sign; spawns: telegraphed points. */
+  dirX: number;
+  dirY: number;
+  sign: number;
+  points: [number, number][];
+}
+
+/** The rotating eye beam (unparryable). Active (lethal) for ticks [start, end). */
+export interface Beam {
+  serial: number;
+  x: number;
+  y: number;
+  dirX: number;
+  dirY: number;
+  /** Per-tick rotation (cos, sin). */
+  turnC: number;
+  turnS: number;
+  start: number;
+  end: number;
+  halfWidth: number;
+  length: number;
+}
+
+export interface Boss {
+  kind: BossKind;
+  /** The wave this boss replaces, and how many times this boss kind was met before (speed bonus). */
+  wave: number;
+  encounter: number;
+  segments: number;
+  remaining: number;
+  x: number;
+  y: number;
+  start: number;
+  /** Intro ends (the first wind-up may start): no attack before this tick. */
+  introEnd: number;
+  /** Next attack sequence starts at this tick (wind-up or teleport). */
+  nextAt: number;
+  attack: BossAttack | null;
+  /** Serial of the most recently launched attack (0 = none yet). */
+  serial: number;
+  /** Tick of the last removed segment (hit flash), -1 = none. */
+  hitTick: number;
+  /** Tick the boss was defeated (-1 while fighting); the body is removed at deathTick + deathTicks. */
+  deathTick: number;
+  /** Speed multiplier for this encounter (difficulty speed is already in the params). */
+  speed: number;
+}
+
+export type PickupKind = 'slow' | 'double';
+
+export interface Pickup {
+  id: number;
+  kind: PickupKind;
+  x: number;
+  y: number;
+  born: number;
+  expires: number;
 }
 
 export type CasterKind = 'shade' | 'stalker';
@@ -97,7 +169,15 @@ export type SimEvent =
   | { type: 'caster_fire'; id: number; attack: CasterAttack }
   | { type: 'caster_fizzle'; id: number }
   | { type: 'wave'; wave: number }
-  | { type: 'death'; x: number; y: number; by: number };
+  | { type: 'death'; x: number; y: number; by: number }
+  | { type: 'boss_intro'; kind: BossKind }
+  | { type: 'boss_attack'; kind: BossKind; pattern: BossPattern; remaining: number }
+  | { type: 'boss_segment'; remaining: number; reflected: boolean }
+  | { type: 'boss_teleport'; x: number; y: number }
+  | { type: 'boss_defeated'; kind: BossKind; x: number; y: number; points: number; charges: number }
+  | { type: 'pickup_spawn'; id: number; kind: PickupKind }
+  | { type: 'pickup_take'; id: number; kind: PickupKind; x: number; y: number }
+  | { type: 'pickup_expire'; id: number };
 
 export interface SimState {
   seed: number;
@@ -129,6 +209,28 @@ export interface SimState {
   patternAt: number;
   telegraphs: Telegraph[];
   casters: Caster[];
+  /** Ticks of normal wave time elapsed (paused during boss fights and the break after them). */
+  waveClock: number;
+  boss: Boss | null;
+  beams: Beam[];
+  /** Bosses met so far per kind (the next encounter's speed bonus). */
+  bossMet: Record<BossKind, number>;
+  bossesDefeated: number;
+  /** The last wave a boss was started for (-1 = none). */
+  bossWave: number;
+  /** Normal waves resume at this tick after a boss (-1 = no break). */
+  breakUntil: number;
+  /** Fixed boss kill points (never multiplied). */
+  bossScore: number;
+  emberCharges: number;
+  pickup: Pickup | null;
+  /** Next pickup spawn attempt. */
+  pickupAt: number;
+  pickupScore: number;
+  slowUntil: number;
+  doubleUntil: number;
+  /** Survival ticks spent under Double Score (counted once more in the score). */
+  doubleTicks: number;
   /** Events emitted during the most recent tick only (render reads them). */
   events: SimEvent[];
 }

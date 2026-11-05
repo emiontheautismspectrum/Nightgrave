@@ -10,7 +10,7 @@ export const REPLAY_VERSION = 1;
 export function tuningHash(): string {
   // spawn geometry is part of the rules (decorative layout fields such as the calm zone are not)
   const L = ARENA_LAYOUT;
-  const src = JSON.stringify(TUNING) + JSON.stringify([L.arena, L.heroSpawn, L.portal, L.hollows, L.runes]);
+  const src = JSON.stringify(TUNING) + JSON.stringify([L.arena, L.heroSpawn, L.portal, L.portalClearRadius, L.hollows, L.runes, (L as { propAnchors?: unknown }).propAnchors]);
   let h = 0x811c9dc5;
   for (let i = 0; i < src.length; i++) h = Math.imul(h ^ src.charCodeAt(i), 0x01000193) >>> 0;
   return h.toString(16).padStart(8, '0');

@@ -73,10 +73,25 @@ export interface SimParams {
   hollowInset: number;
   shardFanCount: number;
   shardFanArc: number;
+  /** Difficulty speed multiplier (boss and pickup code scales base speeds by it). */
+  diffSpeed: number;
+  bosses: typeof TUNING.bosses;
+  pickups: typeof TUNING.pickups;
+  /** Parry active ticks by ember charge count (index = charges, last entry = cap). */
+  parryActiveByCharge: number[];
 }
 
 export const ticks = (seconds: number): number => Math.max(1, Math.round(seconds * TICK_RATE));
 const hundredths = (v: number): number => Math.round(v * 100);
+
+/** Parry window per ember charge: active + min(cap, n * step) seconds, until the cap is reached. */
+function emberTable(): number[] {
+  const { stepSeconds, capSeconds } = TUNING.emberCharge;
+  const out = [ticks(TUNING.parry.activeSeconds)];
+  for (let n = 1; stepSeconds > 0 && n * stepSeconds <= capSeconds + 1e-9 && n < 64; n++)
+    out.push(ticks(TUNING.parry.activeSeconds + n * stepSeconds));
+  return out;
+}
 
 export function makeParams(difficulty: Difficulty): SimParams {
   const T = TUNING;
@@ -153,5 +168,9 @@ export function makeParams(difficulty: Difficulty): SimParams {
     hollowInset: T.casters.hollowInset,
     shardFanCount: T.casters.shardFan.count,
     shardFanArc: T.casters.shardFan.arc,
+    diffSpeed: d.speed,
+    bosses: T.bosses,
+    pickups: T.pickups,
+    parryActiveByCharge: emberTable(),
   };
 }

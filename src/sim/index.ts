@@ -6,3 +6,5 @@ export * from './rng';
 export * from './sim';
 export * from './state';
 export * from './waves';
+export * from './boss';
+export * from './pickups';

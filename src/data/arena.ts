@@ -16,3 +16,6 @@ export const ARENA_LAYOUT = layout;
 export const RUNES: readonly Point[] = layout.runes;
 export const PORTAL: Point = { x: layout.portal[0] ?? 0, y: layout.portal[1] ?? 0 };
 export const HOLLOWS: readonly Hollow[] = layout.hollows as Hollow[];
+/** Ground anchors [x, baseY, radius] of landmarks, graves and trees: pickups never spawn on them. */
+export const PROP_ANCHORS: readonly (readonly [number, number, number])[] =
+  ((layout as { propAnchors?: number[][] }).propAnchors ?? []).map((a) => [a[0] ?? 0, a[1] ?? 0, a[2] ?? 0] as const);
