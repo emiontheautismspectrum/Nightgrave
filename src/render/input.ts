@@ -44,6 +44,7 @@ export class InputCollector {
   private pending = 0;
   private held = new Set<string>();
   private padPrev = { a: false, b: false, rt: false, start: false };
+  private padPrimed = false;
   private confirm = false;
   private pointerSeen = false;
   private mouse = { x: 0, y: 0 };
@@ -165,6 +166,12 @@ export class InputCollector {
     const b = pad.isButtonDown(PAD_B);
     const rt = pad.getButtonValue(PAD_RT) > 0.5;
     const start = pad.isButtonDown(PAD_START);
+    if (!this.padPrimed) {
+      // buttons still held from the menu (A on PLAY) are not fresh presses in the run
+      this.padPrimed = true;
+      this.padPrev = { a, b, rt, start };
+      return;
+    }
     if (a && !this.padPrev.a) {
       this.pending |= BTN_PARRY;
       this.confirm = true;

@@ -33,6 +33,20 @@ export interface MenuPage {
   gap?: number;
 }
 
+/**
+ * A tap on an object: the pointer must go DOWN and UP on it (a finger that started a drag elsewhere and lifts over a
+ * menu row must not trigger it).
+ */
+export function onTap(o: Phaser.GameObjects.GameObject, fn: (p: Phaser.Input.Pointer) => void): void {
+  const downs = new Set<number>();
+  o.on('pointerdown', (p: Phaser.Input.Pointer) => downs.add(p.id));
+  o.on('pointerout', (p: Phaser.Input.Pointer) => downs.delete(p.id));
+  o.on('pointerup', (p: Phaser.Input.Pointer) => {
+    if (!downs.delete(p.id)) return;
+    fn(p);
+  });
+}
+
 const PAD = { a: 0, b: 1, start: 9, up: 12, down: 13, left: 14, right: 15 };
 
 export class MenuView {
@@ -70,7 +84,8 @@ export class MenuView {
     this.objs.push(s.add.text(s.scale.width / 2, 30, page.title, { fontFamily: FONT, fontSize: '16px', color: C.bone }).setOrigin(0.5).setDepth(this.depth + 1));
     if (page.onBack) {
       const back = s.add.text(8, 8, '< BACK', { fontFamily: FONT, fontSize: '8px', color: C.dim }).setPadding(4, 4, 4, 4).setDepth(this.depth + 1);
-      back.setInteractive({ useHandCursor: true }).on('pointerup', () => this.back());
+      back.setInteractive({ useHandCursor: true });
+      onTap(back, () => this.back());
       this.objs.push(back);
     }
     page.items.forEach((it, i) => {
@@ -78,7 +93,7 @@ export class MenuView {
       if (!it.disabled) {
         t.setInteractive({ useHandCursor: true });
         t.on('pointerover', () => this.setFocus(i));
-        t.on('pointerup', (p: Phaser.Input.Pointer) => {
+        onTap(t, (p: Phaser.Input.Pointer) => {
           this.setFocus(i);
           // value rows: the left third steps down, the rest steps up / activates
           if (it.onLeft && p.x < t.x - t.width / 6) this.left();

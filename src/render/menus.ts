@@ -67,7 +67,8 @@ export function settingsPage(ctx: MenuCtx, back: () => void): MenuPage {
         }
       },
     });
-  items.push({ label: () => 'CONTROLS', onActivate: () => ctx.menu.show(controlsPage(() => ctx.menu.show(settingsPage(ctx, back), items.length - 1))) });
+  const controlsAt = items.length;
+  items.push({ label: () => 'CONTROLS', onActivate: () => ctx.menu.show(controlsPage(() => ctx.menu.show(settingsPage(ctx, back), controlsAt))) });
   if (ctx.isTouch()) {
     items.push(
       {

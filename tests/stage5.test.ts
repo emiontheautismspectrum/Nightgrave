@@ -10,7 +10,7 @@ import { decodeReplay, encodeReplay, playReplay } from '../src/sim/replay';
 import { Sim } from '../src/sim/sim';
 import type { SimEvent } from '../src/sim/state';
 import {
-  BEST_PER_DIFFICULTY, DAILY_DAYS, defaultSave, loadSave, recordRun, shouldSaveRun, STORAGE_KEY, todaysBest,
+  BEST_PER_DIFFICULTY, DAILY_DAYS, defaultSave, loadSave, mergeFromDisk, recordRun, save, shouldSaveRun, STORAGE_KEY, todaysBest,
   validateSave, writeSave, type KV,
 } from '../src/storage';
 import { botInput } from './bot';
@@ -111,6 +111,18 @@ describe('storage', () => {
     expect(todaysBest(s, '2026-11-01')).toBeNull(); // dropped (oldest)
     recordRun(s, 'medium', { score: 999, hero: 'knight', date: '2026-11-09', secs: 1 }, '2026-11-09');
     expect(todaysBest(s, '2026-11-09')?.score).toBe(90); // only Hard counts for the daily
+  });
+
+  it('two tabs never erase each other: scores saved by another tab are merged before recording', () => {
+    const other = defaultSave();
+    recordRun(other, 'easy', { score: 500, hero: 'wisp', date: '2026-11-05', secs: 9 }, '2026-11-05');
+    recordRun(other, 'hard', { score: 70, hero: 'wisp', date: '2026-11-05', secs: 9 }, '2026-11-05');
+    const kv = memKV(JSON.stringify(other));
+    recordRun(save(), 'easy', { score: 300, hero: 'knight', date: '2026-11-05', secs: 5 }, '2026-11-05');
+    mergeFromDisk(kv);
+    mergeFromDisk(kv); // idempotent
+    expect(save().best.easy.map((e) => e.score)).toEqual([500, 300]);
+    expect(todaysBest(save(), '2026-11-05')?.score).toBe(70);
   });
 
   it('discarded runs are not saved: restart/quit from pause, dev ?wave runs', () => {

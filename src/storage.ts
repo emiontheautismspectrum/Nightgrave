@@ -216,3 +216,24 @@ export function persist(): void {
 export function shouldSaveRun(endedBy: 'death' | 'restart' | 'quit', devWave: number | undefined): boolean {
   return endedBy === 'death' && !devWave;
 }
+
+/**
+ * Merge best scores another tab saved meanwhile into the live copy (called right before recording a run), so two
+ * open tabs never erase each other's records. Settings stay this tab's.
+ */
+export function mergeFromDisk(kv: KV | null = defaultKV()): void {
+  const disk = loadSave(kv);
+  const cur = save();
+  const key = (e: BestEntry) => `${e.score}|${e.hero}|${e.date}|${e.secs}`;
+  for (const d of DIFFICULTIES) {
+    const seen = new Set(cur.best[d].map(key));
+    cur.best[d] = sortBest([...cur.best[d], ...disk.best[d].filter((e) => !seen.has(key(e)))]).slice(0, BEST_PER_DIFFICULTY);
+  }
+  for (const it of disk.daily) {
+    const mine = cur.daily.find((x) => x.date === it.date);
+    if (!mine) cur.daily.push(it);
+    else if (it.entry.score > mine.entry.score) mine.entry = it.entry;
+  }
+  cur.daily.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  cur.daily = cur.daily.slice(0, DAILY_DAYS);
+}

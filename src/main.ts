@@ -17,7 +17,13 @@ const isTouch = (): boolean => touchSeen || (typeof matchMedia === 'function' &&
 /** The area inside the safe-area padding (phone notch) that the canvas may use. */
 function available(): { w: number; h: number } {
   const host = document.getElementById('game');
-  return { w: host?.clientWidth || innerWidth, h: host?.clientHeight || innerHeight };
+  if (!host) return { w: innerWidth, h: innerHeight };
+  const cs = getComputedStyle(host);
+  const px = (v: string) => parseFloat(v) || 0;
+  return {
+    w: (host.clientWidth || innerWidth) - px(cs.paddingLeft) - px(cs.paddingRight),
+    h: (host.clientHeight || innerHeight) - px(cs.paddingTop) - px(cs.paddingBottom),
+  };
 }
 
 /**
@@ -56,7 +62,7 @@ async function boot(): Promise<void> {
         difficulty === 'hard'
           ? () => {
               const key = utcDateKey(new Date());
-              return { seed: dailySeed(key), label: `HARD - DAILY ${key}` };
+              return { seed: dailySeed(key), label: `HARD - DAILY ${key}`, date: key };
             }
           : () => ({ seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 1, label: '' }),
       ...(devWave ? { startWave: devWave } : {}),

@@ -10,7 +10,7 @@ import { encodeReplay, type Replay } from '../sim/replay';
 import { dashCooldownLeft, isDashing, isFading, isParryActive, parryCooldownLeft, parryCooldownOf, Sim } from '../sim/sim';
 import { HOLLOWS, RUNES } from '../data/arena';
 import type { SimEvent } from '../sim/state';
-import { bestScore, persist, recordRun, save, shouldSaveRun } from '../storage';
+import { bestScore, mergeFromDisk, persist, recordRun, save, shouldSaveRun } from '../storage';
 import { ARENA_PROPS, ATLAS, MANIFEST, bgKey, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
 import { audio } from './audio';
 import { pickMusic, SoundDiffer } from './audioLogic';
@@ -20,7 +20,7 @@ import { InputCollector } from './input';
 import { settingsPage, type MenuCtx } from './menus';
 import { canRestart, portraitPause, RunDriver, type PauseReason } from './runDriver';
 import { TouchModel } from './touch';
-import { C, MenuView, type MenuPage } from './ui';
+import { C, MenuView, onTap, type MenuPage } from './ui';
 
 /** Frame time above this for PERF_WINDOW_MS lowers effects for the rest of the session (render only). */
 const PERF_SLOW_MS = 20;
@@ -53,7 +53,7 @@ export interface RunConfig {
    * Called once per run. The seed source lives on the render side (crypto/clock are fine here, never in
    * src/sim). `label` is shown in the HUD (Hard: the UTC date the daily seed was derived from).
    */
-  makeRun: () => { seed: number; label: string };
+  makeRun: () => { seed: number; label: string; date?: string };
   /** Dev only (previews/screenshots): start at this wave. Never set in production builds. Such runs are never saved. */
   startWave?: number;
   isTouch: () => boolean;
@@ -68,6 +68,8 @@ export class GameScene extends Phaser.Scene {
   private driver!: RunDriver;
   private deadAt = 0;
   private runLabel = '';
+  /** UTC date the run's seed was derived from (Hard): its daily best goes under this date, even across midnight. */
+  private runDate = '';
   private sounds = new SoundDiffer();
   private menu!: MenuView;
   private hint: Phaser.GameObjects.Container | null = null;
@@ -190,7 +192,7 @@ export class GameScene extends Phaser.Scene {
     const t = this.add.text(b.w / 2, b.h / 2, 'II', { fontFamily: FONT, fontSize: '8px', color: C.bone }).setOrigin(0.5);
     this.pauseBtn = this.add.container(b.x, b.y, [bg, t]).setDepth(D_HUD + 1).setSize(b.w, b.h);
     this.pauseBtn.setInteractive(new Phaser.Geom.Rectangle(-4, -4, b.w + 8, b.h + 8), Phaser.Geom.Rectangle.Contains);
-    this.pauseBtn.on('pointerup', () => this.togglePause());
+    onTap(this.pauseBtn, () => this.togglePause());
   }
 
   private isPortrait(): boolean {
@@ -239,12 +241,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   private menuCtx(): MenuCtx {
-    return { menu: this.menu, isTouch: this.cfg.isTouch, onSettings: () => this.applySettings(), onShowTouchHint: () => undefined };
+    return { menu: this.menu, isTouch: this.cfg.isTouch, onSettings: () => this.applySettings(), onShowTouchHint: () => (this.closePause(), this.showTouchHint()) };
   }
 
   private closePause(): void {
     this.menu.hide();
     this.input2.clear();
+    // a missed focus/visibility event must never leave the run frozen after RESUME
+    if (document.hasFocus()) this.driver.resume('blur');
+    if (!document.hidden) this.driver.resume('hidden');
+    if (!this.isPortrait()) this.driver.resume('portrait');
     this.driver.resume('menu');
   }
 
@@ -347,6 +353,7 @@ export class GameScene extends Phaser.Scene {
     this.sounds.reset();
     this.bossView.reset();
     this.runLabel = run.label;
+    this.runDate = run.date ?? utcDateKey(new Date());
     this.hudDaily.setText(run.label);
     for (const s of this.orbs.values()) s.destroy();
     this.orbs.clear();
@@ -474,7 +481,8 @@ export class GameScene extends Phaser.Scene {
     const prevBest = bestScore(save(), d);
     let isNew = false;
     if (shouldSaveRun('death', this.cfg.startWave)) {
-      isNew = recordRun(save(), d, { score, hero, date: utcDateKey(new Date()), secs }, utcDateKey(new Date())).newRecord;
+      mergeFromDisk(); // another tab may have saved scores meanwhile
+      isNew = recordRun(save(), d, { score, hero, date: utcDateKey(new Date()), secs }, this.runDate).newRecord;
       persist();
     }
     if (isNew) emitAudioEvent('new_record');

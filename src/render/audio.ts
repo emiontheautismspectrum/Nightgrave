@@ -1,6 +1,7 @@
 /**
  * The audio manager (Web Audio). Files come from a build-time manifest of assets/audio/*.mp3, so only existing files
  * are requested; a file that fails to load or decode is treated as missing and the synthesized fallback plays instead.
+ * Short sfx are decoded into buffers; music and ambience are streamed.
  * Music crossfades between tracks; ambience loops quietly under the run. Unlocked on the first user input, muted while
  * the tab is hidden, volumes applied live. Never throws into the game.
  */
@@ -99,17 +100,25 @@ class AudioManager {
         playSynth(this.ctx, this.sfxBus, e, rate, done);
         return;
       }
-      const src = this.ctx.createBufferSource();
-      src.buffer = buf;
-      src.playbackRate.value = rate;
-      src.connect(this.sfxBus);
-      src.onended = done;
-      src.start();
+      try {
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        src.playbackRate.value = rate;
+        src.connect(this.sfxBus);
+        src.onended = done;
+        src.start();
+      } catch {
+        done(); // never leak a voice slot
+      }
     } catch {
       /* never break the game */
     }
   }
 
+  /**
+   * Music and ambience are STREAMED (HTMLAudioElement -> MediaElementSource), never decoded whole into memory.
+   * No file, or a file that fails to play: music falls back to the quiet drone pad, ambience stays silent.
+   */
   private startTrack(name: string, volume: number, fadeMs: number, drone: boolean): Track | null {
     if (!this.ctx) return null;
     const ctx = this.ctx;
@@ -117,19 +126,37 @@ class AudioManager {
     gain.gain.value = 0;
     gain.connect(this.musicBus);
     gain.gain.setTargetAtTime(volume, ctx.currentTime, fadeMs / 3000);
-    const buf = this.load(name);
-    if (buf) {
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      src.loop = true;
-      src.connect(gain);
-      src.start();
-      return { name, gain, stop: () => { try { src.stop(); } catch { /* stopped */ } } };
-    }
-    if (!drone) return { name, gain, stop: () => undefined }; // missing ambience is silent
-    const stop = startDrone(ctx, gain, name);
-    // when the real file finishes loading later, swap it in on the next track change
-    return { name, gain, stop };
+    let stopFallback: (() => void) | null = null;
+    const fallback = () => {
+      if (drone && !stopFallback) stopFallback = startDrone(ctx, gain, name);
+    };
+    const url = MANIFEST.get(name);
+    let el: HTMLAudioElement | null = null;
+    if (url && typeof Audio !== 'undefined') {
+      try {
+        el = new Audio(url);
+        el.loop = true;
+        el.preload = 'auto';
+        ctx.createMediaElementSource(el).connect(gain);
+        el.addEventListener('error', () => fallback(), { once: true });
+        void el.play().catch(() => fallback());
+      } catch {
+        el = null;
+        fallback();
+      }
+    } else fallback();
+    return {
+      name,
+      gain,
+      stop: () => {
+        stopFallback?.();
+        if (el) {
+          el.pause();
+          el.removeAttribute('src');
+          el.load();
+        }
+      },
+    };
   }
 
   private fadeOut(t: Track | null, ms: number): void {
