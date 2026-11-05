@@ -9,6 +9,7 @@ import { utcDateKey } from '../daily';
 import { clampSensitivity, persist, save, todaysBest, type BestEntry, type Difficulty } from '../storage';
 import { audio } from './audio';
 import { ATLAS, frame } from './assets';
+import { BEST_HEADER, fmtBestRow, fmtEntry } from './bestFormat';
 import { C, FONT, type MenuPage, type MenuView } from './ui';
 
 export interface MenuCtx {
@@ -110,9 +111,6 @@ export function controlsPage(back: () => void): MenuPage {
   };
 }
 
-const fmtEntry = (i: number, e: BestEntry | undefined): string =>
-  e ? `${i + 1}. ${String(e.score).padStart(7)} ${e.hero.toUpperCase().padEnd(6)} ${e.date} ${e.secs.toFixed(0).padStart(4)}S` : `${i + 1}.       -`;
-
 export function bestPage(back: () => void, show: (p: MenuPage) => void, d: Difficulty = save().difficulty): MenuPage {
   const order: Difficulty[] = ['easy', 'medium', 'hard'];
   const go = (k: number) => show(bestPage(back, show, order[(order.indexOf(d) + k + 3) % 3]!));
@@ -123,12 +121,12 @@ export function bestPage(back: () => void, show: (p: MenuPage) => void, d: Diffi
     items: [{ label: () => DIFF_LABEL(d).replace(/^DAILY .*/, 'HARD (DAILY)'), onLeft: () => go(-1), onRight: () => go(1) }],
     lines: () => {
       const list = save().best[d];
-      const out = ['', 'SCORE   HERO   DATE       TIME'];
+      const out = ['', BEST_HEADER];
       for (let i = 0; i < 5; i++) out.push(fmtEntry(i, list[i]));
       if (d === 'hard') {
         const today = utcDateKey(new Date());
         const t = todaysBest(save(), today);
-        out.push('', `TODAY'S BEST (${today} UTC)`, t ? `${t.score} ${t.hero.toUpperCase()} ${t.secs.toFixed(0)}S` : '-');
+        out.push('', `TODAY'S BEST (${today} UTC)`.padEnd(BEST_HEADER.length), t ? fmtBestRow('1', String(t.score), t.hero.toUpperCase(), today, `${t.secs.toFixed(0)}S`) : fmtBestRow('', '-', '', '', ''));
       }
       return out;
     },
