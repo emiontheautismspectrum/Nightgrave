@@ -35,7 +35,7 @@ export class SkilledBot {
     s.projectiles = seen;
     let f: InputFrame;
     try {
-      f = botInput(sim, { parry: false });
+      f = botInput(sim, { parry: false, beamDash: true });
     } finally {
       s.projectiles = all;
     }

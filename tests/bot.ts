@@ -8,6 +8,8 @@ import { dashCooldownLeft, isFading, parryCooldownLeft, type Sim } from '../src/
 export interface BotOptions {
   /** false = dodge-only bot (never presses parry). Default true. */
   parry?: boolean;
+  /** Dash across a beam sweeping in from the front (the skilled bot). Default false. */
+  beamDash?: boolean;
 }
 
 /** Eye beam threat (wind-up or active): start line, rotation sign. The side behind the start line is never swept. */
@@ -83,7 +85,7 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
     }
     // the sweep is about to reach us from the front: dash across it to the safe side (dash i-frames)
     const active = sim.state.beams.length > 0 || (sim.state.boss?.attack?.pattern === 'beam' && sim.state.boss.attack.fire - sim.state.tick <= 4);
-    if (active && c < 0 && c > -18) dashAway = [nx, ny];
+    if (opts.beamDash && active && c < 0 && c > -18) dashAway = [nx, ny];
   }
   // converging shots can cancel each other's sidestep: break the tie by stepping across the most urgent one
   if (nearT < 45 && Math.abs(fx) + Math.abs(fy) < 0.05) {
