@@ -6,6 +6,7 @@ import { dailySeed, utcDateKey } from './daily';
 import { getServerDate } from './net/api';
 import { audio } from './render/audio';
 import { onAudioEvent } from './render/events';
+import { setDevice } from './render/hints';
 import { GameScene, type RunConfig } from './render/GameScene';
 import { TitleScene, type TitleConfig } from './render/TitleScene';
 import { save } from './storage';
@@ -136,6 +137,9 @@ async function boot(): Promise<void> {
   onAudioEvent((e) => audio.sfx(e));
   const unlock = (e: Event) => {
     if ((e as PointerEvent).pointerType === 'touch') touchSeen = true;
+    // the active input device (controls line on the title, first-run card)
+    if (e.type === 'keydown') setDevice('desktop');
+    else if (e.type === 'pointerdown') setDevice((e as PointerEvent).pointerType === 'touch' ? 'touch' : 'desktop');
     audio.unlock();
     updateRotateOverlay();
   };
@@ -164,6 +168,8 @@ async function boot(): Promise<void> {
   game.events.once(Phaser.Core.Events.READY, resize);
   setTimeout(resize, 0);
   updateRotateOverlay();
+  if (isTouch()) setDevice('touch');
+  addEventListener('gamepadconnected', () => setDevice('gamepad'));
 }
 
 void boot();

@@ -7,6 +7,7 @@
 import Phaser from 'phaser';
 import { addText, setTextColor, setTextValue, snap, type UIText } from './text';
 import { emitAudioEvent } from './events';
+import { setDevice } from './hints';
 
 export const FONT = '"Press Start 2P", monospace';
 export const C = { bone: '#d9d2c0', gold: '#ffd86b', dim: '#7f93b8', stone: '#3a4558', ember: '#ff7a2f', violet: '#9b6bff', teal: '#4fd1c5' };
@@ -142,7 +143,7 @@ export class MenuView {
       const on = i === this.focus && !it.disabled;
       const lab = it.label();
       setTextValue(t, it.onLeft || (it.onRight && !it.onActivate) ? `${on ? '<' : ' '} ${lab} ${on ? '>' : ' '}` : on ? `> ${lab} <` : lab);
-      setTextColor(t, it.disabled ? C.stone : on ? C.gold : C.bone);
+      setTextColor(t, it.disabled ? C.dim : on ? C.gold : C.bone);
       snap(t);
       const hit = t.input?.hitArea as Phaser.Geom.Rectangle | undefined;
       if (hit) hit.setTo(-8, -3, t.width + 16, 14);
@@ -262,6 +263,7 @@ export class MenuView {
     this.padRepeat -= deltaMs;
     const held = (k: string) => !!now[k] && this.padRepeat <= 0;
     let start = false;
+    if (Object.values(now).some(Boolean)) setDevice('gamepad');
     if (edge('a')) this.activate();
     else if (edge('b')) this.back();
     else if (edge('start')) start = true;

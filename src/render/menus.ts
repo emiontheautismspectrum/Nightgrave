@@ -81,9 +81,9 @@ export function settingsPage(ctx: MenuCtx, back: () => void): MenuPage {
       toggle('LEFT-HANDED BUTTONS', 'leftHanded'),
       toggle('SECOND-FINGER PARRY', 'secondFingerParry'),
       toggle('HAPTICS', 'haptics'),
-      { label: () => 'SHOW TOUCH CONTROLS AGAIN', onActivate: () => ((s().touchHintSeen = false), persist(), ctx.onShowTouchHint?.()) },
     );
   }
+  items.push({ label: () => 'SHOW TIPS AGAIN', onActivate: () => ((s().touchHintSeen = false), (s().hintsDone = false), persist(), ctx.onShowTouchHint?.()) });
   return { title: 'SETTINGS', items, onBack: back, top: 52, gap: 13 };
 }
 

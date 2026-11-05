@@ -22,6 +22,7 @@ import { emitAudioEvent } from './events';
 import { InputCollector } from './input';
 import { settingsPage, type MenuCtx } from './menus';
 import { canRestart, portraitPause, RunDriver, type PauseReason } from './runDriver';
+import { cardLines, ContextHints, getDevice, HINT_TEXT } from './hints';
 import { TouchModel } from './touch';
 import { C, MenuView, onTap, type MenuPage } from './ui';
 
@@ -276,23 +277,51 @@ export class GameScene extends Phaser.Scene {
     if (!save().settings.touchHintSeen && !this.hint && this.sim.state.alive && this.sim.state.tick === 0) this.showTouchHint();
   }
 
-  /** First run on a touch device: one screen of controls, dismissed by a tap. */
+  /**
+   * First run on this device: one card with the controls of the active device and the colour rule. Dismissed by any
+   * input after 250 ms; the dismissing press is never used as a parry or dash (the run is paused, presses cleared).
+   */
   private showTouchHint(): void {
+    if (this.hint) return;
     this.driver.pause('hint');
-    const lines = ['DRAG ANYWHERE TO MOVE', '', 'PARRY: BIG BUTTON', `${save().settings.leftHanded ? 'LEFT' : 'RIGHT'} SIDE, DASH ABOVE IT`, '', 'SECOND FINGER TAP = PARRY', '', 'TAP TO START'];
-    const bg = this.add.rectangle(0, 0, VIEW_WIDTH, VIEW_HEIGHT, 0x0b0d12, 0.8).setOrigin(0);
-    const t = snap(addText(this, VIEW_WIDTH / 2, VIEW_HEIGHT / 2, lines.join('\n'), { color: C.bone, align: 'center', lineSpacing: 4 }).setOrigin(0.5));
+    const lines = cardLines(getDevice(), save().settings.leftHanded);
+    const bg = this.add.rectangle(0, 0, VIEW_WIDTH, VIEW_HEIGHT, 0x0b0d12, 0.82).setOrigin(0);
+    const t = snap(addText(this, VIEW_WIDTH / 2, VIEW_HEIGHT / 2, lines.join('\n'), { color: C.bone, align: 'center', lineSpacing: 5 }).setOrigin(0.5));
     this.hint = this.add.container(0, 0, [bg, t]).setDepth(D_HUD + 20);
     const shownAt = this.time.now;
-    bg.setInteractive().on('pointerup', () => {
-      if (this.time.now - shownAt < 250) return; // the touch that opened it must not also close it
+    const dismiss = () => {
+      if (!this.hint || this.time.now - shownAt < 250) return; // the press that opened it must not also close it
       save().settings.touchHintSeen = true;
       persist();
-      this.hint?.destroy();
+      this.hint.destroy();
       this.hint = null;
+      this.input.keyboard?.off('keydown', dismiss);
       this.input2.clear();
       this.driver.resume('hint');
-    });
+    };
+    this.hintDismiss = dismiss;
+    bg.setInteractive().on('pointerup', dismiss);
+    this.input.keyboard?.on('keydown', dismiss);
+  }
+
+  private hintDismiss: (() => void) | null = null;
+  private ctxHints = new ContextHints(false);
+  private ctxText: UIText | null = null;
+
+  /** One-time contextual hints, shown away from the hero (never pausing, never covering him). */
+  private contextHints(): void {
+    const k = this.ctxHints.tick(this.sim.state);
+    if (k) {
+      this.ctxText?.destroy();
+      const y = this.sim.state.hero.y < 135 ? 222 : 36;
+      const t = snap(addText(this, VIEW_WIDTH / 2, y, HINT_TEXT[k], { color: k === 'parry' ? C.violet : '#d12b3a' }).setOrigin(0.5).setDepth(D_HUD));
+      this.ctxText = t;
+      this.tweens.add({ targets: t, alpha: 0, delay: 1400, duration: 300, onComplete: () => t.destroy() });
+      if (this.ctxHints.done) {
+        save().settings.hintsDone = true;
+        persist();
+      }
+    }
   }
 
   private buildArena(): void {
@@ -376,13 +405,19 @@ export class GameScene extends Phaser.Scene {
     this.banner.setAlpha(0);
     this.input2.newRun();
     this.panel.setVisible(false);
-    if (this.cfg.isTouch() && !save().settings.touchHintSeen && !this.hint) this.showTouchHint();
+    this.ctxHints = new ContextHints(!save().settings.hintsDone);
+    if (!save().settings.touchHintSeen && !this.hint) this.showTouchHint();
     this.hero.setVisible(true).play(`${this.cfg.hero}_idle`);
     this.shadow.setVisible(true);
   }
 
   override update(_time: number, delta: number): void {
     this.input2.pollPad();
+    if (this.hint && this.hintDismiss) {
+      const gp = this.input.gamepad;
+      const pad = gp && gp.total > 0 ? gp.pad1 : null;
+      if (pad && pad.buttons.some((b) => b.pressed)) this.hintDismiss();
+    }
     if (this.menu.active && this.menu.pollPad(delta) && this.sim.state.alive) this.closePause();
     this.watchPerf(delta);
     const st = this.sim.state;
@@ -398,6 +433,7 @@ export class GameScene extends Phaser.Scene {
       for (const ev of this.sounds.tick(this.sim.state, this.sim.state.events, this.time.now)) emitAudioEvent(ev);
     });
     audio.setMusic(pickMusic('run', this.sim.state, audio.current()));
+    this.contextHints();
     // slow, small fog drift (a few px back and forth; the fog layer is full-screen and avoids the calm zone)
     this.fog.tilePositionX = Math.round(Math.sin(this.sim.state.tick / 600) * 4);
     const dx = this.sim.state.hero.x - this.sim.params.cx;

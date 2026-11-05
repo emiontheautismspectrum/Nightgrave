@@ -113,12 +113,19 @@ async function desktop(browser) {
   await page.keyboard.press('Enter'); // play
   await sleep(800);
   let d = await dbg(page);
-  ok(d && d.alive && !d.paused, 'desktop: Play starts a run');
+  ok(d && d.hint && d.paused, 'desktop: first run shows the controls card (run paused)');
+  await page.keyboard.press('KeyX'); // any key dismisses it (after 250 ms) and is not used as an action
+  await sleep(300);
+  d = await dbg(page);
+  ok(d && d.alive && !d.paused && !d.hint, 'desktop: the card is dismissed by a key, Play starts the run');
+  const ps0 = d.parryStart;
   const p = await toPage(page, 330, 135);
   await page.mouse.move(p.x, p.y);
   await sleep(700);
   d = await dbg(page);
   ok(d && d.x > 270, `desktop: the hero follows the mouse (x ${d && d.x.toFixed(0)})`);
+  ok(d && d.parryStart === ps0, 'desktop: dismissing the card did not trigger a parry');
+  await page.screenshot({ path: path.join(OUT, 'dash_chevron_full.png') });
   const ps = d.parryStart;
   await page.mouse.down();
   await page.mouse.up();

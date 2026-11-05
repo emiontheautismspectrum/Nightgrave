@@ -26,7 +26,10 @@ export interface Settings {
   leftHanded: boolean;
   secondFingerParry: boolean;
   haptics: boolean;
+  /** The first-run controls card was dismissed on this device. */
   touchHintSeen: boolean;
+  /** Both one-time contextual hints were shown on this device. */
+  hintsDone: boolean;
 }
 
 export interface BestEntry {
@@ -74,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
   secondFingerParry: true,
   haptics: false,
   touchHintSeen: false,
+  hintsDone: false,
 };
 
 export function defaultSave(): SaveData {
@@ -126,6 +130,7 @@ export function validateSave(raw: unknown): SaveData {
     secondFingerParry: bool(s.secondFingerParry, d.secondFingerParry),
     haptics: bool(s.haptics, d.haptics),
     touchHintSeen: bool(s.touchHintSeen, d.touchHintSeen),
+    hintsDone: bool(s.hintsDone, d.hintsDone),
   };
   out.hero = oneOf(raw.hero, HEROES, 'knight');
   out.difficulty = oneOf(raw.difficulty, DIFFICULTIES, 'medium');

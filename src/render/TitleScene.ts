@@ -10,6 +10,7 @@ import { DIFFICULTIES, persist, save } from '../storage';
 import { audio } from './audio';
 import { ARENA_PROPS, ATLAS, MANIFEST, bgKey, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
 import { bestPage, creditsPage, DIFF_LABEL, heroPage, settingsPage, type MenuCtx } from './menus';
+import { controlsLine, getDevice } from './hints';
 import { C, FONT, MenuView, type MenuPage } from './ui';
 
 export interface TitleConfig {
@@ -26,6 +27,7 @@ export class TitleScene extends Phaser.Scene {
   private boardState: 'offline' | 'loading' | 'error' | 'ready' = online() ? 'loading' : 'offline';
   private champion: { label: string; name: string; message: string | null } | null = null;
   private onBoardPage = false;
+  private shownDevice = getDevice();
 
   constructor() {
     super('title');
@@ -112,7 +114,7 @@ export class TitleScene extends Phaser.Scene {
       lines: () => lines,
       onBack: () => {
         this.onBoardPage = false;
-        this.showMain(5);
+        this.showMain(6);
       },
     });
   }
@@ -128,16 +130,18 @@ export class TitleScene extends Phaser.Scene {
       top: 76,
       items: [
         { label: () => 'PLAY', onActivate: () => this.cfg.startRun(this) },
+        // one line of controls for the active input device (switches when another device is used)
+        { label: () => controlsLine(getDevice()), disabled: true },
         {
           label: () => `DIFFICULTY ${DIFF_LABEL(sv.difficulty)}`,
           onLeft: () => ((sv.difficulty = DIFFICULTIES[(DIFFICULTIES.indexOf(sv.difficulty) + 2) % 3]!), persist()),
           onRight: () => ((sv.difficulty = DIFFICULTIES[(DIFFICULTIES.indexOf(sv.difficulty) + 1) % 3]!), persist()),
         },
-        { label: () => `HERO ${sv.hero.toUpperCase()}`, onActivate: () => this.menu.show(heroPage(() => this.showMain(2), () => this.showMain(2))) },
-        { label: () => 'SETTINGS', onActivate: () => this.menu.show(settingsPage(this.ctx(), () => this.showMain(3))) },
+        { label: () => `HERO ${sv.hero.toUpperCase()}`, onActivate: () => this.menu.show(heroPage(() => this.showMain(3), () => this.showMain(3))) },
+        { label: () => 'SETTINGS', onActivate: () => this.menu.show(settingsPage(this.ctx(), () => this.showMain(4))) },
         { label: () => 'BEST SCORES', onActivate: () => this.showBest() },
         { label: () => "TODAY'S BEST", onActivate: () => this.showBoard() },
-        { label: () => 'CREDITS', onActivate: () => this.menu.show(creditsPage(() => this.showMain(6))) },
+        { label: () => 'CREDITS', onActivate: () => this.menu.show(creditsPage(() => this.showMain(7))) },
       ],
       lines: () => this.boardLines(),
     };
@@ -146,12 +150,16 @@ export class TitleScene extends Phaser.Scene {
 
   private showBest(): void {
     const show = (p: MenuPage) => this.menu.show(p);
-    show(bestPage(() => this.showMain(4), show));
+    show(bestPage(() => this.showMain(5), show));
   }
 
   override update(_t: number, delta: number): void {
     this.fog.tilePositionX = Math.round(Math.sin(this.time.now / 10000) * 4);
     this.menu.pollPad(delta);
+    if (getDevice() !== this.shownDevice) {
+      this.shownDevice = getDevice();
+      this.menu.refresh();
+    }
   }
 }
 

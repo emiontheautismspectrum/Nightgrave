@@ -38,7 +38,7 @@ const ok = (c, m) => (c ? console.log('ok  ', m) : fail(m));
       await route.fulfill({ response: res, headers: h });
     });
     await ctx.addInitScript(() => {
-      localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'hard', settings: {}, best: {}, daily: [] }));
+      localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'hard', settings: { touchHintSeen: true, hintsDone: true }, best: {}, daily: [] }));
     });
     const page = await ctx.newPage();
     page.on('console', (m) => {
