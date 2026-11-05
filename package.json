@@ -17,7 +17,8 @@
     "verify:replay": "vite-node tools/verify/replay.ts",
     "e2e:crisp": "node tests-e2e/crisp.cjs",
     "e2e:layout": "node tests-e2e/layout.cjs",
-    "e2e:phone": "node tests-e2e/phone.cjs"
+    "e2e:phone": "node tests-e2e/phone.cjs",
+    "e2e:pages": "node tests-e2e/pages.cjs"
   },
   "dependencies": {
     "@fontsource/press-start-2p": "5.2.7",

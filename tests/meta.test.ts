@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { configConst, pageMeta } from '../vite.config';
-import { DESCRIPTION, SITE_URL, TITLE } from '../src/config';
+import { pageMeta } from '../vite.config';
+import { CONTACT_EMAIL, SITE_URL, TITLE } from '../src/config';
+import { contactEmail, copyrightLine, footerHtml, legalLinks } from '../src/legal';
 
 const html = readFileSync('index.html', 'utf8');
 const run = (site?: string): string => {
@@ -11,10 +12,26 @@ const run = (site?: string): string => {
 };
 
 describe('page meta (title, description, Open Graph, Twitter)', () => {
-  it('reads the constants from src/config.ts', () => {
-    expect(configConst('TITLE')).toBe(TITLE);
-    expect(configConst('DESCRIPTION')).toBe(DESCRIPTION);
-    expect(configConst('SITE_URL')).toBe(SITE_URL);
+  it('footer: copyright, licence summary and links; no personal email in the repo', () => {
+    expect(copyrightLine()).toMatch(/^\(c\) 2026 .+\. Code: MIT\. Art and audio: all rights reserved\.$/);
+    expect(legalLinks().map((l) => l.label).slice(0, 4)).toEqual(['Privacy', 'Rules', 'Credits', 'License']);
+    expect(CONTACT_EMAIL).toBe(''); // the author fills it in; never a personal address in the repository
+    expect(contactEmail()).toBe('');
+    expect(legalLinks().some((l) => l.label === 'Contact')).toBe(false);
+    const f = footerHtml();
+    expect(f).toContain('href="./privacy.html"');
+    expect(f).toContain('rel="noopener noreferrer"');
+    expect(run(undefined)).toContain(f);
+  });
+  it('every legal page exists, has the footer slot, a stylesheet, and no script or inline style', () => {
+    for (const n of ['privacy', 'rules', 'credits', 'license']) {
+      const src = readFileSync(`${n}.html`, 'utf8');
+      const out = (pageMeta(undefined).transformIndexHtml as (h: string) => string)(src);
+      expect(out).toContain(footerHtml());
+      expect(out).toContain('<link rel="stylesheet"');
+      expect(out).not.toMatch(/<script|<style|\sstyle="|\son[a-z]+="/i);
+      expect(out).not.toMatch(/%NG_|<!--ng-/);
+    }
   });
   it('fills title and description; without a site URL og:url and og:image are left out', () => {
     const out = run(undefined);

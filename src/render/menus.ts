@@ -4,7 +4,7 @@
  */
 import Phaser from 'phaser';
 import { addText, snap } from './text';
-import { TITLE } from '../config';
+import { COPYRIGHT_YEAR, legalLinks, owner } from '../legal';
 import { utcDateKey } from '../daily';
 import { clampSensitivity, persist, save, todaysBest, type BestEntry, type Difficulty } from '../storage';
 import { audio } from './audio';
@@ -134,23 +134,34 @@ export function bestPage(back: () => void, show: (p: MenuPage) => void, d: Diffi
   };
 }
 
+/** Open one of the static pages / links in a new tab (from a tap or key press: a user gesture). */
+function openLink(href: string): void {
+  try {
+    window.open(new URL(href, location.href).toString(), '_blank', 'noopener,noreferrer');
+  } catch {
+    /* blocked pop-up: nothing else to do */
+  }
+}
+
+/**
+ * Credits, plus the footer links as menu items: phones hide the page footer, so Privacy, Rules, Credits, License,
+ * Source and Contact are reachable here.
+ */
 export function creditsPage(back: () => void): MenuPage {
   return {
     title: 'CREDITS',
-    items: [],
-    top: 56,
+    top: 50,
+    gap: 12,
     onBack: back,
+    items: legalLinks().map((l) => ({ label: () => (l.label === 'Credits' ? 'FULL CREDITS' : l.label.toUpperCase()), onActivate: () => openLink(l.href) })),
     lines: () => [
-      TITLE.toUpperCase(),
       '',
       'ART AND CODE GENERATED FOR THIS PROJECT',
+      'FONT: PRESS START 2P BY CODEMAN38 (OFL 1.1)',
+      'AUDIO: CREDITS COMING SOON - ENGINE: PHASER 3',
       '',
-      'FONT: PRESS START 2P BY CODEMAN38',
-      'SIL OPEN FONT LICENSE 1.1 (OFL)',
-      '',
-      'AUDIO: CREDITS COMING SOON',
-      '',
-      'ENGINE: PHASER 3',
+      `(C) ${COPYRIGHT_YEAR} ${owner().toUpperCase()}`,
+      'CODE: MIT - ART AND AUDIO: ALL RIGHTS RESERVED',
     ],
   };
 }

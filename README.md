@@ -61,3 +61,12 @@ secret into the seed and publish it at 00:00 UTC (offline Hard runs would then b
 
 - Font: Press Start 2P by CodeMan38, SIL Open Font License 1.1 (via `@fontsource/press-start-2p`).
 - Art and code generated for this project. Engine: Phaser 3. Audio credits: to be added with the audio files.
+
+## License
+
+- Code: [MIT](LICENSE), copyright (c) 2026 The Nightgrave Authors.
+- Art and audio: all rights reserved, see [assets/LICENSE.md](assets/LICENSE.md). Audio made with ElevenLabs also
+  follows the ElevenLabs terms.
+- Font: Press Start 2P stays under the SIL Open Font License 1.1.
+- Player-facing pages: `privacy.html`, `rules.html`, `credits.html`, `license.html` (linked from the page footer and
+  the in-game Credits screen).
