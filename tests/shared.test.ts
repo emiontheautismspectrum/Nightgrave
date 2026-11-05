@@ -7,6 +7,7 @@ import { hasProfanity, validateMessage, validateName } from '../src/shared/text'
 import { sanitizeInput } from '../src/sim/input';
 import { Sim } from '../src/sim/sim';
 import { botInput } from './bot';
+import { SkilledBot } from './skilled';
 import { mulberryInputs } from './scripted';
 
 describe('dailySeed', () => {
@@ -35,6 +36,19 @@ describe('maxPossibleScore', () => {
         expect(sim.score).toBeLessThanOrEqual(maxPossibleScore(sim.state.tick));
         if (sim.state.tick > 600) ratios.push(maxPossibleScore(sim.state.tick) / Math.max(1, sim.score));
       }
+    // the skilled (human-like) bot on Hard: still below the bound
+    const skilled: number[] = [];
+    for (let seed = 1; seed <= 10; seed++) {
+      const sim = new Sim(seed * 7919, 'hard');
+      const bot = new SkilledBot(seed);
+      while (sim.state.alive && sim.state.tick < 60 * 200) {
+        sim.step(bot.input(sim));
+        if (sim.state.tick % 60 === 0) expect(sim.score).toBeLessThanOrEqual(maxPossibleScore(sim.state.tick));
+      }
+      if (sim.state.tick > 600) skilled.push(maxPossibleScore(sim.state.tick) / Math.max(1, sim.score));
+    }
+    skilled.sort((a, b) => a - b);
+    console.log(`maxPossibleScore / skilled bot score (hard): min ${skilled[0]?.toFixed(1)} median ${skilled[skilled.length >> 1]?.toFixed(1)}`);
     // scripted button mashing (parry spam) also stays below
     const mash = new Sim(5, 'hard');
     for (const f of mulberryInputs(9, 60 * 60)) mash.step({ ...f, buttons: 1 });

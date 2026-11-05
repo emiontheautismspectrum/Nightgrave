@@ -15,7 +15,9 @@ export function maxSpawnsPerSecond(): number {
   const dens = T.waves.densityCap * Math.max(...Object.values(T.difficulty).map((d) => d.density));
   const stream = dens / T.stream.intervalSeconds;
   const P = T.patterns;
-  const biggestSet = Math.max(P.orbFan.maxCount, P.runeBurst.maxShards, P.blades.maxCount, P.wraiths.maxCount, P.heavyOrbs.maxCount);
+  // a splitting orb can turn into (children) more parryable orbs
+  const biggestSet = Math.max(P.orbFan.maxCount, P.runeBurst.maxShards, P.blades.maxCount, P.wraiths.maxCount, P.heavyOrbs.maxCount,
+    P.armored.maxCount, P.split.maxCount * (1 + T.newThreats.split.children));
   const sets = (dens / P.gapMinSeconds) * biggestSet;
   const casterCycle = T.casters.telegraphSeconds + T.casters.riseSeconds + T.casters.casterIdleMinSeconds + T.casters.castSeconds;
   const casters = (T.casters.maxActive / casterCycle) * Math.max(P.orbFan.maxCount, T.casters.shardFan.count);
@@ -45,7 +47,8 @@ export function maxPossibleScore(durationTicks: number): number {
   const survival = Math.floor((n * dbl * T.score.survivalPerSecond) / TICK_RATE);
   // parry: one successful pulse per (shortest) cooldown; kills bounded by projectiles that could have spawned
   const pulses = Math.ceil(n / t(T.parry.cooldownSeconds));
-  const kills = Math.ceil((n / TICK_RATE) * maxSpawnsPerSecond());
+  // kills are bounded by the projectiles that could exist AND by maxKillsPerPulse per successful pulse
+  const kills = Math.min(Math.ceil((n / TICK_RATE) * maxSpawnsPerSecond() * (1 + T.newThreats.split.children)), pulses * T.parry.maxKillsPerPulse);
   const firsts = Math.min(pulses, kills);
   const extras = Math.max(0, kills - firsts);
   const parry = (firsts * T.score.parryBase + extras * T.score.extraKillPoints) * T.multiplier.cap * dbl;
