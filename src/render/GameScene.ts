@@ -278,7 +278,8 @@ export class GameScene extends Phaser.Scene {
   private onDeath(): void {
     const st = this.sim.state;
     this.deadAt = this.time.now;
-    this.lastReplay = encodeReplay(st.seed, st.difficulty, this.sim.log);
+    // a dev start-wave run is not a real run: its replay could not play back (startWave is not recorded)
+    this.lastReplay = this.cfg.startWave ? null : encodeReplay(st.seed, st.difficulty, this.sim.log);
     this.hero.play(`${this.cfg.hero}_death`);
     this.shadow.setVisible(false);
     this.burst('death_burst', st.hero.x, st.hero.y);

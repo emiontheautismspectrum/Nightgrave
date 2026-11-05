@@ -4,7 +4,7 @@
  */
 import { HOLLOWS, PORTAL, RUNES } from '../data/arena';
 import { dcos, dsin, PI, rotate } from './dmath';
-import { isBossWave, runBoss, startBoss } from './boss';
+import { isBossWave, rotateBeams, runBoss, startBoss } from './boss';
 import type { SimParams } from './params';
 import { nextFloat, range } from './rng';
 import type { Caster, CasterAttack, CasterKind, Projectile, ProjectileKind, SimState } from './state';
@@ -330,6 +330,7 @@ export function runDirector(s: SimState, p: SimParams, opts: DirectorOptions): v
     runBoss(s, p, spawnProjectile);
     return;
   }
+  if (s.beams.length > 0) rotateBeams(s); // never left behind by a removed boss
   if (s.breakUntil >= 0 && s.breakUntil <= s.tick) {
     // the break just ended: resume with fresh timers so nothing fires on the first tick
     s.breakUntil = -1;
@@ -371,8 +372,11 @@ export function runDirector(s: SimState, p: SimParams, opts: DirectorOptions): v
 /** Advance one projectile by a tick (curve, homing, move). */
 export function moveProjectile(s: SimState, pr: Projectile, f = 1): void {
   if (pr.turnS !== 0) {
-    const vx = pr.vx * pr.turnC - pr.vy * pr.turnS;
-    pr.vy = pr.vx * pr.turnS + pr.vy * pr.turnC;
+    // Slow Time scales the turn with the distance moved, so curved paths keep their shape
+    const ts = f === 1 ? pr.turnS : pr.turnS * f;
+    const tc = f === 1 ? pr.turnC : Math.sqrt(1 - ts * ts);
+    const vx = pr.vx * tc - pr.vy * ts;
+    pr.vy = pr.vx * ts + pr.vy * tc;
     pr.vx = vx;
   }
   if (pr.homing > 0 && !isFading(s, pr)) {
@@ -380,8 +384,8 @@ export function moveProjectile(s: SimState, pr: Projectile, f = 1): void {
     const dy = s.hero.y - pr.y;
     const d = Math.sqrt(dx * dx + dy * dy);
     if (d > 1e-6) {
-      pr.vx += ((dx / d) * pr.speed - pr.vx) * pr.homing;
-      pr.vy += ((dy / d) * pr.speed - pr.vy) * pr.homing;
+      pr.vx += ((dx / d) * pr.speed - pr.vx) * pr.homing * f;
+      pr.vy += ((dy / d) * pr.speed - pr.vy) * pr.homing * f;
       const v = Math.sqrt(pr.vx * pr.vx + pr.vy * pr.vy);
       if (v > 1e-9) {
         pr.vx = (pr.vx / v) * pr.speed;

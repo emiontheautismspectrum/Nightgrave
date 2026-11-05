@@ -98,8 +98,8 @@ export class BossView {
 
   /** A removed segment shatters: four small shards fall and fade. */
   private shatter(b: Boss, remaining: number): void {
-    const seg = BAR_W / b.segments;
-    const x = BAR_X + remaining * seg + seg / 2;
+    const seg = (BAR_W - 4) / b.segments;
+    const x = BAR_X + 2 + remaining * seg + seg / 2;
     for (let k = 0; k < 4; k++) {
       const r = this.scene.add.rectangle(x - 4 + k * 3, BAR_Y + 5, 2, 2, COL.bone).setDepth(this.depth.hud + 1);
       this.scene.tweens.add({ targets: r, x: r.x + (k - 1.5) * 4, y: r.y + 8 + k, alpha: 0, duration: 300, onComplete: () => r.destroy() });
@@ -177,8 +177,8 @@ export class BossView {
       const x0 = Math.round(BAR_X + 2 + i * seg) + 1;
       const x1 = Math.round(BAR_X + 2 + (i + 1) * seg) - 1;
       const on = i < b.remaining;
-      const flash = on && b.hitTick >= 0 && t - b.hitTick < HIT_TICKS && i === b.remaining - 1;
-      this.barGfx.fillStyle(flash ? COL.violet : on ? COL.bone : COL.violetDark, on ? 1 : 0.6);
+      const flash = b.hitTick >= 0 && t - b.hitTick < HIT_TICKS && i === b.remaining; // the cell just removed
+      this.barGfx.fillStyle(flash ? COL.violet : on ? COL.bone : COL.violetDark, flash || on ? 1 : 0.6);
       this.barGfx.fillRect(x0, BAR_Y + 2, x1 - x0, BAR_H - 4);
     }
   }

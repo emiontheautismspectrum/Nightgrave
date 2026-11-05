@@ -55,7 +55,7 @@ export function startBoss(s: SimState, p: SimParams, wave: number): void {
   const cfg = kind === 'eye' ? B.eye : B.lich;
   const segments = clampSegments(cfg.segments);
   const introEnd = s.tick + ticks(B.introSeconds);
-  // the lich materialises at the portal unless the hero stands there, then at the farthest spot
+  // the lich materialises at a seeded spot >= minHeroDist from the hero (portal or a hollow)
   let x: number = B.eye.x;
   let y: number = B.eye.y;
   if (kind === 'lich') {
@@ -174,15 +174,32 @@ function launch(s: SimState, p: SimParams, b: Boss, a: BossAttack, spawn: Spawn)
   const h = s.hero;
   const fair2 = p.fairDistance * p.fairDistance;
   const sp = b.speed * p.diffSpeed;
-  const shoot = (kind: 'orb_small' | 'orb_large' | 'wraith', x: number, y: number, vx: number, vy: number, extra = {}): void => {
-    if (d2(x, y, h.x, h.y) < fair2) return; // never spawn within 60 px of the hero
+  const m = p.despawnMargin - 2;
+  /**
+   * Never spawn within 60 px of the hero. A shot that would is moved along its own line to exactly 60 px: aimed shots
+   * back (they still come at the hero, from 60 px), radial ring orbs forward (as if already on their way). Standing
+   * next to the boss therefore never cancels an attack. Only a shot that would then leave the field is dropped.
+   */
+  const shoot = (kind: 'orb_small' | 'orb_large' | 'wraith', x: number, y: number, vx: number, vy: number, extra = {}, aimed = true): void => {
+    if (d2(x, y, h.x, h.y) < fair2) {
+      const v = Math.sqrt(vx * vx + vy * vy) || 1;
+      const dx = vx / v;
+      const dy = vy / v;
+      const qd = (x - h.x) * dx + (y - h.y) * dy;
+      const r60 = p.fairDistance + 0.5; // a hair beyond 60 px (float safety)
+      const disc = Math.sqrt(Math.max(0, qd * qd - d2(x, y, h.x, h.y) + r60 * r60));
+      const tt = aimed ? -qd - disc : -qd + disc;
+      x += dx * tt;
+      y += dy * tt;
+      if (x < p.x0 - m || x > p.x1 + m || y < p.y0 - m || y > p.y1 + m) return;
+    }
     spawn(s, p, kind, x, y, vx, vy, { ...extra, boss: serial }, tele);
   };
   const aim = (x: number, y: number): [number, number] => {
     const dx = h.x - x;
     const dy = h.y - y;
-    const d = Math.sqrt(dx * dx + dy * dy) || 1;
-    return [dx / d, dy / d];
+    const d = Math.sqrt(dx * dx + dy * dy);
+    return d > 1e-6 ? [dx / d, dy / d] : [0, 1]; // hero exactly on the boss: shoot straight down
   };
   if (a.pattern === 'ring') {
     const c = p.bosses.eye.ring;
@@ -194,7 +211,7 @@ function launch(s: SimState, p: SimParams, b: Boss, a: BossAttack, spawn: Spawn)
       const ang = base + (2 * 3.141592653589793 * k) / n;
       const dx = dcos(ang);
       const dy = dsin(ang);
-      shoot('orb_small', b.x + dx * 10, b.y + dy * 10, dx * v, dy * v, { turnC: dcos(curve), turnS: dsin(curve) });
+      shoot('orb_small', b.x + dx * 10, b.y + dy * 10, dx * v, dy * v, { turnC: dcos(curve), turnS: dsin(curve) }, false);
     }
   } else if (a.pattern === 'beam') {
     const c = p.bosses.eye.beam;
@@ -266,7 +283,7 @@ export function beamHits(s: SimState, p: SimParams): boolean {
   return false;
 }
 
-function rotateBeams(s: SimState): void {
+export function rotateBeams(s: SimState): void {
   const keep: Beam[] = [];
   for (const bm of s.beams) {
     if (s.tick >= bm.end) continue;

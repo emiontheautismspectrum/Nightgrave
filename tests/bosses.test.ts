@@ -208,6 +208,46 @@ describe('reflect bonus', () => {
   });
 });
 
+describe('review fixes', () => {
+  it('hugging a boss never cancels its attacks: shots move to 60 px instead of being dropped', () => {
+    for (const [wave, kind] of [[3, 'eye'], [7, 'lich']] as const) {
+      const sim = new Sim(21, 'hard', { startWave: wave });
+      let launched = 0;
+      let shots = 0;
+      while (sim.state.tick < 60 * 20) {
+        const b = sim.state.boss;
+        // stand right on the boss body (no collision)
+        sim.step(b ? { cursor: true, mx: Math.round(b.x), my: Math.round(b.y + (kind === 'eye' ? 30 : 0)), buttons: 0 } : idle);
+        sim.state.alive = true; // test only: an immortal hugger, so every attack of the fight is observed
+        for (const e of sim.state.events) {
+          if (e.type === 'boss_attack' && e.pattern !== 'beam') launched++;
+          if (e.type === 'spawn' && sim.state.projectiles.find((q) => q.id === e.id)?.boss) {
+            shots++;
+            expect(e.dist).toBeGreaterThanOrEqual(60 - 1e-6);
+          }
+        }
+      }
+      expect(launched, kind).toBeGreaterThan(0);
+      expect(shots, kind).toBeGreaterThanOrEqual(launched);
+    }
+  });
+
+  it('reflect bonus applies once per pulse, not once per destroyed orb', () => {
+    const base = makeParams('easy');
+    const p: SimParams = { ...base, bosses: { ...base.bosses, reflectBonusSegments: 1 } };
+    const s = createState(4, 'easy', p);
+    const opts = { startWave: EYE_WAVE };
+    while (!s.boss) step(s, idle, p, opts);
+    s.boss!.serial = 1;
+    s.boss!.remaining = 9;
+    s.hero.x = 300;
+    s.hero.y = 180;
+    for (let k = 0; k < 5; k++) spawnProjectile(s, p, 'orb_small', 305 + k * 2, 180, 0, 0, { boss: 1 });
+    step(s, { cursor: false, mx: 0, my: 0, buttons: 1 }, p, opts);
+    expect(s.boss!.remaining).toBe(8);
+  });
+});
+
 describe('pickups', () => {
   it('Slow Time slows projectiles only (hero, beams and timers keep their pace)', () => {
     const p = makeParams('medium');

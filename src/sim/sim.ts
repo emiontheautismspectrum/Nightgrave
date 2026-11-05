@@ -209,7 +209,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
         }
         s.lastParryTick = t;
         h.parryHit = true;
-        if (pr.boss > 0) onBossParry(s, p, pr.boss);
+        if (first && pr.boss > 0) onBossParry(s, p, pr.boss); // reflect bonus: once per successful pulse
       } else keep.push(pr);
     }
     s.projectiles = keep;
