@@ -20,6 +20,9 @@ const fail = (m) => {
 const ok = (c, m) => (c ? console.log('ok  ', m) : fail(m));
 
 (async () => {
+  // a clean LOCAL board: every e2e run plays the same idle run, and an identical replay is (correctly) refused as a
+  // duplicate once it is already verified for the day
+  execSync('npx wrangler d1 execute nightgrave --local --command "DELETE FROM entries"', { cwd: path.join(ROOT, 'server'), stdio: 'ignore' });
   execSync('npx vite build', { cwd: ROOT, stdio: 'ignore', env: { ...process.env, VITE_API_BASE: API, VITE_SMOKE: '1' } });
   const headers = fs.readFileSync(path.join(ROOT, 'dist', '_headers'), 'utf8');
   const csp = /Content-Security-Policy: (.*)/.exec(headers)[1];
