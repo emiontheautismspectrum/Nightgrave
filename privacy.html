@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy - %NG_TITLE%</title>
+    <meta name="description" content="What %NG_TITLE% stores and for how long." />
+    <meta name="theme-color" content="#0b0d12" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
+    <link rel="stylesheet" href="/src/pages.css" />
+  </head>
+  <body>
+    <main>
+      <a class="back" href="./">&lt; Back to the game</a>
+      <h1>Privacy</h1>
+      <p>%NG_TITLE% is a free browser game. It has no accounts, no cookies, no analytics, no tracking and no ads.</p>
+
+      <h2>On your device</h2>
+      <p>The game keeps its settings, your local best scores, the name you last used on the board and a random player
+        ID in your browser's local storage, and a "the intro was shown" flag in session storage. Only the random player ID
+        is ever sent: to look up your own place on today's board (the board panel does this while it is shown; the
+        lookup is not stored) and with a run you submit. Clearing this site's data in your browser deletes all of it.</p>
+
+      <h2>The online board (Hard only)</h2>
+      <p>Only when you choose to submit a Hard run to today's board, the server stores:</p>
+      <ul>
+        <li>the name you typed and, for the day's best run only, your short message;</li>
+        <li>the score, the hero, the run length and the view (full arena or the zoomed phone camera);</li>
+        <li>the replay of the run (your inputs, used to re-simulate and verify the score);</li>
+        <li>the random player ID from your browser (it ties your runs of a day together; it is never shown);</li>
+        <li>the date and time of the run.</li>
+      </ul>
+      <p>To limit abuse, the server also counts requests per salted hash of your IP address, and submissions per
+        player ID. Your IP address itself is not stored; these counters are deleted within two days.</p>
+      <p>Board entries are kept for 30 days and then deleted automatically. Names and messages are public on the board.</p>
+
+      <h2>Deletion</h2>
+      <p>To have a name, message or run removed before then, <!--ng-contact--> with the date, the name on the board
+        and what should be removed. Offensive names and messages are removed without being asked.</p>
+
+      <h2>Hosting</h2>
+      <p>The game and the board run on Cloudflare (Pages, Workers and D1). Delivering a website involves processing
+        connection data such as your IP address; the game itself adds nothing to that.</p>
+    </main>
+    <footer><!--ng-footer--></footer>
+  </body>
+</html>

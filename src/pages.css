@@ -1,0 +1,17 @@
+/* Legal pages (privacy, rules, credits, license): the game's palette and font, a readable size. No inline styles (CSP). */
+@import '@fontsource/press-start-2p/400.css';
+html, body { margin: 0; background: #0b0d12; color: #d9d2c0; }
+body { font-family: "Press Start 2P", monospace; font-size: 10px; line-height: 1.9; }
+main { max-width: 720px; margin: 0 auto; padding: 28px 18px 12px; }
+h1 { font-size: 16px; line-height: 1.5; color: #ffd86b; margin: 0 0 18px; font-weight: normal; }
+h2 { font-size: 11px; color: #9b6bff; margin: 26px 0 8px; font-weight: normal; }
+p, li { margin: 0 0 10px; }
+ul { padding-left: 18px; }
+a { color: #4fd1c5; }
+a:hover, a:focus { color: #ffd86b; }
+.back { display: inline-block; margin-bottom: 18px; }
+.dim { color: #7f93b8; }
+pre { white-space: pre-wrap; font-family: inherit; font-size: 9px; color: #7f93b8; background: #12161d; padding: 12px; border: 1px solid #262e3d; }
+footer { max-width: 720px; margin: 24px auto 32px; padding: 12px 18px 0; border-top: 1px solid #262e3d; color: #7f93b8; font-size: 8px; text-align: center; }
+footer a { color: #7f93b8; margin: 0 5px; }
+footer a:hover, footer a:focus { color: #d9d2c0; }

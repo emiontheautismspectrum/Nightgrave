@@ -18,24 +18,91 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Keyboard: WASD/arrows move, J or Z = Parry, K or Shift = Dash.
 - Gamepad: left stick move, A = Parry, B or RT = Dash.
 - Never require the mouse button to move.
+- Touch (phones/tablets, landscape): relative drag anywhere moves a virtual cursor from the hero (sensitivity 0.5-3.0,
+  default 1.5; lifting keeps it, the next drag continues); the hero follows it like the mouse. PARRY = large round button
+  in the bottom of the right margin (~36 px), DASH = smaller button above it (~28 px); "Left-handed" mirrors them to the
+  left margin; buttons never overlap the arena (x 48..432). A tap with a second finger on the arena = PARRY (setting, on
+  by default); a single tap of the only finger does nothing. Touch becomes the same per-tick cursor input as the mouse
+  (replays identical); the input source is replay metadata only. Pause button at the right end of the top HUD band.
+- Phones (Polish 3): landscape plays the full arena. Portrait plays a ZOOMED CAMERA (render-only, `src/data/view.ts`,
+  `src/render/camera.ts`): a 216x384 (9:16) game screen, HUD band on top (two rows), a world window of 216x292 world
+  px at zoom 1 (tunable), the boss bar and PARRY/DASH in the bottom strip; smooth follow with a dead zone and a lead
+  (reduced motion or reduced flashes: snappier, no lead); shake follows the setting. Pause menu, cards and the death
+  panel switch back to the full 480x270 arena. FAIRNESS EDGE MARKERS (`src/render/edgeMarkers.ts`) on the window edge:
+  every off-view projectile that can reach the hero within 90 ticks (violet / red, bigger = sooner) and every off-view
+  telegraph (runes, casters, sigils, the boss and its wind-up points, beams) for its whole telegraph time; tested:
+  every threat first appearing off-view is marked >= 15 ticks before it can hit. Rotating mid-run re-lays out and
+  auto-pauses until RESUME (no rotate overlay). Replay / board metadata `view: "full" | "zoomed"` (never affects the
+  sim or the verifier; the board shows a phone icon).
+- Pause: Esc, P, gamepad Start or the pause button; auto-pause on focus loss / hidden tab.
+- Hints (render-only, never in the sim or the replay): one controls line under PLAY for the active device; on the first
+  run per device a card with the controls and "Violet: parry it. Red: dodge or dash." (any input after 250 ms closes it,
+  without acting); two one-time contextual hints ("Parry!", "Can't parry - dash!") away from the hero; "Show tips again"
+  in Settings. A small amber chevron next to the hero shows where a dash would go.
 
 ## Core mechanics (all values live in `src/data/tuning.ts`, tunable)
-- Parry: short pulse, radius ~28 px, active ~0.15 s, cooldown ~0.4 s. Destroys parryable projectiles inside the pulse, grants points and builds the multiplier.
-- Dash: rare. ~80 px, ~0.2 s of invulnerability, cooldown ~3 s. Needed against unparryable threats.
-- Multiplier: +0.25 per successful parry, cap x5, resets after 5 s without a parry. A hit kills the run.
+- Parry (a skill, Polish 2): pulse radius 22 px, active 0.10 s, cooldown 0.9 s after a successful parry and 1.4 s after
+  a whiff. Destroys at most 3 parryable projectiles per pulse (nearest first) while they are inside it during the active
+  window; each scores as before.
+- Dash: rare. ~80 px over 0.2 s, invulnerable only for the first 0.12 s, cooldown 3 s. Needed against unparryable threats.
+- Multiplier: +0.25 per pulse, but only for a CLOSE parry (a kill within the inner 60% of the radius; a far parry scores
+  but neither steps nor resets it); cap x5; resets after 3 s without a successful parry. A hit kills the run.
+- Ember charge (boss drop): +0.01 s parry window per charge, cap +0.04 s (max window 0.14 s).
 - Score: survival 10 pts/s + parry 25 x multiplier + pickups + boss kill fixed 1000.
 
 ## Threats
 - Orb (straight, parryable), Rune burst (radial ring from ground runes, parryable),
   Blade (spinning arcs, UNPARRYABLE, dash/dodge only), Wraith (slow homing shadow, parryable, fades).
+- Polish 2 threats: ARMORED ORB (violet + bone rim, wave 2+): two parries (the first cracks it and pushes it 6 px away,
+  no points). SPLITTING ORB (violet, wave 3+): a parry bursts it into 3 small orbs flying outward, never inside the
+  hero's hit radius and never toward him. BLOOD SIGIL (red ground hazard, wave 5+): 0.6 s outline telegraph, 1.5 s
+  lethal fill, fade; unparryable, dash i-frames pass; at most 2, never under the hero, the arena always keeps a path.
+  Bosses keep their own patterns (no new threats in boss fights). Base projectile speeds are +30% vs Stage 4.
 - Visual language: parryable = violet, unparryable = blood red. Must be readable at a glance.
 - Waves every ~15 s. Endless scaling: +5% speed, +6% density per wave, with caps.
+- Casters summon attacks (they are emitters only: not hittable, not lethal, no collision). Their attacks are the
+  threats above, so parry/dash rules and colors are unchanged.
+  - Shade (portal altar): portal ignites violet (telegraph), a hooded shade rises, idles, casts, dissolves into violet smoke.
+  - Stalker (forest hollows): eyes light up (telegraph), a hunched antlered silhouette steps out, idles, casts, melts into the trees.
+  - Timing: rise/emerge anim, then idle a seeded 1.0-3.0 s (`casterIdleMinSeconds/MaxSeconds`), cast wind-up >= 15 ticks,
+    one attack, dissolve ~0.4 s. A cap on simultaneous casters lives in tuning.
+- Fairness (all spawns, incl. casters): >= 0.25 s (15 ticks) from the first visual cue to the first projectile;
+  no projectile spawns within 60 px of the hero unless telegraphed; spawn points come from the seeded PRNG only.
+
+## Arena (v2: a calm forest clearing)
+- Playable rectangle 384x216 at x 48..432, y 27..243 of the 480x270 screen (16:9, 80% height). Hero spawns at (240,135)
+  and moves anywhere inside the rectangle (sim clamp). Projectiles are removed 24 px outside it.
+- Setting: a moonlit FOREST CLEARING (not a cemetery). Soft, calm, pleasant to look at, like the Stage 0 style board.
+  Edge: a soft irregular rim of moss, roots and a few half-buried broken ring stones (no hard curb); the ground just
+  outside the rectangle is slightly darker so the clamp still reads. Hollows (2 per side) are dark gaps in the tree line
+  where stalkers step in.
+- Decor never blocks anything: no colliders. Moon top-left: soft mid-tone rim light only, lower-right shadows, a soft
+  moon pool at the centre, flat vignette steps at the edges.
+- Calm zone x 165..340, y 75..195: nearly flat ground, no props.
+- Portal altar at (120,78) with a 20 px clear radius, standing alone in the clearing; a few graves nearby (8-12 total in
+  2-3 loose clusters plus singles) and 2-3 short broken fence fragments. No fenced graveyard.
+- Landmarks (base centre = where the sprite touches the ground; small, low-amplitude render-only loops, at most 4 animated
+  landmarks in any 200x120 window): colossal ancient tree (top-right, base (380,118)) with sinuous ground roots and pale
+  glowing mushrooms, a runed sword stuck in a small stone base at its foot (378,140) and 3 fallen weapons; gallows
+  (138,150) with cage and crows; cursed well (362,172) with a bent gas lamp (386,162); gothic hunter's wagon at the top
+  edge (270,44) half behind the forest; hunter's cabin with workshop lower-left. No bones in the lower-right; bones and
+  skulls only near the altar and graves (<= 4). Original designs only (mood references, no copying).
+- Ground (v4): an old ruined stone courtyard reclaimed by the forest: large irregular flagstones (relaxed Voronoi), dark
+  joints, calm tones capped at stone_dark; stone gives way to moss, soil and roots toward the edges and under trees;
+  concentric altar plaza, cobble path to the cabin and the well, a broken low curb at the rect; depth from large flat
+  value zones, moonbeams and a top-left -> bottom-right falloff; the centre is one step darker so the hero pops.
+- Draw order: forest far/mid (parallax) -> ground + edge + decals -> ground telegraphs -> y-sorted props, casters, hero,
+  projectiles, effects -> fog -> vignette -> forest near overhang (max 8 px into the arena) -> UI.
+- Translucency: a prop/overhang drawn in front of the hero, a caster or a projectile (box + 4 px) fades to ~35% alpha
+  (~45% for props wider than 40 px) in ~100 ms and back when clear. Render-only; the hero keeps its outline.
+- Softness and density rules (values, dithering, budgets) live in ASSETS_SPEC.md and are enforced by
+  `tools/check_noise.py`, `tools/check_readability.py` and `tools/validate_palette.py`.
 
 ## Bosses (MVP: 2)
 - Eye Sentinel: rotating ring and beam patterns, spawns orbs.
 - Lich Mage: teleports, summons wraiths, orb fans.
 - A boss appears every 4th wave, alternating.
-- Boss health is a segmented bar at the bottom of the screen, spanning the arena width (classic boss bar).
+- Boss health is a segmented bar below the arena (x 48..432, y 250..262), spanning the arena width (classic boss bar).
 - Boss HP = number of attacks it will make: 12 segments by default (tunable range 10-15, can differ per boss).
   Each boss attack (one pattern cast, a thrust or a strike) removes exactly 1 segment.
 - The player survives each attack by dodging, dashing or parrying (reflecting). Both ways are valid.
@@ -50,7 +117,8 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Shield is NOT in MVP (planned later as a bonus).
 
 ## Difficulty
-- Easy / Medium / Hard differ only by projectile speed and density (Easy 0.8x/0.7x, Medium 1.0x/1.0x, Hard 1.25x/1.4x).
+- Easy / Medium / Hard differ only by projectile speed and density (Polish 2: Easy 0.65x/0.5x, Medium 0.85x/0.75x,
+  Hard 1.1x/1.2x), calibrated with the skilled bot (`npx vite-node tools/bot/balance.ts 50`).
 - Only HARD has the online "Today's best" board.
 
 ## Leaderboard (Hard only)
@@ -60,6 +128,23 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Security: strict length limits, treat all text as untrusted, render with text-only APIs (never innerHTML),
   basic profanity filter, rate limiting, plausibility checks (score <= max possible for run time).
   Replay verification is a later stage.
+
+## Page layout, sharing, legal (Polish 3)
+- Desktop: the framed canvas (crisp integer device-pixel scale) with the HTML board panel to its right ("Today's Hard
+  best": champion + message, ranks 2-10 with hero / phone icons, your standing via POST /api/daily/me, countdown to
+  00:00 UTC; refresh every 60 s, never during a run); narrow windows put the panel under the canvas
+  (`src/web/layout.ts`). A short intro plays once per session.
+- Phones: no side panel. "BOARD" on the title and the death panel opens a full-screen board overlay (back button, drag
+  scroll, Esc / B close it, never during a run); in portrait the title shows the board under the canvas.
+- Footer (static HTML, built from `src/legal.ts`): "(c) 2026 <SITE_DOMAIN or The <TITLE> Authors>. Code: MIT. Art and
+  audio: all rights reserved." + Privacy, Rules, Credits, License, Source, Contact (hidden while CONTACT_EMAIL is
+  empty). Hidden on phones; the in-game Credits screen has the same links.
+- Constants next to TITLE in `src/config.ts`: DESCRIPTION, SITE_URL (empty: no og:url / og:image), SITE_DOMAIN,
+  SOURCE_URL, CONTACT_EMAIL (never a personal address in the repo). `public/og-image.png` (1200x630) and the favicons
+  are generated by `tools/gen_assets.py`.
+- Pages `privacy.html`, `rules.html`, `credits.html`, `license.html`: same CSP, a stylesheet file, no script. The
+  privacy page must match what the server stores (update both together). LICENSE = MIT for code;
+  `assets/LICENSE.md` = art and audio all rights reserved (ElevenLabs terms; the font stays OFL).
 
 ## Tech stack
 - TypeScript, Phaser 3, Vite, Vitest. Static HTML5 build.

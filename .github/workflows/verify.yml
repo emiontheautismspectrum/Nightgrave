@@ -1,0 +1,35 @@
+# Replay verification for the Hard daily board: re-simulates pending submissions with the game's own deterministic sim
+# and posts verified / rejected to the Worker. Only verified runs ever appear on the board. See DEPLOY.md.
+name: verify-replays
+
+on:
+  schedule:
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-replays
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      # secrets are passed only as environment variables (never interpolated into the script); the verifier never
+      # prints the token or any player-supplied text
+      - run: npm run verify:pending
+        env:
+          API_BASE: ${{ secrets.API_BASE }}
+          VERIFIER_TOKEN: ${{ secrets.VERIFIER_TOKEN }}

@@ -1,0 +1,33 @@
+{
+  "name": "nightgrave",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "assets": "python3 tools/gen_assets.py && python3 tools/run_checks.py",
+    "bot": "vite-node scripts/botsim.ts",
+    "audio:check": "python3 tools/check_audio.py",
+    "smoke": "VITE_SMOKE=1 npm run build && node tests-e2e/smoke.cjs && npm run build",
+    "e2e:board": "node tests-e2e/board_e2e.cjs",
+    "verify:pending": "vite-node tools/verify/pending.ts",
+    "verify:replay": "vite-node tools/verify/replay.ts",
+    "e2e:crisp": "node tests-e2e/crisp.cjs",
+    "e2e:layout": "node tests-e2e/layout.cjs",
+    "e2e:phone": "node tests-e2e/phone.cjs",
+    "e2e:pages": "node tests-e2e/pages.cjs"
+  },
+  "dependencies": {
+    "@fontsource/press-start-2p": "5.2.7",
+    "phaser": "3.90.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "3.2.7"
+  }
+}

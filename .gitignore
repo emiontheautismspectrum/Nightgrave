@@ -1,0 +1,20 @@
+node_modules/
+dist/
+coverage/
+__pycache__/
+*.pyc
+.DS_Store
+.wrangler/
+.dev.vars
+*.dev.vars
+!.dev.vars.example
+.env
+.env.*
+!.env.example
+# local D1 / SQLite files
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.db
+server/.wrangler/

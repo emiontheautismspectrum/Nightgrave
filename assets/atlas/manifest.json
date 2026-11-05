@@ -1,0 +1,1228 @@
+{
+ "backgrounds": {
+  "arena_ground": {
+   "h": 270,
+   "w": 480
+  },
+  "fog_overlay": {
+   "h": 270,
+   "w": 480
+  },
+  "forest_far": {
+   "h": 270,
+   "w": 480
+  },
+  "forest_mid": {
+   "h": 270,
+   "w": 480
+  },
+  "forest_mist": {
+   "h": 270,
+   "w": 480
+  },
+  "forest_near": {
+   "h": 270,
+   "w": 480
+  },
+  "forest_overhang": {
+   "h": 270,
+   "w": 480
+  },
+  "vignette": {
+   "h": 270,
+   "w": 480
+  },
+  "vignette_outer": {
+   "h": 270,
+   "w": 480
+  }
+ },
+ "layout": {
+  "alphas": {
+   "fog_overlay": 0.07,
+   "forest_mist": 0.35,
+   "vignette": 0.35,
+   "vignette_outer": 0.35
+  },
+  "arena": [
+   48,
+   27,
+   432,
+   243
+  ],
+  "bossBar": [
+   48,
+   250,
+   432,
+   262
+  ],
+  "calmZone": [
+   165,
+   75,
+   340,
+   195
+  ],
+  "forest": [
+   {
+    "name": "forest_far",
+    "parallax": 0.02
+   },
+   {
+    "name": "forest_mid",
+    "parallax": 0.05
+   },
+   {
+    "name": "forest_near",
+    "parallax": 0.0
+   }
+  ],
+  "graves": 10,
+  "heroSpawn": [
+   240,
+   135
+  ],
+  "hollows": [
+   {
+    "side": "top",
+    "x": 72,
+    "y": 27
+   },
+   {
+    "side": "top",
+    "x": 162,
+    "y": 27
+   },
+   {
+    "side": "bottom",
+    "x": 190,
+    "y": 243
+   },
+   {
+    "side": "bottom",
+    "x": 300,
+    "y": 243
+   },
+   {
+    "side": "left",
+    "x": 48,
+    "y": 47
+   },
+   {
+    "side": "left",
+    "x": 48,
+    "y": 139
+   },
+   {
+    "side": "right",
+    "x": 432,
+    "y": 180
+   },
+   {
+    "side": "right",
+    "x": 432,
+    "y": 226
+   }
+  ],
+  "landmarks": [
+   {
+    "box": [
+     92,
+     52,
+     148,
+     96
+    ],
+    "sprite": "portal_altar"
+   },
+   {
+    "box": [
+     332,
+     -1,
+     428,
+     119
+    ],
+    "sprite": "giant_tree"
+   },
+   {
+    "box": [
+     366,
+     82,
+     390,
+     140
+    ],
+    "sprite": "rune_sword"
+   },
+   {
+    "box": [
+     364,
+     133,
+     392,
+     143
+    ],
+    "sprite": "rune_sword_base"
+   },
+   {
+    "box": [
+     114,
+     94,
+     162,
+     150
+    ],
+    "sprite": "gallows_tree"
+   },
+   {
+    "box": [
+     350,
+     148,
+     374,
+     172
+    ],
+    "sprite": "cursed_well"
+   },
+   {
+    "box": [
+     380,
+     144,
+     392,
+     162
+    ],
+    "sprite": "gas_lamp_short"
+   },
+   {
+    "box": [
+     242,
+     4,
+     298,
+     44
+    ],
+    "sprite": "hunter_wagon"
+   },
+   {
+    "box": [
+     22,
+     186,
+     86,
+     242
+    ],
+    "sprite": "hunter_cabin"
+   },
+   {
+    "box": [
+     90,
+     230,
+     110,
+     240
+    ],
+    "sprite": "workbench_0"
+   },
+   {
+    "box": [
+     116,
+     224,
+     132,
+     236
+    ],
+    "sprite": "weapon_rack_0"
+   },
+   {
+    "box": [
+     85,
+     232,
+     95,
+     242
+    ],
+    "sprite": "crate_0"
+   },
+   {
+    "box": [
+     133,
+     232,
+     143,
+     242
+    ],
+    "sprite": "crate_1"
+   },
+   {
+    "box": [
+     144,
+     214,
+     156,
+     242
+    ],
+    "sprite": "gas_lamp_0"
+   },
+   {
+    "box": [
+     402,
+     143,
+     406,
+     152
+    ],
+    "sprite": "weapon_sword_1"
+   },
+   {
+    "box": [
+     350,
+     130,
+     355,
+     140
+    ],
+    "sprite": "weapon_spear_1"
+   },
+   {
+    "box": [
+     391,
+     153,
+     401,
+     160
+    ],
+    "sprite": "helmet_0"
+   }
+  ],
+  "portal": [
+   120,
+   78
+  ],
+  "portalClearRadius": 20,
+  "ritualCenter": [
+   240,
+   135
+  ],
+  "ritualRadius": 76,
+  "runes": [
+   {
+    "x": 299,
+    "y": 159
+   },
+   {
+    "x": 264,
+    "y": 194
+   },
+   {
+    "x": 216,
+    "y": 194
+   },
+   {
+    "x": 181,
+    "y": 159
+   },
+   {
+    "x": 181,
+    "y": 111
+   },
+   {
+    "x": 216,
+    "y": 76
+   },
+   {
+    "x": 264,
+    "y": 76
+   },
+   {
+    "x": 299,
+    "y": 111
+   }
+  ]
+ },
+ "sprites": {
+  "altar_chain": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 5
+  },
+  "altar_flame": {
+   "frames": 4,
+   "group": "arena",
+   "h": 8,
+   "w": 6
+  },
+  "altar_flame_tele": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 8,
+   "w": 6
+  },
+  "blade": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "blood_sigil": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 32,
+   "w": 32
+  },
+  "bone_pile_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 10
+  },
+  "bone_pile_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 10
+  },
+  "bone_pile_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 10
+  },
+  "bone_pile_3": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 10
+  },
+  "boss_bar": {
+   "frames": 1,
+   "group": "ui",
+   "h": 10,
+   "w": 384
+  },
+  "bramble_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 8,
+   "w": 14
+  },
+  "bramble_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 8,
+   "w": 14
+  },
+  "bramble_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 8,
+   "w": 14
+  },
+  "cabin_smoke": {
+   "frames": 6,
+   "group": "arena",
+   "h": 20,
+   "w": 12
+  },
+  "cabin_window": {
+   "frames": 3,
+   "group": "arena",
+   "h": 5,
+   "w": 7
+  },
+  "candle_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 3
+  },
+  "candle_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 4,
+   "w": 4
+  },
+  "crate_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 10,
+   "w": 10
+  },
+  "crate_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 10,
+   "w": 10
+  },
+  "crow": {
+   "frames": 4,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "cursed_well": {
+   "frames": 1,
+   "group": "arena",
+   "h": 24,
+   "w": 24
+  },
+  "cursor_reticle": {
+   "frames": 1,
+   "group": "gameplay",
+   "h": 9,
+   "w": 9
+  },
+  "dash_trail": {
+   "frames": 3,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "death_burst": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 32,
+   "w": 32
+  },
+  "dust_puff": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 8,
+   "w": 8
+  },
+  "ember_particle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 2,
+   "w": 2
+  },
+  "eye_beam": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 4,
+   "w": 16
+  },
+  "eye_sentinel_charge": {
+   "frames": 3,
+   "group": "gameplay",
+   "h": 48,
+   "w": 48
+  },
+  "eye_sentinel_death": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 48,
+   "w": 48
+  },
+  "eye_sentinel_hit": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 48,
+   "w": 48
+  },
+  "eye_sentinel_idle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 48,
+   "w": 48
+  },
+  "fence_frag_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 14,
+   "w": 13
+  },
+  "fence_frag_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 14,
+   "w": 10
+  },
+  "fence_frag_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 14,
+   "w": 7
+  },
+  "forest_eyes": {
+   "frames": 3,
+   "group": "telegraph",
+   "h": 4,
+   "w": 8
+  },
+  "forest_leaf_ash": {
+   "frames": 6,
+   "group": "caster",
+   "h": 16,
+   "w": 16
+  },
+  "gallows_cage": {
+   "frames": 4,
+   "group": "arena",
+   "h": 26,
+   "w": 14
+  },
+  "gallows_tree": {
+   "frames": 1,
+   "group": "arena",
+   "h": 56,
+   "w": 48
+  },
+  "gas_lamp_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 28,
+   "w": 12
+  },
+  "gas_lamp_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 28,
+   "w": 12
+  },
+  "gas_lamp_short": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 12
+  },
+  "giant_tree": {
+   "frames": 1,
+   "group": "arena",
+   "h": 120,
+   "w": 96
+  },
+  "giant_tree_crack": {
+   "frames": 4,
+   "group": "arena",
+   "h": 30,
+   "w": 4
+  },
+  "glow_mushrooms": {
+   "frames": 3,
+   "group": "arena",
+   "h": 5,
+   "w": 7
+  },
+  "grass_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "grass_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "grass_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "grass_3": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "grave_broken_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 14,
+   "w": 12
+  },
+  "grave_broken_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 12,
+   "w": 14
+  },
+  "grave_broken_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 12
+  },
+  "grave_cross_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 20,
+   "w": 12
+  },
+  "grave_cross_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 20,
+   "w": 14
+  },
+  "grave_cross_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 12
+  },
+  "grave_intact_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 20,
+   "w": 14
+  },
+  "grave_intact_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 12
+  },
+  "grave_intact_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 16
+  },
+  "grave_intact_3": {
+   "frames": 2,
+   "group": "arena",
+   "h": 22,
+   "w": 10
+  },
+  "grave_intact_4": {
+   "frames": 2,
+   "group": "arena",
+   "h": 20,
+   "w": 16
+  },
+  "grave_slab_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 10,
+   "w": 18
+  },
+  "grave_slab_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 12,
+   "w": 20
+  },
+  "grave_sunk_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
+   "w": 14
+  },
+  "grave_sunk_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 16,
+   "w": 12
+  },
+  "helmet_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 7,
+   "w": 10
+  },
+  "hero_shadow": {
+   "frames": 1,
+   "group": "gameplay",
+   "h": 6,
+   "w": 12
+  },
+  "hit_flash": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "hunter_cabin": {
+   "frames": 1,
+   "group": "arena",
+   "h": 56,
+   "w": 64
+  },
+  "hunter_wagon": {
+   "frames": 3,
+   "group": "arena",
+   "h": 40,
+   "w": 56
+  },
+  "icon_dash": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "icon_parry": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "icon_ring": {
+   "frames": 13,
+   "group": "gameplay",
+   "h": 20,
+   "w": 20
+  },
+  "knight_bash": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 32,
+   "w": 32
+  },
+  "knight_cloak_trail": {
+   "frames": 3,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "knight_dash": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "knight_death": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "knight_idle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "knight_parry": {
+   "frames": 3,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "knight_run": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "leaves_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "leaves_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "leaves_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 8
+  },
+  "lich_mage_cast": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 40,
+   "w": 32
+  },
+  "lich_mage_death": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 40,
+   "w": 32
+  },
+  "lich_mage_hit": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 40,
+   "w": 32
+  },
+  "lich_mage_idle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 40,
+   "w": 32
+  },
+  "lich_mage_teleport_in": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 40,
+   "w": 32
+  },
+  "lich_mage_teleport_out": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 40,
+   "w": 32
+  },
+  "mushroom_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 6
+  },
+  "mushroom_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 7
+  },
+  "orb_armored": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 10,
+   "w": 10
+  },
+  "orb_armored_crack": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 10,
+   "w": 10
+  },
+  "orb_large": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 10,
+   "w": 10
+  },
+  "orb_small": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 6,
+   "w": 6
+  },
+  "orb_split": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 8,
+   "w": 8
+  },
+  "parry_fizzle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 12,
+   "w": 12
+  },
+  "parry_pulse": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 24,
+   "w": 24
+  },
+  "parry_spark": {
+   "frames": 8,
+   "group": "gameplay",
+   "h": 4,
+   "w": 4
+  },
+  "pickup_double_score": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 12,
+   "w": 12
+  },
+  "pickup_glow": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "pickup_slow_time": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 12,
+   "w": 12
+  },
+  "portal_altar": {
+   "frames": 1,
+   "group": "arena",
+   "h": 44,
+   "w": 56
+  },
+  "portal_ignite": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 40,
+   "w": 40
+  },
+  "portal_smoke": {
+   "frames": 6,
+   "group": "caster",
+   "h": 32,
+   "w": 24
+  },
+  "root_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 8,
+   "w": 16
+  },
+  "root_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 8,
+   "w": 16
+  },
+  "root_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 8,
+   "w": 16
+  },
+  "rune_glow_0": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_1": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_2": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_3": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_4": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_5": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_6": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_glow_7": {
+   "frames": 4,
+   "group": "telegraph",
+   "h": 11,
+   "w": 11
+  },
+  "rune_shard": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 8,
+   "w": 8
+  },
+  "rune_sword": {
+   "frames": 4,
+   "group": "arena",
+   "h": 58,
+   "w": 24
+  },
+  "rune_sword_base": {
+   "frames": 1,
+   "group": "arena",
+   "h": 10,
+   "w": 28
+  },
+  "shade_cast": {
+   "frames": 3,
+   "group": "caster",
+   "h": 20,
+   "w": 16
+  },
+  "shade_dissolve": {
+   "frames": 6,
+   "group": "caster",
+   "h": 20,
+   "w": 16
+  },
+  "shade_idle": {
+   "frames": 4,
+   "group": "caster",
+   "h": 20,
+   "w": 16
+  },
+  "shade_rise": {
+   "frames": 6,
+   "group": "caster",
+   "h": 20,
+   "w": 16
+  },
+  "skull_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 7
+  },
+  "skull_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 6,
+   "w": 7
+  },
+  "stalker_cast": {
+   "frames": 3,
+   "group": "caster",
+   "h": 24,
+   "w": 20
+  },
+  "stalker_emerge": {
+   "frames": 6,
+   "group": "caster",
+   "h": 24,
+   "w": 20
+  },
+  "stalker_idle": {
+   "frames": 4,
+   "group": "caster",
+   "h": 24,
+   "w": 20
+  },
+  "stalker_vanish": {
+   "frames": 6,
+   "group": "caster",
+   "h": 24,
+   "w": 20
+  },
+  "stone_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 4,
+   "w": 6
+  },
+  "stone_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 7
+  },
+  "stone_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 5,
+   "w": 8
+  },
+  "stone_3": {
+   "frames": 2,
+   "group": "arena",
+   "h": 3,
+   "w": 4
+  },
+  "tree_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 40,
+   "w": 30
+  },
+  "tree_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 44,
+   "w": 34
+  },
+  "tree_2": {
+   "frames": 2,
+   "group": "arena",
+   "h": 34,
+   "w": 26
+  },
+  "tree_3": {
+   "frames": 2,
+   "group": "arena",
+   "h": 40,
+   "w": 32
+  },
+  "tree_4": {
+   "frames": 2,
+   "group": "arena",
+   "h": 28,
+   "w": 34
+  },
+  "weapon_halberd_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 15,
+   "w": 7
+  },
+  "weapon_rack_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 12,
+   "w": 16
+  },
+  "weapon_spear_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 15,
+   "w": 5
+  },
+  "weapon_spear_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 10,
+   "w": 5
+  },
+  "weapon_sword_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 14,
+   "w": 5
+  },
+  "weapon_sword_1": {
+   "frames": 2,
+   "group": "arena",
+   "h": 9,
+   "w": 4
+  },
+  "well_wisp": {
+   "frames": 6,
+   "group": "arena",
+   "h": 20,
+   "w": 12
+  },
+  "wisp_dash": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "wisp_death": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "wisp_idle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "wisp_pulse": {
+   "frames": 3,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "workbench_0": {
+   "frames": 2,
+   "group": "arena",
+   "h": 10,
+   "w": 20
+  },
+  "wraith": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "wraith_fade": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  }
+ }
+}

@@ -1,0 +1,4 @@
+# Copy to server/.dev.vars for `wrangler dev` (git-ignored). Use long random values.
+ADMIN_TOKEN=change-me-local-admin-token-at-least-32-chars
+IP_SALT=change-me-local-salt-at-least-16
+VERIFIER_TOKEN=change-me-local-verifier-token-at-least-32-chars
