@@ -72,7 +72,7 @@ SMALL_DECOR_CLUSTERS = [((64, 60), 4), ((150, 222), 4), ((300, 70), 3), ((236, 4
 # v4 cobble paths (8-14 px cobbles): altar -> down toward the cabin, routed WEST of the gallows; a short branch to the well
 PATHS = [[(118, 100), (100, 124), (94, 160), (98, 196), (92, 222)], [(316, 236), (332, 214), (348, 194), (358, 182)]]
 PATH_WIDTH = 16
-STONE_SIZE = {"calm": 42, "mid": 34, "edge": 24, "tree": 24}  # Poisson spacing (px) of flagstone seeds per zone
+STONE_SIZE = {"calm": 52, "mid": 34, "edge": 24, "tree": 24}  # Poisson spacing (px) of flagstone seeds per zone
 ALTAR_PLAZA_R = 40
 PUDDLES = [(408, 156, 13, 6), (96, 182, 12, 5)]  # (x, y, rx, ry): one by the giant tree roots, one by the gallows
 CRACKS_MAX, CRACKS_CALM_MAX = 12, 4

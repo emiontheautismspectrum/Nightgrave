@@ -300,7 +300,7 @@ def stone_checks():
         return 0.2126 * f(r_) + 0.7152 * f(g_) + 0.0722 * f(b_)
     worst_ratio = 0.0
     pairs = set()
-    for y, x in zip(ys[::3], xs[::3]):
+    for y, x in zip(ys, xs):
         for dy, dx in ((0, 1), (1, 0), (0, -1), (-1, 0)):
             yy_, xx_ = y + dy, x + dx
             if 0 <= yy_ < g.shape[0] and 0 <= xx_ < g.shape[1] and st[yy_, xx_]:
@@ -312,6 +312,25 @@ def stone_checks():
     failed |= not ok
     print(f"stones: pixels > 1 step above base {int(over.sum())}, joints lighter than a stone {bad_light}, "
           f"max joint/stone contrast {worst_ratio:.2f} (<= {JOINT_STONE_MAX})  {'OK' if ok else 'FAIL'}")
+    # 5. geometry: no 4-way '+' junctions, no axis-aligned seam > 20 px, neighbours within one tone step,
+    #    calm-centre stones large (median sqrt(area) reported vs 36-44 px)
+    q = np.stack([lab[:-1, :-1], lab[:-1, 1:], lab[1:, :-1], lab[1:, 1:]])
+    four = int(((q[0] != q[1]) & (q[0] != q[2]) & (q[0] != q[3]) & (q[1] != q[2]) & (q[1] != q[3]) & (q[2] != q[3]))[
+        inside[:-1, :-1]].sum())
+    seams = [s_ for s_ in CP.long_seams(np.where(inside, lab, -1), 20) if s_[0] >= 0]
+    miss = M["missing"]
+    pairs_t = set()
+    for a_, b_ in ((lab[:, :-1], lab[:, 1:]), (lab[:-1, :], lab[1:, :])):
+        m = (a_ != b_) & inside[:a_.shape[0], :a_.shape[1]]
+        pairs_t |= set(zip(a_[m].tolist(), b_[m].tolist()))
+    steps = [(i, j) for i, j in pairs_t if not miss[i] and not miss[j] and abs(int(tone[i]) - int(tone[j])) > 1]
+    calm_ids = np.unique(lab[L.CALM_ZONE[1]:L.CALM_ZONE[3], L.CALM_ZONE[0]:L.CALM_ZONE[2]])
+    areas = np.bincount(lab.ravel())
+    calm_sizes = np.sqrt(areas[[i for i in calm_ids if M["calm"][i]]])
+    ok = four == 0 and not seams and not steps
+    failed |= not ok
+    print(f"stone geometry: '+' junctions {four}, straight seams > 20 px {len(seams)}, neighbour step > 1 {len(steps)}, "
+          f"calm stone size median {np.median(calm_sizes):.0f} px (36-44 target)  {'OK' if ok else 'FAIL'}")
     # 4. brightness cap inside the rect; stone and moss never in the ground (puddle moon glints excepted)
     cap = rel(IDX["stone_dark"])
     vals = np.unique(g[inside & (g != -1)])

@@ -396,6 +396,10 @@ def root_mushroom_spots():
     return spots[:L.GLOW_MUSHROOMS]
 
 
+from .palette import RGB as _RGB  # noqa: E402
+
+LUMI = np.array([0.2126 * ((c[0] / 255) ** 2.2) + 0.7152 * ((c[1] / 255) ** 2.2) + 0.0722 * ((c[2] / 255) ** 2.2)
+                 for c in _RGB])
 STONE = ["bg0", "bg1", "fog", "mist", "stone_dark"]  # v4 stone ramp, darkest first (cap = stone_dark)
 MOSS = ["forest", "fern"]
 SOIL = ["earth", "loam"]
@@ -433,6 +437,30 @@ def _value_field(xx, yy):
     return v, din
 
 
+def long_seams(lab, max_len):
+    """Axis-aligned joint runs longer than max_len px between the same two stones -> [(stone index, run length)]."""
+    out = []
+    for axis in (0, 1):
+        a_ = lab if axis == 0 else lab.T
+        # boundary between two real stones (labels < 0 = outside the arena: the rect edge is not a seam)
+        diff = (a_[:, :-1] != a_[:, 1:]) & (a_[:, :-1] >= 0) & (a_[:, 1:] >= 0)
+        pair = a_[:, :-1] * 100000 + a_[:, 1:]
+        for x in range(diff.shape[1]):
+            run, prev = 0, None
+            col_d, col_p = diff[:, x], pair[:, x]
+            for y in range(len(col_d)):
+                if col_d[y] and col_p[y] == prev:
+                    run += 1
+                else:
+                    if run > max_len:
+                        out.append((int(prev // 100000), run))
+                    run = 1 if col_d[y] else 0
+                    prev = col_p[y] if col_d[y] else None
+            if run > max_len:
+                out.append((int(prev // 100000), run))
+    return out
+
+
 def stone_layout():
     """The flagstone layout: seeds (Poisson by zone, concentric at the altar, cobbles on the paths), Lloyd-relaxed Voronoi
     labels, per-stone base tone (index into STONE), joints, and which cells are missing / broken / sunken."""
@@ -460,13 +488,15 @@ def stone_layout():
         for (x0, y0), (x1, y1) in zip(path, path[1:]):
             seg = math.hypot(x1 - x0, y1 - y0)
             nx, ny = -(y1 - y0) / seg, (x1 - x0) / seg
-            for k in range(int(seg // 9) + 1):
-                t = k * 9 / seg
-                for side in (-1, 0, 1):  # three rows of cobbles, staggered
-                    jitter = r.uniform(-1.2, 1.2)
-                    off = (k % 2) * 4.5 if side == 0 else 0
-                    fixed.append((x0 + (x1 - x0) * (t + off / seg) + nx * side * 5.5 + jitter,
-                                  y0 + (y1 - y0) * (t + off / seg) + ny * side * 5.5))
+            k = 0.0
+            while k <= seg:
+                t = k / seg
+                for side in (-1, 0, 1):  # three loose rows of cobbles: jitter along AND across, uneven stagger
+                    along = r.uniform(-1.8, 1.8) + (r.uniform(3, 5.5) if side == 0 else 0)
+                    across = side * r.uniform(4.6, 6.4) + r.uniform(-1.5, 1.5)
+                    fixed.append((x0 + (x1 - x0) * (t + along / seg) + nx * across,
+                                  y0 + (y1 - y0) * (t + along / seg) + ny * across))
+                k += r.uniform(8.0, 11.0)
     pts = list(fixed)
     pt_arr = np.array(pts)
     for _ in range(9000):
@@ -500,22 +530,43 @@ def stone_layout():
         moved[ok, 0], moved[ok, 1] = mx[ok] / cnt[ok], my[ok] / cnt[ok]
         moved[:nfix] = seeds[:nfix]
         seeds = moved
-    lab = labels_of(seeds)
-    n = len(seeds)
-    # cobbles never grow beyond the path corridor: those pixels go to the nearest flagstone instead
     pd = np.full((H, W), 1e9)
     for pth in L.PATHS:
         for (x0, y0), (x1, y1) in zip(pth, pth[1:]):
             vx, vy = x1 - x0, y1 - y0
             t = np.clip(((xx - x0) * vx + (yy - y0) * vy) / (vx * vx + vy * vy), 0, 1)
             pd = np.minimum(pd, np.hypot(xx - x0 - t * vx, yy - y0 - t * vy))
+    n = len(seeds)
     is_cobble = np.zeros(n, dtype=bool)
     is_cobble[32:nfix] = True
-    stray = is_cobble[lab] & (pd > L.PATH_WIDTH / 2 + 1)
-    if stray.any():
-        others = np.nonzero(~is_cobble)[0]
-        sub_lab = labels_of(seeds[others])
-        lab[stray] = others[sub_lab[stray]]
+    others = np.nonzero(~is_cobble)[0]
+
+    def full_labels(sd):
+        """Voronoi labels; cobbles never grow beyond the path corridor (those pixels go to the nearest flagstone)."""
+        lb = labels_of(sd)
+        stray = is_cobble[lb] & (pd > L.PATH_WIDTH / 2 + 1)
+        if stray.any():
+            lb[stray] = others[labels_of(sd[others])[stray]]
+        return lb
+
+    lab = full_labels(seeds)
+    inside = (xx > AX0 - 2) & (xx < AX1 + 2) & (yy > AY0 - 2) & (yy < AY1 + 2)
+    # break 4-way "+" junctions and long axis-aligned seams: nudge the seeds involved, recompute
+    for _round in range(12):
+        bad = set()
+        q = np.stack([lab[:-1, :-1], lab[:-1, 1:], lab[1:, :-1], lab[1:, 1:]])
+        four = (q[0] != q[1]) & (q[0] != q[2]) & (q[0] != q[3]) & (q[1] != q[2]) & (q[1] != q[3]) & (q[2] != q[3])
+        four &= inside[:-1, :-1]
+        for y, x in zip(*np.nonzero(four)):
+            bad.update(int(v_) for v_ in q[:, y, x])
+        for idx, _len in long_seams(np.where(inside, lab, -1), 20):
+            if idx >= 0:
+                bad.add(idx)
+        if not bad:
+            break
+        for i in sorted(bad):
+            seeds[i] += r.uniform(-4.0, 4.0, 2)
+        lab = full_labels(seeds)
     cnt = np.bincount(lab.ravel(), minlength=n)
     cxs = np.bincount(lab.ravel(), weights=xx.ravel(), minlength=n) / np.maximum(cnt, 1)
     cys = np.bincount(lab.ravel(), weights=yy.ravel(), minlength=n) / np.maximum(cnt, 1)
@@ -535,7 +586,8 @@ def stone_layout():
     calm = (cxs >= CZ[0]) & (cxs <= CZ[2]) & (cys >= CZ[1]) & (cys <= CZ[3])
     tone[calm] = np.where(r.random(calm.sum()) < 0.7, 2, 3)  # calm centre: fog / mist only
     path_cell = np.zeros(n, dtype=bool)
-    path_cell[len(fixed) - (len(fixed) - 1 - 31):nfix] = True  # cobbles (all fixed seeds after the plaza's 32)
+    path_cell[32:nfix] = True  # cobbles (all fixed seeds after the plaza's 32)
+    tone[path_cell] = np.maximum(1, tone[path_cell] - 1)  # cobbles one step darker, before the neighbour smoothing
     # neighbouring stones differ by at most one step
     pairs = set()
     for a_, b_ in ((lab[:, :-1], lab[:, 1:]), (lab[:-1, :], lab[1:, :])):
@@ -552,7 +604,6 @@ def stone_layout():
                 changed = True
         if not changed:
             break
-    tone[path_cell] = np.maximum(1, tone[path_cell] - 1)  # cobbles: one step darker than the flagstones
     # missing stones (soil / moss showing): rare in the mid ring, frequent at the forest edge and under the tree
     dcell = np.minimum.reduce([cxs - AX0, AX1 - cxs, cys - AY0, AY1 - cys])
     p_missing = np.where(dcell < 30, 0.65 * (1 - np.clip(dcell, 0, 30) / 30), 0.04)
@@ -760,6 +811,47 @@ def ground(sprites, decals_, props, ritual, return_masks=False):
     g0 = g.copy()  # one step darker, computed from the original tones (no chained steps)
     for src, dst in STEP_DOWN.items():
         g[shadow_m & (g0 == C.ci(src))] = C.ci(dst)
+    # remove 1-px slivers that would form a period-2 stripe (e.g. a thin stone strip between two joints)
+    jn = joint | np.roll(joint, 1, 0) | np.roll(joint, -1, 0) | np.roll(joint, 1, 1) | np.roll(joint, -1, 1)
+    for _ in range(2):
+        for axis in (0, 1):
+            a_ = g if axis == 0 else g.T
+            jt_ = joint if axis == 0 else joint.T
+            jn_ = jn if axis == 0 else jn.T
+            mid = a_[1:-2]
+            darker = LUMI[np.clip(a_[:-3], 0, None)] < LUMI[np.clip(mid, 0, None)]
+            stripe = (a_[:-3] == a_[2:-1]) & (mid == a_[3:]) & (mid != a_[:-3]) & (mid != C.T) & (a_[:-3] != C.T)
+            # joints are never lightened; a stone sliver touching a joint may only take that joint's tone
+            stripe &= ~(jt_[1:-2] & ~darker) & ~(jn_[1:-2] & ~jt_[1:-2] & darker & ~jt_[:-3])
+            mid[stripe] = a_[:-3][stripe]
+            # a dark joint between two lighter pixels (joint, then a lit edge): darken the next stone pixel instead,
+            # unless that would put it below a joint it touches
+            nxt = a_[2:-1]
+            lum_ = LUMI[np.clip(a_, 0, None)]
+            blocked = ((a_[:-3] == a_[2:-1]) & (mid == a_[3:]) & (mid != a_[:-3]) & (mid != C.T) & (a_[:-3] != C.T)
+                       & jt_[1:-2] & ~darker & ~jt_[2:-1])
+            ok = blocked.copy()
+            for sh in ((1, 0), (-1, 0), (1, 1), (-1, 1)):
+                nb_j = np.roll(jt_, sh[0], sh[1])[2:-1]
+                nb_l = np.roll(lum_, sh[0], sh[1])[2:-1]
+                ok &= ~(nb_j & (nb_l > LUMI[np.clip(mid, 0, None)]))
+            nxt[ok] = mid[ok]
+            if axis == 1:
+                g = a_.T.copy()
+    # safety net: a joint the pass left lighter than a stone pixel it touches takes that stone's tone,
+    # if it stays within the joint/stone contrast budget against all its stone neighbours
+    st_ = cover & ~joint & ~decal & ~shadow_m & (g != C.T)
+    lum = LUMI[np.clip(g, 0, None)]
+    nbs = [(np.roll(np.roll(g, -dy, 0), -dx, 1), np.roll(np.roll(st_, -dy, 0), -dx, 1))
+           for dy, dx in ((0, 1), (1, 0), (0, -1), (-1, 0))]
+    for y, x in zip(*np.nonzero(joint & cover & (g != C.T))):
+        cand = [int(n[y, x]) for n, m in nbs if m[y, x] and LUMI[n[y, x]] < lum[y, x]]
+        if not cand:
+            continue
+        c = min(cand, key=lambda k: LUMI[k])
+        if all((max(LUMI[c], LUMI[n[y, x]]) + 0.05) / (min(LUMI[c], LUMI[n[y, x]]) + 0.05) <= 1.35
+               for n, m in nbs if m[y, x]):
+            g[y, x] = c
     if return_masks:
         return g, dict(S, decal=decal | shadow_m, cover=cover)
     return g
