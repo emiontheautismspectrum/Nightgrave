@@ -21,7 +21,9 @@ from nglib import spec  # noqa: E402
 from nglib.pack import pack  # noqa: E402
 
 SCREENSHOT_PREFIXES = ("boss_fight_", "menu_", "death_panel", "touch_layout", "crisp_", "dash_chevron", "best_scores", "first_run_hint",
-                       "intro_frame", "desktop_layout", "phone_")
+                       "intro_frame", "desktop_layout", "phone_",
+                       # made by check_noise.py, not by this script: keep them across a regeneration
+                       "noise_compare", "arena_v4_compare", "arena_v3_compare", "ground_closeup", "wagon_closeup")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
 
@@ -122,6 +124,18 @@ def write_web_manifest(title, game):
         region = img[o:o + big.shape[0], o:o + big.shape[1]]
         region[m] = pal[big[m]]
         Image.fromarray(img).save(os.path.join(icons, f"icon-{size}.png"), optimize=False)
+    # favicons and the iOS home-screen icon: the same wisp, integer scaled (16 px sprite)
+    for size, name in ((16, "favicon-16"), (32, "favicon-32"), (180, "apple-touch-icon")):
+        k = max(1, size // 24) if size >= 48 else size // 16
+        img = np.zeros((size, size, 3), dtype=np.uint8)
+        img[:] = pal[C.ci("bg0")]
+        big = np.repeat(np.repeat(spr, k, 0), k, 1)
+        oy = (size - big.shape[0]) // 2
+        ox = (size - big.shape[1]) // 2
+        m = big != C.T
+        region = img[oy:oy + big.shape[0], ox:ox + big.shape[1]]
+        region[m] = pal[big[m]]
+        Image.fromarray(img).save(os.path.join(icons, f"{name}.png"), optimize=False)
     # tiny 8x8 board icons (palette colours): knight helmet, wisp flame, phone (zoomed portrait runs)
     icon_art = {
         "hero-knight": ["..AAA...", ".BBBB...", ".BKKKS..", ".BBBBS..", "..SBBS..", ".BBBBBS.", ".BB.SS..", "........"],
@@ -145,6 +159,49 @@ def write_web_manifest(title, game):
     with open(os.path.join(pub, "manifest.webmanifest"), "w", encoding="utf-8") as fp:
         json.dump(manifest, fp, indent=1)
         fp.write("\n")
+
+
+def px8_text(img, x, y, s, scale, rgb):
+    """Blit text with the game's own bitmap font (public/fonts/px8.png + .xml, made by gen_font.py) at an integer scale."""
+    import xml.etree.ElementTree as ET
+    root = ET.parse(os.path.join(ROOT, "public", "fonts", "px8.xml")).getroot()
+    chars = {int(c.get("id")): c for c in root.iter("char")}
+    sheet = np.array(Image.open(os.path.join(ROOT, "public", "fonts", "px8.png")).convert("RGBA"))
+    for ch in s:
+        c = chars.get(ord(ch))
+        if c is None:  # an Element without children is falsy: compare with None
+            c = chars[32]
+        gx, gy, gw, gh = (int(c.get(k)) for k in ("x", "y", "width", "height"))
+        m = sheet[gy:gy + gh, gx:gx + gw, 3] > 127
+        m = np.repeat(np.repeat(m, scale, 0), scale, 1)
+        oy = y + int(c.get("yoffset")) * scale
+        ox = x + int(c.get("xoffset")) * scale
+        region = img[oy:oy + m.shape[0], ox:ox + m.shape[1]]
+        region[m[:region.shape[0], :region.shape[1]]] = rgb
+        x += int(c.get("xadvance")) * scale
+    return x
+
+
+def og_image(art, game, title):
+    """public/og-image.png (1200x630, link previews): the composed arena at 3x, a dark band and the title logo."""
+    from nglib.palette import RGB
+    scene = AP.scene_only(art, game)  # 480x270 RGB
+    crop = scene[24:24 + 210, 40:40 + 400]
+    img = np.repeat(np.repeat(crop, 3, 0), 3, 1).copy()  # 1200x630
+    pal = np.array(RGB, dtype=np.uint8)
+    band = img[215:415].astype(np.float64)
+    img[215:415] = (band * 0.25 + pal[C.ci("bg0")] * 0.75).astype(np.uint8)
+    img[215:218] = pal[C.ci("stone")]
+    img[412:415] = pal[C.ci("stone")]
+    sc = 10
+    w = len(title) * 8 * sc
+    px8_text(img, (1200 - w) // 2 + 6, 245 + 6, title, sc, pal[C.ci("bg0")])  # drop shadow
+    px8_text(img, (1200 - w) // 2, 245, title, sc, pal[C.ci("gold")])
+    sub = "PARRY. DASH. SURVIVE THE NIGHT."
+    w2 = len(sub) * 8 * 3
+    px8_text(img, (1200 - w2) // 2, 352, sub, 3, pal[C.ci("bone")])
+    Image.fromarray(img).save(os.path.join(ROOT, "public", "og-image.png"), optimize=True)
+    Image.fromarray(img).save(os.path.join(ASSETS, "preview", "og-image.png"), optimize=True)  # review copy
 
 
 def heroes_compare(game):
@@ -238,6 +295,7 @@ def main():
     write_web_manifest(read_title(), game)
     import gen_font  # noqa: E402  pixel-exact bitmap font for the game's text
     gen_font.main()
+    og_image(art, game, read_title().upper())
     for n in art["notes"]:
         print("note:", n)
     print(f"generated {len(sprites)} sprites ({len(art['sprites'])} arena), {len(art['props'])} placed props, "
