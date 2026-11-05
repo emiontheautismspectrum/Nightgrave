@@ -28,6 +28,8 @@ const FADE_ALPHA_WIDE = 0.45;
 const WIDE_PROP_PX = 40;
 const FADE_PER_MS = (1 - FADE_ALPHA) / 100;
 const FADE_PAD = 4;
+const ARENA_RECT = MANIFEST.layout.arena as [number, number, number, number];
+const OVERHANG_DEPTH = 8; // forest overhang reaches at most 8 px into the arena (arena_layout.OVERHANG_MAX)
 /** Base y of the portal altar prop: the shade and its ignite telegraph draw in front of it. */
 const ALTAR_BASE = ARENA_PROPS.props.find((p) => p.sprite === 'portal_altar')?.baseY ?? 0;
 const FONT = '"Press Start 2P", monospace';
@@ -60,6 +62,7 @@ export class GameScene extends Phaser.Scene {
   private fog!: Phaser.GameObjects.TileSprite;
   private runes: Phaser.GameObjects.Sprite[] = [];
   private runeOverlay: Phaser.GameObjects.Sprite[] = [];
+  private overhang!: Phaser.GameObjects.Image;
   private parallax: { sprite: Phaser.GameObjects.TileSprite; k: number }[] = [];
   /** Placed props, y-sorted with the actors; `alpha` eases toward 1 or the translucency target. */
   private props: { s: Phaser.GameObjects.Sprite; x0: number; y0: number; x1: number; y1: number; base: number; fade: number }[] = [];
@@ -103,6 +106,8 @@ export class GameScene extends Phaser.Scene {
     this.add.image(0, 0, bgKey('vignette')).setOrigin(0).setDepth(D_FOG + 1).setAlpha(al.vignette ?? 1);
     this.add.image(0, 0, bgKey('vignette_outer')).setOrigin(0).setDepth(D_FOG + 1).setAlpha(al.vignette_outer ?? 1);
     this.add.image(0, 0, bgKey('forest_near')).setOrigin(0).setDepth(D_FOG + 2);
+    // the thin overhang reaching into the arena (<= 8 px) fades like a prop when an actor comes near the edge
+    this.overhang = this.add.image(0, 0, bgKey('forest_overhang')).setOrigin(0).setDepth(D_FOG + 2);
     this.buildTelegraphOverlay();
     this.reticle = this.add.image(0, 0, ATLAS, frame('cursor_reticle')).setDepth(D_HUD);
     this.buildHud();
@@ -177,6 +182,7 @@ export class GameScene extends Phaser.Scene {
     for (const v of this.casterViews.values()) for (const o of [v.body, v.tele, v.fx]) o.destroy();
     this.casterViews.clear();
     for (const p of this.props) p.s.setAlpha(1);
+    this.overhang.setAlpha(1);
     this.tweens.killTweensOf(this.banner);
     this.banner.setAlpha(0);
     this.acc = 0;
@@ -419,6 +425,14 @@ export class GameScene extends Phaser.Scene {
     }
     for (const c of st.casters) if (st.tick >= c.appear0) boxes.push([c.x - 10, c.y - 20, c.x + 10, c.y + 4, c.y + 4]);
     const dt = this.game.loop.delta;
+    // overhang: fade while any actor box comes within (overhang depth + pad) of the arena rectangle's edge
+    const [ax0, ay0, ax1, ay1] = ARENA_RECT;
+    const reach = OVERHANG_DEPTH + FADE_PAD;
+    const nearEdge = boxes.some(([x0, y0, x1, y1]) => x0 < ax0 + reach || x1 > ax1 - reach || y0 < ay0 + reach || y1 > ay1 - reach);
+    const oTarget = nearEdge ? FADE_ALPHA : 1;
+    const oa = this.overhang.alpha;
+    if (oa !== oTarget)
+      this.overhang.setAlpha(oa < oTarget ? Math.min(oTarget, oa + FADE_PER_MS * dt) : Math.max(oTarget, oa - FADE_PER_MS * dt));
     for (const p of this.props) {
       let behind = false;
       for (const [x0, y0, x1, y1, base] of boxes) {

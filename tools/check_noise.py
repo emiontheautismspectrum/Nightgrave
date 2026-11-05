@@ -9,8 +9,9 @@ Baselines are rendered from git, by exporting that commit's tools/ into a temp d
   PREV   (the arena right before the v2 softening pass: same composition as the current arena, incl. placed props)
 Requirements (both metrics): new <= 1.3 x STAGE0 and new <= 0.6 x PREV. The Stage 0 baseline is a floor without
 sprites, so it is compared like-for-like with the new floor (no props) AND, as asked, with the full new arena.
-Also: zero fine (1 px) checkerboard dither in ground, forest, fog and vignette layers. A fine checker is a 3x3 window of
-pure 1-px alternation; the coarse 2x2-pixel pattern allowed on the fog edge does not match it.
+Also: zero fine dither in ground, forest, fog and vignette layers: no 4x4 window may be a non-uniform period-2 lattice
+(1-px checkerboards, stripes, 25/50/75% bayer). The coarse 2x2-block pattern allowed on the fog edge has period 4.
+Placed arena props may have at most PROP_DITHER_MAX such windows each.
 Usage: python3 tools/check_noise.py [--json out.json]
 """
 import hashlib
@@ -31,9 +32,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STAGE0_COMMIT = "7454e7f"  # "Stage 0: deterministic pixel-art pipeline, palette validator, style board"
 PREV_COMMIT = "ff5f5a3"  # Part C: the last arena before the v2 softening pass
 BUSY_RANGE = 8.0  # L* units
+PROP_DITHER_MAX = 4  # "a few pixels of texture" per prop sprite
 MAX_VS_STAGE0 = 1.3
 MAX_VS_PREV = 0.6
-LAYERS = ("arena_ground", "forest_far", "forest_mid", "forest_mist", "forest_near", "fog_overlay", "vignette", "vignette_outer")
+LAYERS = ("arena_ground", "forest_far", "forest_mid", "forest_mist", "forest_near", "forest_overhang", "fog_overlay",
+          "vignette", "vignette_outer")
 CACHE = os.path.join(tempfile.gettempdir(), "nightgrave-noise-cache")
 
 
@@ -101,6 +104,8 @@ def compose_current(assets):
         if os.path.exists(f):
             blend(img, f, al.get(n, 1.0))
     over(img, os.path.join(bgd, "forest_near.png"))
+    if os.path.exists(os.path.join(bgd, "forest_overhang.png")):
+        over(img, os.path.join(bgd, "forest_overhang.png"))
     return img
 
 
@@ -118,6 +123,7 @@ def compose_floor(assets):
     for n in ("vignette", "vignette_outer"):
         blend(img, os.path.join(bgd, f"{n}.png"), al.get(n, 1.0))
     over(img, os.path.join(bgd, "forest_near.png"))
+    over(img, os.path.join(bgd, "forest_overhang.png"))
     return img
 
 
@@ -180,15 +186,32 @@ def metrics(img):
     return float(np.mean(blocks)), float(np.mean(busy))
 
 
-def fine_checkers(path):
-    """Count 3x3 windows of pure 1-px alternation (transparent counts as a colour)."""
+def fine_dither(path, frame_w=None):
+    """Count 4x4 windows that form a non-uniform period-2 lattice (1-px checkerboards, 1-px stripes, 25/50/75% bayer,
+    any 2x2-periodic texture). Transparent counts as a colour. The coarse 2x2-block pattern has period 4 and passes."""
     im = np.array(Image.open(path).convert("RGBA")).astype(np.int64)
     key = np.where(im[..., 3] == 255, (im[..., 0] << 16) | (im[..., 1] << 8) | im[..., 2], -1)
+    if key.shape[0] < 4 or key.shape[1] < 4:
+        return 0
     a = key
-    p, q = a[:-2, :-2], a[:-2, 1:-1]
-    same_p = (a[:-2, 2:] == p) & (a[1:-1, 1:-1] == p) & (a[2:, :-2] == p) & (a[2:, 2:] == p)
-    same_q = (a[1:-1, :-2] == q) & (a[1:-1, 2:] == q) & (a[2:, 1:-1] == q)
-    return int((same_p & same_q & (p != q)).sum())
+    hgt, wid = a.shape
+    per = np.ones((hgt - 3, wid - 3), dtype=bool)
+    nonuni = np.zeros_like(per)
+    base = a[:hgt - 3, :wid - 3]
+    for dy in range(4):
+        for dx in range(4):
+            cell = a[dy:hgt - 3 + dy, dx:wid - 3 + dx]
+            ref = a[dy % 2:hgt - 3 + dy % 2, dx % 2:wid - 3 + dx % 2]
+            per &= cell == ref
+            nonuni |= cell != base
+    hits = per & nonuni
+    if frame_w:  # ignore windows straddling two frames of a strip
+        cols = np.arange(wid - 3)
+        hits &= ((cols % frame_w) + 3) < frame_w
+    return int(hits.sum())
+
+
+fine_checkers = fine_dither
 
 
 def write_compare(panels):
@@ -244,7 +267,21 @@ def main():
         if c:
             bad[n] = c
     failed |= bool(bad)
-    print(f"fine 1-px checkerboard windows in {', '.join(LAYERS)}: {bad or 0}  {'FAIL' if bad else 'OK'}")
+    print(f"fine dither (period-2 lattice) windows in {', '.join(LAYERS)}: {bad or 0}  {'FAIL' if bad else 'OK'}")
+    # placed arena props: at most a few texture pixels (v2 rule 2)
+    props = json.load(open(os.path.join(here, "data", "arena_props.json")))["props"]
+    manifest = json.load(open(os.path.join(here, "atlas", "manifest.json")))["sprites"]
+    prop_hits = {}
+    for name in sorted({p["sprite"] for p in props if p["kind"] != "eyes"}):
+        if manifest[name]["group"] != "arena":
+            continue
+        c = fine_dither(os.path.join(here, "sprites", f"{name}.png"), manifest[name]["w"])
+        if c:
+            prop_hits[name] = c
+    worst = max(prop_hits.values(), default=0)
+    ok = worst <= PROP_DITHER_MAX
+    failed |= not ok
+    print(f"fine dither windows in placed arena props (<= {PROP_DITHER_MAX} each): {prop_hits or 0}  {'OK' if ok else 'FAIL'}")
     if "--json" in sys.argv:
         json.dump({"stage0": s0, "prev": prev, "current": cur, "current_floor": cur_floor},
                   open(sys.argv[sys.argv.index("--json") + 1], "w"))

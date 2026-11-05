@@ -56,6 +56,8 @@ def compose_rgb(bg, sprites, props, actors=(), telegraphs=(), alphas=None, overr
     if "vignette_outer" in bg:
         paste_rgb(img, bg["vignette_outer"], 0, 0, al.get("vignette_outer", 1.0))
     paste_rgb(img, bg["forest_near"], 0, 0)
+    if "forest_overhang" in bg:
+        paste_rgb(img, bg["forest_overhang"], 0, 0)
     return np.clip(np.round(img), 0, 255).astype(np.uint8)
 
 

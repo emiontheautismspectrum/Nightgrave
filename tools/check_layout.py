@@ -5,7 +5,7 @@
 - >= 45% of the arena area free of any prop bounding box (flat ground decals are not props)
 - calm zone: no prop box inside (landmarks: pixel-accurate, since e.g. the giant tree's box is mostly empty)
 - portal: no other decor pixel within the clear radius of the altar centre
-- graves: >= 24 px from every landmark box, >= 20 px from the altar box
+- graves: >= 24 px from every landmark box, >= 20 px from the altar box, never touching each other
 - hollows: >= 30 px from every landmark's pixels and every grave's box
 - animation: at most 4 animated landmarks in any 200x120 window
 Usage: python3 tools/check_layout.py
@@ -89,6 +89,13 @@ def main():
         d = float(np.sqrt((xs - px_) ** 2 + (ys - py_) ** 2).min()) if len(xs) else 1e9
         if d < lay["portalClearRadius"]:
             errs.append(f"{p['sprite']} is {d:.1f} px from the portal (< {lay['portalClearRadius']})")
+    for i, a in enumerate(graves):  # loose clusters: graves never overlap or touch, no twin next to its twin
+        for b in graves[i + 1:]:
+            d = box_dist(box(a), box(b))
+            if d < 1:
+                errs.append(f"graves {a['sprite']}@({a['x']},{a['y']}) and {b['sprite']}@({b['x']},{b['y']}) touch")
+            if a["sprite"] == b["sprite"] and d < 16:
+                errs.append(f"two {a['sprite']} graves stand side by side")
     altar = next(box(p) for p in lms if p["sprite"] == "portal_altar")
     for g in graves:
         if box_dist(box(g), altar) < 20:

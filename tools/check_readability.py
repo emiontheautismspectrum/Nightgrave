@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """Readability check for the arena (exit 1 on failure).
 
-1. GROUND (gating): every projectile frame is evaluated at EVERY position inside the arena rectangle on the
-   composed ground (forest + arena_ground), with fog and vignette drawn over it exactly as in the game. For each
-   placement: mean relative luminance of the projectile's body pixels (violet / blood, after fog) vs. the mean
-   luminance of the 3 px ring around its silhouette -> WCAG contrast ratio. Targets: violet >= 3.0, blood >= 2.5,
-   for the worst placement. (The spec asks for >= 300 seeded positions; the exhaustive sweep is a superset.)
-2. OVER PROPS (reported, not gating): the same sweep over ground + placed props. Props are drawn behind
-   projectiles but some are bright (bone, moon rim), so this shows where Part C's y-sort/translucency and prop
-   palette matter.
-3. CALM ZONE (gating): the central 200x120 of arena_ground has no neighbouring-pixel contrast above CALM_MAX, and no
-   prop box enters it except the author's authoritative graveyard (fence contour reaches x=163).
+1. GROUND (gating): every projectile frame is evaluated at EVERY position inside the arena rectangle on the composed
+   ground (forest + mist + arena_ground), with fog, both vignette steps and the forest overhang (faded, as the game
+   fades it when an actor is near the edge) drawn over it with the game's alphas. For each placement: mean relative
+   luminance of the projectile's body pixels (violet / blood, after the overlays) vs. the mean luminance of the 3 px
+   ring around its silhouette -> WCAG contrast. Targets: violet >= 3.0, blood >= 2.5 for the worst placement.
+2. OVER PROPS (goal, reported): the same sweep over ground + placed props drawn BEHIND the projectile. Goal: violet
+   < 10% and blood < 25% of positions below target. Props in FRONT of a projectile fade to 35-45% in the game.
+3. CALM ZONE (gating): the central zone of arena_ground has no neighbouring-pixel contrast above CALM_MAX
+   (props in the calm zone are checked by check_layout.py).
 
 If a value is below target, fix the GROUND (darker/calmer), never recolor threats.
 Usage: python3 tools/check_readability.py
@@ -33,7 +32,6 @@ ASSETS = os.path.join(ROOT, "assets")
 TARGET = {"violet": 3.0, "blood": 2.5}
 PROJECTILES = {"orb_small": "violet", "orb_large": "violet", "rune_shard": "violet", "wraith": "violet", "blade": "blood"}
 CALM_MAX = 1.6
-CALM_EXEMPT_KINDS = {"fence", "grave"}  # inside the author's fence contour
 
 
 def lum_table():
@@ -100,6 +98,7 @@ def sweep(lum, fog_mask, fog_rgb, alpha, frames, hue):
 
 
 GOAL_OVER_PROPS = {"violet": 0.10, "blood": 0.25}
+OVERHANG_FADE = 0.35  # the game fades the overhang when an actor is near the arena edge (GameScene)
 
 
 def main():
@@ -137,8 +136,12 @@ def main():
     fa = al.get("fog_overlay", 1.0)
     fog_mask = fog[..., 3] == 255
     fog_rgb = np.array(RGB[IDX["fog"]], dtype=np.float64)
-    put(base, fog, fa)
-    put(with_props, fog, fa)
+    for img in (base, with_props):
+        put(img, fog, fa)
+        put(img, rgb("vignette"), al.get("vignette", 1.0))
+        put(img, rgb("vignette_outer"), al.get("vignette_outer", 1.0))
+        put(img, rgb("forest_near"))
+        put(img, rgb("forest_overhang"), OVERHANG_FADE)
     lum_g, lum_p = lum_rgb(base), lum_rgb(with_props)
 
     failed = False

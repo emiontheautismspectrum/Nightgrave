@@ -167,7 +167,7 @@ def gallows_cage():
             C.put(a, 7 + (sway * y) // 9, y, "dry")
         cx = 7 + sway
         for y in range(9, 24):
-            for x in (cx - 4, cx - 2, cx + 1, cx + 3):
+            for x in (cx - 4, cx - 1, cx + 2):  # bars 3 px apart (period-2 bars read as fine stripes)
                 C.put(a, x, y, "stone_dark")
         for x in range(cx - 4, cx + 4):
             C.put(a, x, 9, "stone")

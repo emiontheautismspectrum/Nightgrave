@@ -98,7 +98,7 @@ class Placer:
 
 
 
-TREE_HOLLOW_CLEAR = 22  # trees may stand a little closer to a hollow than landmarks/graves (30), never in it
+TREE_HOLLOW_CLEAR = 30  # stalkers step out of hollows: trees keep the same clearance as landmarks and graves
 
 
 def box_of(sprites, p):
@@ -156,7 +156,7 @@ def place_all(sprites):
     P.overlay(gal, "crow", 38, 2, "crow")
     well = lm("cursed_well", L.WELL)
     P.overlay(well, "well_wisp", 6, -9, "well_wisp")
-    lm("gas_lamp_1", L.WELL_LAMP)
+    lm("gas_lamp_short", L.WELL_LAMP)
     lm("beast_ribcage", L.RIBCAGE)
     lm("hunter_wagon", L.WAGON, anim="hunter_wagon")
     lm("horse_skeleton", L.WAGON_HORSE, flip=True)
@@ -198,7 +198,9 @@ def place_all(sprites):
             b = P.box_for(v, x, y)
             grave_boxes = [box_of(sprites, q) for q in P.props if q["kind"] == "grave"]
             others_free = all(not boxes_overlap(b, ob, 2) for ob in P.boxes if ob not in grave_boxes)
-            graves_free = all(not boxes_overlap(b, gb, -3) for gb in grave_boxes)  # rows may overlap a little in depth
+            graves_free = all(not boxes_overlap(b, gb, 2) for gb in grave_boxes)  # loose clusters: graves never touch
+            if graves and graves[-1][2] == v:
+                continue  # never the same variant twice in a row
             ok = (not in_calm(b) and others_free and graves_free and hollow_ok(b)
                   and box_dist(b, altar_box) >= L.GRAVE_ALTAR_CLEAR
                   and all(box_dist(b, lb) >= L.GRAVE_LANDMARK_CLEAR for n_, lb in landmarks if n_ != "portal_altar")
@@ -477,7 +479,7 @@ def _gap_hollows(a, radius):
 
 def forest_far():
     a = np.full((H, W), C.ci("bg0"), dtype=np.int16)
-    sil = _forest(11, "stone_dark", 30, 8, 16)
+    sil = _gap_hollows(_forest(11, "stone_dark", 30, 8, 16), 16)  # hollows stay dark gaps in every layer
     a[sil != C.T] = sil[sil != C.T]
     return a
 
@@ -524,6 +526,16 @@ def forest_near():
             C.line(a, x0 + t * (side >= 2), y0 + t * (side < 2), x0 + dx, y0 + dy, "bg0")
     a[AY0 + m:AY1 - m, AX0 + m:AX1 - m] = C.T
     return _gap_hollows(a, 12)
+
+
+def split_overhang(near):
+    """forest_near -> (outside part, opaque) + (overhang inside the arena rect, fades like a prop in the game)."""
+    inside = np.zeros((H, W), dtype=bool)
+    inside[AY0:AY1, AX0:AX1] = True
+    outer, over = near.copy(), near.copy()
+    outer[inside] = C.T
+    over[~inside] = C.T
+    return outer, over
 
 
 def vignette(outer=False):

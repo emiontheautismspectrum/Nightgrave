@@ -24,6 +24,10 @@
    "h": 270,
    "w": 480
   },
+  "forest_overhang": {
+   "h": 270,
+   "w": 480
+  },
   "vignette": {
    "h": 270,
    "w": 480
@@ -72,7 +76,7 @@
     "parallax": 0.0
    }
   ],
-  "graves": 11,
+  "graves": 8,
   "heroSpawn": [
    240,
    135
@@ -177,11 +181,11 @@
    {
     "box": [
      380,
-     134,
+     144,
      392,
      162
     ],
-    "sprite": "gas_lamp_1"
+    "sprite": "gas_lamp_short"
    },
    {
     "box": [
@@ -540,6 +544,12 @@
    "frames": 2,
    "group": "arena",
    "h": 28,
+   "w": 12
+  },
+  "gas_lamp_short": {
+   "frames": 2,
+   "group": "arena",
+   "h": 18,
    "w": 12
   },
   "giant_tree": {

@@ -394,6 +394,17 @@ def lamps_candles_weapons():
         a[2, hx - 1:hx + 2] = C.ci("stone")
         a[26, 3:9] = C.ci("stone")
         out[f"gas_lamp_{i}"] = prop(a)
+    # short bent lamp (18 px) for tight spots, e.g. beside the well under the giant tree
+    a = C.new(12, 18)
+    for y in range(6, 17):
+        x = 4 + max(0, 9 - y) // 3
+        C.put(a, x, y, "stone_dark")
+        C.put(a, x + 1, y, "stone_dark")
+    a[2:6, 6:10] = C.ci("stone_dark")
+    a[3:5, 7:9] = C.ci("fog")
+    a[1, 6:9] = C.ci("stone")
+    a[16, 2:8] = C.ci("stone")
+    out["gas_lamp_short"] = prop(a)
     for i, rows in enumerate([[".K.", ".B.", ".B.", ".B.", "DDD"], [".K..", ".BB.", ".BB.", "DDDD"]]):
         out[f"candle_{i}"] = _ascii_prop(rows, BONE, {"dry": "earth", "earth": "bg1"})
     weapons = {
