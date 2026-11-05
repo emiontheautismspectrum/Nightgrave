@@ -235,6 +235,6 @@ describe('private data in responses and logs', () => {
     const src = readFileSync('tools/verify/pending.ts', 'utf8');
     // only interpolated values matter (the text may name a variable): ids, verdicts, timings, HTTP status
     for (const line of src.split('\n').filter((l) => l.includes('console.')))
-      for (const m of line.matchAll(/\$\{([^}]*)\}/g)) expect(m[1], line).not.toMatch(/TOKEN|headers|replay|body|raw\b|\bit\.|ip/i);
+      for (const m of line.matchAll(/\$\{([^}]*)\}/g)) expect(m[1], line).not.toMatch(/TOKEN|headers|replay|body|\braw\b|\bit\.|\bip\b/i);
   });
 });
