@@ -11,3 +11,10 @@ __pycache__/
 .env
 .env.*
 !.env.example
+# local D1 / SQLite files
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.db
+server/.wrangler/
