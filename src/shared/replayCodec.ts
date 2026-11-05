@@ -76,8 +76,37 @@ export function decodeInputLog(b64: string, maxTicks = 60 * 60 * 120): InputFram
   return frames;
 }
 
-/** Tick count of an encoded log without materialising the frames (null if malformed). */
+/**
+ * Tick count of an encoded log WITHOUT materialising frames (cheap: sums run lengths, validates the structure).
+ * Stops with null as soon as the total exceeds maxTicks.
+ */
 export function countTicks(b64: string, maxTicks = 60 * 60 * 120): number | null {
-  const f = decodeInputLog(b64, maxTicks);
-  return f ? f.length : null;
+  let bin: string;
+  try {
+    if (typeof b64 !== 'string' || b64.length > Math.ceil((MAX_REPLAY_BYTES * 4) / 3) + 4) return null;
+    bin = atob(b64);
+  } catch {
+    return null;
+  }
+  let p = 0;
+  const readVar = (): number | null => {
+    let v = 0;
+    for (let s = 0; s < 35; s += 7) {
+      if (p >= bin.length) return null;
+      const b = bin.charCodeAt(p++);
+      v += (b & 0x7f) * 2 ** s;
+      if (!(b & 0x80)) return v > 0xffffffff ? null : v;
+    }
+    return null;
+  };
+  let total = 0;
+  while (p < bin.length) {
+    const n = readVar();
+    if (n === null || n < 1 || p >= bin.length) return null;
+    total += n;
+    if (total > maxTicks) return null;
+    if (bin.charCodeAt(p++) > 7) return null;
+    if (readVar() === null || readVar() === null) return null;
+  }
+  return total;
 }

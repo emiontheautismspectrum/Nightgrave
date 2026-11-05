@@ -46,7 +46,7 @@ Generate a random value (works on Windows, macOS and Linux):
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Run it twice and keep both values somewhere private (a password manager). Then store them in Cloudflare:
+Run it twice (each value must be at least 32 characters; this command prints 64) and keep both values somewhere private (a password manager). Then store them in Cloudflare:
 
 ```bash
 npx wrangler secret put ADMIN_TOKEN

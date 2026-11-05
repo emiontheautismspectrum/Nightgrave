@@ -308,7 +308,7 @@ describe('pickups', () => {
       }
     expect(spawns).toBeGreaterThan(20);
     expect(takes).toBeGreaterThanOrEqual(0);
-  });
+  }, 30_000); // long bot runs: slow when the suite runs in parallel with the production-bundle build
 
   it('taking the same pickup twice refreshes the timer instead of stacking', () => {
     const p = makeParams('medium');

@@ -45,7 +45,7 @@ export function parseBoard(raw: unknown): Board | null {
   for (const e of o.top.slice(0, 10)) {
     if (!e || typeof e !== 'object') continue;
     const r = e as Record<string, unknown>;
-    const name = str(r.name, 64);
+    const name = str(r.name, 128); // the server caps names at 32 code points
     const score = int(r.score);
     const rank = int(r.rank);
     const dur = int(r.durationTicks);
@@ -54,7 +54,7 @@ export function parseBoard(raw: unknown): Board | null {
   }
   let champion: Board['champion'] = null;
   const c = o.champion as Record<string, unknown> | null;
-  if (c && typeof c === 'object' && str(c.name, 64)) champion = { name: c.name as string, message: str(c.message, 200) };
+  if (c && typeof c === 'object' && str(c.name, 128)) champion = { name: c.name as string, message: str(c.message, 320) };
   return { date, serverNow: now, top, champion };
 }
 

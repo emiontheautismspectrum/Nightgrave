@@ -27,13 +27,24 @@ const FORBIDDEN = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}\p{Regional_Indica
 const NAME_OK = /^[\p{L}\p{M}\p{N} _.\-]+$/u;
 const MSG_OK = /^[\p{L}\p{M}\p{N} _.\-!?,':]+$/u;
 
+/** At most this many combining marks in a row (no "zalgo" stacks over the title screen). */
+const MARK_RUN = /\p{M}{3,}/u;
+/** Common Cyrillic/Greek look-alikes of Latin letters (for the word filter only). */
+const CONFUSABLE: Record<string, string> = {
+  а: 'a', е: 'e', о: 'o', р: 'p', с: 'c', у: 'y', х: 'x', к: 'k', м: 'm', т: 't', в: 'b', н: 'h', і: 'i', ј: 'j',
+  α: 'a', ο: 'o', ρ: 'p', ν: 'v', κ: 'k', τ: 't', ι: 'i', υ: 'u',
+};
+
 const LEET: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', $: 's', '!': 'i', '|': 'l' };
 const WORDS: string[] = (profanity as { words: string[] }).words.map((w) => w.toLowerCase());
 
 /** Lowercase, map leetspeak, drop separators and everything that is not a letter. Two variants for 1 -> i / l. */
 function skeletons(s: string): string[] {
-  const low = s.toLowerCase().replace(/ё/g, 'е');
+  const base = s.toLowerCase().replace(/ё/g, 'е');
+  const stripped = base.normalize('NFD').replace(/\p{M}/gu, '').normalize('NFC');
+  const latin = [...stripped].map((c) => CONFUSABLE[c] ?? c).join('');
   const out: string[] = [];
+  for (const low of [base, stripped, latin])
   for (const one of ['i', 'l']) {
     let r = '';
     for (const ch of low) {
@@ -55,7 +66,8 @@ export function validateName(raw: unknown): { ok: true; value: string } | { ok: 
   if (FORBIDDEN.test(raw.normalize('NFKC'))) return { ok: false, error: 'chars' }; // before whitespace folding
   const v = normalizeText(raw);
   if (!v) return { ok: false, error: 'empty' };
-  if (FORBIDDEN.test(v) || !NAME_OK.test(v)) return { ok: false, error: 'chars' };
+  if (FORBIDDEN.test(v) || !NAME_OK.test(v) || MARK_RUN.test(v)) return { ok: false, error: 'chars' };
+  if ([...v].length > 32) return { ok: false, error: 'long' };
   const n = graphemes(v);
   if (n < 3) return { ok: false, error: 'short' };
   if (n > 16) return { ok: false, error: 'long' };
@@ -68,8 +80,8 @@ export function validateMessage(raw: unknown): { ok: true; value: string } | { o
   if (FORBIDDEN.test(raw.normalize('NFKC'))) return { ok: false, error: 'chars' }; // before whitespace folding
   const v = normalizeText(raw);
   if (!v) return { ok: false, error: 'empty' };
-  if (FORBIDDEN.test(v) || !MSG_OK.test(v)) return { ok: false, error: 'chars' };
-  if (graphemes(v) > 40) return { ok: false, error: 'long' };
+  if (FORBIDDEN.test(v) || !MSG_OK.test(v) || MARK_RUN.test(v)) return { ok: false, error: 'chars' };
+  if ([...v].length > 80 || graphemes(v) > 40) return { ok: false, error: 'long' };
   if (hasProfanity(v)) return { ok: false, error: 'words' };
   return { ok: true, value: v };
 }

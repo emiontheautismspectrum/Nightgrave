@@ -16,7 +16,7 @@ let ipN = 0;
 beforeEach(() => {
   const d = makeD1();
   raw = d.raw;
-  env = { DB: d.DB as Env['DB'], ADMIN_TOKEN: 'secret-admin-token', IP_SALT: 'salt', ALLOWED_ORIGINS: `${ORIGIN},http://localhost:5173` };
+  env = { DB: d.DB as Env['DB'], ADMIN_TOKEN: 'secret-admin-token-0123456789abcdef', IP_SALT: 'salt-0123456789abcdef', ALLOWED_ORIGINS: `${ORIGIN},http://localhost:5173` };
 });
 
 const pid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -200,11 +200,11 @@ describe('admin', () => {
     expect((await admin('POST', `/api/admin/clear-message/${id}`)).status).toBe(404);
     expect((await admin('POST', `/api/admin/clear-message/${id}`, 'wrong')).status).toBe(404);
     expect((await admin('POST', `/api/admin/clear-message/${id}`, '')).status).toBe(404);
-    expect((await admin('POST', `/api/admin/clear-message/${id}`, 'secret-admin-token')).status).toBe(200);
+    expect((await admin('POST', `/api/admin/clear-message/${id}`, 'secret-admin-token-0123456789abcdef')).status).toBe(200);
     expect(raw.prepare('SELECT message FROM entries').get()).toEqual({ message: null });
-    expect((await admin('DELETE', `/api/admin/entry/${id}`, 'secret-admin-token')).status).toBe(200);
-    expect((await admin('DELETE', `/api/admin/entry/${id}`, 'secret-admin-token')).status).toBe(404);
-    expect((await admin('DELETE', '/api/admin/entry/abc', 'secret-admin-token')).status).toBe(404);
+    expect((await admin('DELETE', `/api/admin/entry/${id}`, 'secret-admin-token-0123456789abcdef')).status).toBe(200);
+    expect((await admin('DELETE', `/api/admin/entry/${id}`, 'secret-admin-token-0123456789abcdef')).status).toBe(404);
+    expect((await admin('DELETE', '/api/admin/entry/abc', 'secret-admin-token-0123456789abcdef')).status).toBe(404);
   });
   it('without an ADMIN_TOKEN configured, admin is always 404', async () => {
     env.ADMIN_TOKEN = undefined;
@@ -225,5 +225,32 @@ describe('scheduled cleanup', () => {
     await cleanup(env, NOW);
     expect(raw.prepare('SELECT COUNT(*) AS n FROM entries').get()).toEqual({ n: 1 });
     expect(raw.prepare("SELECT COUNT(*) AS n FROM ratelimit WHERE key = 'x'").get()).toEqual({ n: 0 });
+  });
+});
+
+describe('review hardening', () => {
+  it('a huge run-length replay is rejected cheaply (no frames built)', async () => {
+    // one run of 432000 ticks in 8 base64 chars, durationTicks 60
+    const r = await post(body({ durationTicks: 60, replay: btoa('\x80\xae\x1a\x01\x00\x00') }));
+    expect(await reason(r)).toBe('replay');
+  });
+  it('IPv6 addresses share a rate-limit bucket per /64', async () => {
+    const { ipKey } = await import('../src/index');
+    expect(ipKey('2001:db8:1:2:aaaa::1')).toBe(ipKey('2001:db8:1:2:bbbb:cccc:dddd:eeee'));
+    expect(ipKey('2001:db8:1:3::1')).not.toBe(ipKey('2001:db8:1:2::1'));
+    expect(ipKey('1.2.3.4')).toBe('1.2.3.4');
+  });
+  it('refuses to run without a strong IP_SALT; a weak ADMIN_TOKEN disables admin', async () => {
+    env.IP_SALT = 'short';
+    expect((await get()).status).toBe(500);
+    env.IP_SALT = 'salt-0123456789abcdef';
+    env.ADMIN_TOKEN = 'short-token';
+    const r = await handle(new Request('https://api.test/api/admin/entry/1', { method: 'DELETE', headers: { Authorization: 'Bearer short-token' } }), env, NOW);
+    expect(r.status).toBe(404);
+  });
+  it('zalgo, look-alike and accented profanity are rejected', async () => {
+    expect(await reason(await post(body({ name: `abc${'́'.repeat(190)}` })))).toBe('name');
+    expect(await reason(await post(body({ name: 'fuсk you' })))).toBe('words');
+    expect(await reason(await post(body({ name: 'fück you' })))).toBe('words');
   });
 });

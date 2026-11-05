@@ -77,7 +77,17 @@ async function safeEqual(a: string, b: string): Promise<boolean> {
 
 /** Raw IPs are never stored: only SHA-256(ip + IP_SALT). */
 async function ipHash(req: Request, env: Env): Promise<string> {
-  return sha256Hex(`${req.headers.get('CF-Connecting-IP') ?? 'unknown'}${env.IP_SALT ?? ''}`);
+  return sha256Hex(`${ipKey(req.headers.get('CF-Connecting-IP') ?? 'unknown')}${env.IP_SALT ?? ''}`);
+}
+
+/** IPv4 as is; IPv6 reduced to its /64 prefix (one customer owns a whole /64, rotating inside it must not help). */
+export function ipKey(ip: string): string {
+  if (!ip.includes(':')) return ip;
+  const [head = '', tail = ''] = ip.toLowerCase().split('::');
+  const h = head ? head.split(':') : [];
+  const t = tail ? tail.split(':') : [];
+  const full = ip.includes('::') ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t] : h;
+  return `${full.slice(0, 4).map((x) => x.replace(/^0+(?=.)/, '')).join(':')}::/64`;
 }
 
 /** Fixed-window counter in D1. Returns true if the call is within the limit. */
@@ -126,7 +136,6 @@ async function getDaily(req: Request, env: Env, now: number): Promise<Response> 
   const today = utcDateKey(new Date(now));
   const date = url.searchParams.get('date') ?? today;
   if (!DATE_RE.test(date) || (date !== today && date !== addDays(today, -1))) return json({ error: 'date' }, 400, req, env);
-  if (!(await allow(env, `get:${await ipHash(req, env)}`, 60_000, LIMITS.getPerMinutePerIp, now))) return json({ error: 'rate' }, 429, req, env);
   let cached: Response | undefined;
   try {
     cached = await caches.default.match(cacheKey(date));
@@ -134,8 +143,9 @@ async function getDaily(req: Request, env: Env, now: number): Promise<Response> 
     cached = undefined;
   }
   let data: { top: object[]; champion: object | null };
-  if (cached) data = (await cached.json()) as typeof data;
+  if (cached) data = (await cached.json()) as typeof data; // cached hits never touch D1
   else {
+    if (!(await allow(env, `get:${await ipHash(req, env)}`, 60_000, LIMITS.getPerMinutePerIp, now))) return json({ error: 'rate' }, 429, req, env);
     data = await board(env, date);
     try {
       await caches.default.put(cacheKey(date), new Response(JSON.stringify(data), { headers: { 'Cache-Control': `public, max-age=${LIMITS.cacheSeconds}` } }));
@@ -178,9 +188,9 @@ export function checkBody(raw: unknown, now: number):
   // 5. plausibility
   const score = o.score as number;
   if (score < 0 || score > maxPossibleScore(d)) return { reason: 'too_high', status: 400 };
-  // 6. replay decodes, fits and matches the duration
+  // 6. replay decodes, fits and matches the duration (cheap: run lengths only, stops past durationTicks)
   const replay = o.replay as string;
-  if (replay.length > Math.ceil((MAX_REPLAY_BYTES * 4) / 3) + 4 || countTicks(replay) !== d) return { reason: 'replay', status: 400 };
+  if (replay.length > Math.ceil((MAX_REPLAY_BYTES * 4) / 3) + 4 || countTicks(replay, d) !== d) return { reason: 'replay', status: 400 };
   // 7. text
   const name = validateName(o.name);
   if (!name.ok) return { reason: name.error === 'words' ? 'words' : 'name', status: 400 };
@@ -193,14 +203,39 @@ export function checkBody(raw: unknown, now: number):
   return { v: { date, score, durationTicks: d, hero: o.hero as string, name: name.value, message, playerId: o.playerId as string, replay } };
 }
 
+/** Read at most `max` bytes of the body (a chunked body without Content-Length cannot flood memory). */
+async function readCapped(req: Request, max: number): Promise<Uint8Array | null> {
+  if (!req.body) return new Uint8Array(0);
+  const reader = req.body.getReader();
+  const parts: Uint8Array[] = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    n += value.byteLength;
+    if (n > max) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    parts.push(value);
+  }
+  const out = new Uint8Array(n);
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.byteLength;
+  }
+  return out;
+}
+
 async function postSubmit(req: Request, env: Env, now: number): Promise<Response> {
   // 1. transport: JSON, size
   const ct = (req.headers.get('Content-Type') ?? '').toLowerCase();
   if (!ct.startsWith('application/json')) return reject('invalid', 415, req, env);
   const len = Number(req.headers.get('Content-Length') ?? '0');
   if (len > LIMITS.bodyBytes) return reject('too_large', 413, req, env);
-  const buf = await req.arrayBuffer();
-  if (buf.byteLength > LIMITS.bodyBytes) return reject('too_large', 413, req, env);
+  const buf = await readCapped(req, LIMITS.bodyBytes);
+  if (!buf) return reject('too_large', 413, req, env);
   let raw: unknown;
   try {
     raw = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(buf));
@@ -239,7 +274,8 @@ async function admin(req: Request, env: Env, now: number, parts: string[]): Prom
   if (!(await allow(env, `admin:${await ipHash(req, env)}`, 60_000, LIMITS.adminPerMinutePerIp, now))) return json({ error: 'rate' }, 429, req, env);
   const auth = req.headers.get('Authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  if (!env.ADMIN_TOKEN || !(await safeEqual(token, env.ADMIN_TOKEN))) return notFound(req, env);
+  // a missing or weak admin token disables moderation entirely (never a guessable password)
+  if (!env.ADMIN_TOKEN || env.ADMIN_TOKEN.length < 32 || !(await safeEqual(token, env.ADMIN_TOKEN))) return notFound(req, env);
   const id = Number(parts[4]);
   if (!Number.isSafeInteger(id) || id < 1 || parts.length !== 5) return notFound(req, env);
   const row = await env.DB.prepare('SELECT date FROM entries WHERE id = ?1').bind(id).first<{ date: string }>();
@@ -256,6 +292,8 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
   const parts = url.pathname.split('/'); // ['', 'api', ...]
   const allowed = origins(env);
   const origin = req.headers.get('Origin');
+  // without a salt the stored IP hashes could be reversed: refuse to run rather than store weak hashes
+  if (!env.IP_SALT || env.IP_SALT.length < 16) return json({ error: 'server' }, 500, req, env);
   if (req.method === 'OPTIONS') {
     if (!origin || !allowed.includes(origin)) return new Response(null, { status: 403, headers: { Vary: 'Origin' } });
     return new Response(null, {
