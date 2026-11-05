@@ -11,6 +11,7 @@ import { playCue } from './sfx';
 import { HOLLOWS, RUNES } from '../data/arena';
 import type { SimEvent } from '../sim/state';
 import { ARENA_PROPS, ATLAS, MANIFEST, bgKey, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
+import { BossView } from './BossView';
 import { InputCollector } from './input';
 
 const STEP_MS = 1000 / TICK_RATE;
@@ -44,6 +45,8 @@ export interface RunConfig {
    * src/sim). `label` is shown in the HUD (Hard: the UTC date the daily seed was derived from).
    */
   makeRun: () => { seed: number; label: string };
+  /** Dev only (previews/screenshots): start at this wave. Never set in production builds. */
+  startWave?: number;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -78,6 +81,8 @@ export class GameScene extends Phaser.Scene {
   private icons!: { parry: Phaser.GameObjects.Image; parryRing: Phaser.GameObjects.Image; dash: Phaser.GameObjects.Image; dashRing: Phaser.GameObjects.Image };
   private panel!: Phaser.GameObjects.Container;
   private panelText!: Phaser.GameObjects.Text;
+  private bossView!: BossView;
+  private vigOuter!: Phaser.GameObjects.Image;
 
   constructor() {
     super('game');
@@ -104,13 +109,14 @@ export class GameScene extends Phaser.Scene {
     this.fog = this.add.tileSprite(0, 0, VIEW_WIDTH, VIEW_HEIGHT, bgKey('fog_overlay')).setOrigin(0).setDepth(D_FOG);
     this.fog.setAlpha(al.fog_overlay ?? 1);
     this.add.image(0, 0, bgKey('vignette')).setOrigin(0).setDepth(D_FOG + 1).setAlpha(al.vignette ?? 1);
-    this.add.image(0, 0, bgKey('vignette_outer')).setOrigin(0).setDepth(D_FOG + 1).setAlpha(al.vignette_outer ?? 1);
+    this.vigOuter = this.add.image(0, 0, bgKey('vignette_outer')).setOrigin(0).setDepth(D_FOG + 1).setAlpha(al.vignette_outer ?? 1);
     this.add.image(0, 0, bgKey('forest_near')).setOrigin(0).setDepth(D_FOG + 2);
     // the thin overhang reaching into the arena (<= 8 px) fades like a prop when an actor comes near the edge
     this.overhang = this.add.image(0, 0, bgKey('forest_overhang')).setOrigin(0).setDepth(D_FOG + 2);
     this.buildTelegraphOverlay();
     this.reticle = this.add.image(0, 0, ATLAS, frame('cursor_reticle')).setDepth(D_HUD);
     this.buildHud();
+    this.bossView = new BossView(this, { ysort: D_YSORT, fog: D_FOG, hud: D_HUD }, this.vigOuter, this.banner, al.vignette_outer ?? 1);
     this.input2 = new InputCollector(this);
     this.newRun();
   }
@@ -165,7 +171,7 @@ export class GameScene extends Phaser.Scene {
       dash: this.add.image(dx, 16, ATLAS, frame('icon_dash')),
       dashRing: this.add.image(dx, 16, ATLAS, frame('icon_ring')),
     };
-    this.hudDaily = this.add.text(6, VIEW_HEIGHT - 12, '', { ...style, color: '#3a4558' });
+    this.hudDaily = this.add.text(6, 54, '', { ...style, color: '#3a4558' });
     const bg = this.add.rectangle(0, 0, 200, 56, 0x0b0d12).setStrokeStyle(1, 0x3a4558);
     this.panelText = this.add.text(0, 0, '', { ...style, align: 'center', lineSpacing: 6 }).setOrigin(0.5);
     this.panel = this.add.container(VIEW_WIDTH / 2, VIEW_HEIGHT / 2, [bg, this.panelText]).setVisible(false);
@@ -175,7 +181,8 @@ export class GameScene extends Phaser.Scene {
 
   private newRun(): void {
     const run = this.cfg.makeRun();
-    this.sim = new Sim(run.seed, this.cfg.difficulty);
+    this.sim = new Sim(run.seed, this.cfg.difficulty, this.cfg.startWave ? { startWave: this.cfg.startWave } : {});
+    this.bossView.reset();
     this.hudDaily.setText(run.label);
     for (const s of this.orbs.values()) s.destroy();
     this.orbs.clear();
@@ -217,6 +224,7 @@ export class GameScene extends Phaser.Scene {
 
   private onEvent(e: SimEvent): void {
     const h = this.sim.state.hero;
+    this.bossView.onEvent(e, this.sim.state);
     switch (e.type) {
       case 'parry_start': {
         const scale = Math.max(1, Math.round(this.sim.params.parryRadius / 12));
@@ -296,6 +304,7 @@ export class GameScene extends Phaser.Scene {
     this.shadow.setPosition(hx, hy + 5).setDepth(D_YSORT + hy + 3.9);
     this.pulse.setPosition(hx, hy - 2).setDepth(D_YSORT + hy + 4.1);
     this.drawCasters();
+    this.bossView.draw(st, p);
     if (st.alive) {
       const anim = this.hero.anims.currentAnim?.key ?? '';
       const busy = this.hero.anims.isPlaying && (anim.endsWith('_parry') || anim.endsWith('_pulse'));
@@ -424,6 +433,9 @@ export class GameScene extends Phaser.Scene {
       boxes.push([pr.x - hh, pr.y - hh, pr.x + hh, pr.y + hh, pr.y + hh]);
     }
     for (const c of st.casters) if (st.tick >= c.appear0) boxes.push([c.x - 10, c.y - 20, c.x + 10, c.y + 4, c.y + 4]);
+    const bb = this.bossView.box(st);
+    if (bb) boxes.push(bb);
+    if (st.pickup) boxes.push([st.pickup.x - 7, st.pickup.y - 7, st.pickup.x + 7, st.pickup.y + 7, st.pickup.y + 6]);
     const dt = this.game.loop.delta;
     // overhang: fade while any actor box comes within (overhang depth + pad) of the arena rectangle's edge
     const [ax0, ay0, ax1, ay1] = ARENA_RECT;

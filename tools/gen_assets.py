@@ -15,7 +15,7 @@ import gen_arena  # noqa: E402
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 from nglib import arena_previews as AP  # noqa: E402
-from nglib import board, effects, heroes, threats  # noqa: E402
+from nglib import board, bosses, effects, heroes, threats  # noqa: E402
 from nglib import canvas as C  # noqa: E402
 from nglib import spec  # noqa: E402
 from nglib.pack import pack  # noqa: E402
@@ -41,7 +41,7 @@ def save(a, path):
 
 def gameplay_sprites():
     builders = {}
-    for mod in (heroes.SPRITES, threats.SPRITES, effects.SPRITES):
+    for mod in (heroes.SPRITES, threats.SPRITES, effects.SPRITES, bosses.SPRITES):
         builders.update(mod)
     assert set(builders) == set(spec.SPRITES), set(builders) ^ set(spec.SPRITES)
     sprites = {}
@@ -62,9 +62,56 @@ def write_json(path, data):
         fp.write("\n")
 
 
+def boss_board(art, game):
+    """Both bosses (all frames), the beam, the boss bar with 12 drawn segments and the pickups, at 3x."""
+    from nglib.palette import RGB
+    pal = np.array(RGB + [(11, 13, 18)], dtype=np.uint8)
+    rows = [["eye_sentinel_idle", "eye_sentinel_charge", "eye_sentinel_hit"], ["eye_sentinel_death"],
+            ["lich_mage_idle", "lich_mage_cast", "lich_mage_hit"], ["lich_mage_teleport_out", "lich_mage_teleport_in"],
+            ["lich_mage_death"], ["eye_beam", "pickup_slow_time", "pickup_double_score", "pickup_glow"]]
+    W_, pad = 560, 4
+    blocks = []
+    for row in rows:
+        h = max(game[n][0].shape[0] for n in row) + pad
+        line = np.full((h, W_), C.ci("fog"), dtype=np.int16)
+        x = pad
+        for n in row:
+            for f in game[n]:
+                fh, fw = f.shape
+                m = f != C.T
+                line[pad // 2:pad // 2 + fh, x:x + fw][m] = f[m]
+                x += fw + 2
+            x += 6
+        blocks.append(line)
+    bar = np.full((14, W_), C.ci("fog"), dtype=np.int16)
+    frame_ = art["sprites"]["boss_bar"][0] if "boss_bar" in art["sprites"] else None
+    if frame_ is not None:
+        fw = min(W_ - 8, frame_.shape[1])
+        m = frame_[:, :fw] != C.T
+        bar[2:12, 4:4 + fw][m] = frame_[:, :fw][m]
+        seg_w = (fw - 4) / 12
+        for k in range(12):
+            x0 = int(4 + 2 + k * seg_w) + 1
+            x1 = int(4 + 2 + (k + 1) * seg_w) - 1
+            bar[4:10, x0:x1] = C.ci("violet_dark" if k >= 9 else "bone")
+    blocks.append(bar)
+    a = np.concatenate(blocks, 0)
+    a = np.where(a < 0, len(RGB), a)
+    img = pal[a]
+    return np.repeat(np.repeat(img, 3, 0), 3, 1)
+
+
 def main():
+    # gameplay screenshots (boss_fight_*.png) are captured from the running game, not generated: keep them
+    pdir = os.path.join(ASSETS, "preview")
+    keep = {n: open(os.path.join(pdir, n), "rb").read() for n in (os.listdir(pdir) if os.path.isdir(pdir) else [])
+            if n.startswith("boss_fight_")}
     for sub in ("sprites", "backgrounds", "atlas", "preview", "data"):
         shutil.rmtree(os.path.join(ASSETS, sub), ignore_errors=True)
+    os.makedirs(pdir, exist_ok=True)
+    for n, b in keep.items():
+        with open(os.path.join(pdir, n), "wb") as fp:
+            fp.write(b)
 
     game = gameplay_sprites()
     art = gen_arena.build()
@@ -117,6 +164,7 @@ def main():
     rgb(AP.translucency_demo(art, game), "translucency_demo.png")
     save(AP.variation_board(art), pv("variation_board.png"))
     save(AP.animation_strips(art), pv("animation_strips.png"))
+    rgb(boss_board(art, game), "boss_board.png")
     for n in art["notes"]:
         print("note:", n)
     print(f"generated {len(sprites)} sprites ({len(art['sprites'])} arena), {len(art['props'])} placed props, "

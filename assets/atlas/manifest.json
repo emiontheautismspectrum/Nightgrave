@@ -468,6 +468,36 @@
    "h": 2,
    "w": 2
   },
+  "eye_beam": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 4,
+   "w": 16
+  },
+  "eye_sentinel_charge": {
+   "frames": 3,
+   "group": "gameplay",
+   "h": 48,
+   "w": 48
+  },
+  "eye_sentinel_death": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 48,
+   "w": 48
+  },
+  "eye_sentinel_hit": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 48,
+   "w": 48
+  },
+  "eye_sentinel_idle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 48,
+   "w": 48
+  },
   "fence_frag_0": {
    "frames": 2,
    "group": "arena",
@@ -756,6 +786,42 @@
    "h": 6,
    "w": 8
   },
+  "lich_mage_cast": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 40,
+   "w": 32
+  },
+  "lich_mage_death": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 40,
+   "w": 32
+  },
+  "lich_mage_hit": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 40,
+   "w": 32
+  },
+  "lich_mage_idle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 40,
+   "w": 32
+  },
+  "lich_mage_teleport_in": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 40,
+   "w": 32
+  },
+  "lich_mage_teleport_out": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 40,
+   "w": 32
+  },
   "mushroom_0": {
    "frames": 2,
    "group": "arena",
@@ -797,6 +863,24 @@
    "group": "gameplay",
    "h": 4,
    "w": 4
+  },
+  "pickup_double_score": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 12,
+   "w": 12
+  },
+  "pickup_glow": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "pickup_slow_time": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 12,
+   "w": 12
   },
   "portal_altar": {
    "frames": 1,

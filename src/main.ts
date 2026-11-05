@@ -35,6 +35,8 @@ async function boot(): Promise<void> {
           }
         : () => ({ seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 1, label: '' }),
   };
+  // dev-only start wave (screenshots of boss fights); never available in a production build
+  if (import.meta.env.DEV && q.get('wave')) run.startWave = Math.max(0, Math.min(99, Number(q.get('wave')) | 0));
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',

@@ -15,6 +15,13 @@ SPRITES = {
     "cursor_reticle": (9, 9, 1),
     # UI
     "icon_parry": (16, 16, 2), "icon_dash": (16, 16, 2), "icon_ring": (20, 20, 13), "parry_fizzle": (12, 12, 4),
+    # bosses (Stage 4)
+    "eye_sentinel_idle": (48, 48, 4), "eye_sentinel_charge": (48, 48, 3), "eye_sentinel_hit": (48, 48, 2),
+    "eye_sentinel_death": (48, 48, 6), "eye_beam": (16, 4, 2),
+    "lich_mage_idle": (32, 40, 4), "lich_mage_cast": (32, 40, 4), "lich_mage_teleport_out": (32, 40, 4),
+    "lich_mage_teleport_in": (32, 40, 4), "lich_mage_hit": (32, 40, 2), "lich_mage_death": (32, 40, 6),
+    # pickups
+    "pickup_slow_time": (12, 12, 4), "pickup_double_score": (12, 12, 4), "pickup_glow": (16, 16, 4),
 }
 
 # Gameplay sprites above; arena decor/landmark/caster sprites are defined by tools/gen_arena.py (layout-dependent).
