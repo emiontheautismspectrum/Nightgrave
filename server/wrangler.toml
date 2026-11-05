@@ -1,0 +1,21 @@
+# Nightgrave API: Cloudflare Worker + D1. See DEPLOY.md.
+name = "nightgrave-api"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+
+[vars]
+# Comma-separated list of allowed browser origins: your Pages domain (and localhost for development).
+ALLOWED_ORIGINS = "https://nightgrave.pages.dev,http://localhost:5173"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nightgrave"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# Daily cleanup: entries older than 30 days, rate-limit rows older than 1 day (03:17 UTC).
+[triggers]
+crons = ["17 3 * * *"]
+
+# Secrets (never in git): npx wrangler secret put ADMIN_TOKEN / npx wrangler secret put IP_SALT
+# Local development: put them in server/.dev.vars (git-ignored), see .dev.vars.example.

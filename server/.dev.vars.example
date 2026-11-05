@@ -1,0 +1,3 @@
+# Copy to server/.dev.vars for `wrangler dev` (git-ignored). Use long random values.
+ADMIN_TOKEN=change-me-local-admin-token
+IP_SALT=change-me-local-salt

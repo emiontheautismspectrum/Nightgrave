@@ -1,0 +1,8 @@
+{
+  "_comment": "Blocked words (matched after lowercasing, removing separators and mapping leetspeak). Extend freely. This data file is the only place where non-English text is allowed.",
+  "words": [
+    "fuck", "shit", "cunt", "bitch", "nigger", "nigga", "faggot", "retard", "whore", "slut", "dick", "cock", "pussy",
+    "asshole", "bastard", "rape", "nazi", "hitler", "kkk", "porn",
+    "хуй", "хуе", "хуи", "хуя", "пизд", "ебат", "ебан", "ебал", "еблан", "ёба", "бляд", "блять", "сука", "мудак", "пидор", "пидар", "залуп", "шлюх", "гандон"
+  ]
+}
