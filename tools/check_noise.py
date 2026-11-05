@@ -30,9 +30,11 @@ import arena_layout as L  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STAGE0_COMMIT = "7454e7f"  # "Stage 0: deterministic pixel-art pipeline, palette validator, style board"
-PREV_COMMIT = "ff5f5a3"  # Part C: the last arena before the v2 softening pass
-V2_COMMIT = "72c0155"  # the arena v2 ground (flatness baseline)
-MIN_DEPTH_VS_V2 = 1.8
+PREV_COMMIT = "ea8e8f4"  # the pre-V2 arena: the commit right before "art: arena v2 softening and layout"
+V2_COMMIT = "72c0155"  # the arena v2 ground (wagon close-up "previous version")
+V3_COMMIT = "e02b6b5"  # "art: arena v3 ground, giant tree, trees, wagon" (flatness baseline for v4)
+MIN_DEPTH_VS_V3 = 1.5
+JOINT_STONE_MAX = 1.35
 BUSY_RANGE = 8.0  # L* units
 PROP_DITHER_MAX = 4  # "a few pixels of texture" per prop sprite
 MAX_VS_STAGE0 = 1.3
@@ -239,6 +241,90 @@ def write_v3_compare(v2_img, v3_img, floor_img):
     Image.fromarray(np.repeat(np.repeat(crop, 2, 0), 2, 1)).save(os.path.join(pv, "ground_closeup.png"), optimize=False)
 
 
+def write_v4_compare(imgs, floor_img):
+    """arena_v4_compare.png (pre-V2 | V3 | V4 at 2x) and ground_closeup.png (2x crop of the bare ground covering the
+    calm centre, the mid ring, the left edge and the altar plaza)."""
+    h, w = imgs[0].shape[:2]
+    out = np.zeros((h, len(imgs) * (w + 8) - 8, 3), dtype=np.uint8)
+    out[:] = (11, 13, 18)
+    for i, im in enumerate(imgs):
+        out[:, i * (w + 8):i * (w + 8) + w] = im
+    pv = os.path.join(ROOT, "assets", "preview")
+    Image.fromarray(np.repeat(np.repeat(out, 2, 0), 2, 1)).save(os.path.join(pv, "arena_v4_compare.png"), optimize=False)
+    crop = floor_img[27:191, 40:300]
+    Image.fromarray(np.repeat(np.repeat(crop, 2, 0), 2, 1)).save(os.path.join(pv, "ground_closeup.png"), optimize=False)
+
+
+def stone_checks():
+    """v4 stone rules on the generator's own masks + the brightness cap inside the arena rect."""
+    from nglib import compose as CP
+    from nglib import canvas as CC
+    from nglib.palette import IDX, RGB as PRGB
+    import gen_arena
+    art = gen_arena.build()
+    g, M = CP.ground(art["sprites"], art["decals"], art["props"], CP.ritual_runes(), return_masks=True)
+    disk = np.array(Image.open(os.path.join(ROOT, "assets", "backgrounds", "arena_ground.png")).convert("RGBA"))
+    failed = False
+    lum = lambda c: float(lstar(np.array([[PRGB[c]]], dtype=np.uint8))[0, 0])  # noqa: E731
+    order = {IDX[t]: i for i, t in enumerate(CP.STONE)}
+    x0, y0, x1, y1 = L.ARENA
+    inside = np.zeros_like(M["cover"])
+    inside[y0:y1, x0:x1] = True
+    # 1. the generator's array is what is on disk
+    on_disk = np.array(CC.to_image(g))
+    if not np.array_equal(on_disk, disk):
+        print("  stone masks do not match assets/backgrounds/arena_ground.png  FAIL")
+        return True
+    lab, tone, joint = M["lab"], M["tone"], M["joint"]
+    plain = inside & M["cover"] & ~M["decal"] & ~M["missing"][lab]
+    # 2. no stone pixel more than one step lighter than its stone's base tone
+    st = plain & ~joint
+    step = np.vectorize(lambda c: order.get(int(c), -9))(g[st])
+    over = (step - tone[lab][st]) > 1
+    # 3. joints never lighter than an adjacent stone; joint/stone contrast <= 1.35
+    jt = plain & joint
+    bad_light, worst = 0, 0.0
+    ys, xs = np.nonzero(jt)
+    for y, x in zip(ys, xs):
+        jl = lum(g[y, x])
+        for dy, dx in ((0, 1), (1, 0), (0, -1), (-1, 0)):
+            yy_, xx_ = y + dy, x + dx
+            if 0 <= yy_ < g.shape[0] and 0 <= xx_ < g.shape[1] and st[yy_, xx_]:
+                sl = lum(g[yy_, xx_])
+                bad_light += jl > sl + 1e-9
+                worst = max(worst, (max(sl, jl) + 5) / (min(sl, jl) + 5))  # L* proxy ratio (see below)
+    # contrast ratio in WCAG terms (relative luminance)
+    def rel(c):
+        r_, g_, b_ = [v / 255 for v in PRGB[c]]
+        f = lambda u: u / 12.92 if u <= 0.04045 else ((u + 0.055) / 1.055) ** 2.4  # noqa: E731
+        return 0.2126 * f(r_) + 0.7152 * f(g_) + 0.0722 * f(b_)
+    worst_ratio = 0.0
+    pairs = set()
+    for y, x in zip(ys[::3], xs[::3]):
+        for dy, dx in ((0, 1), (1, 0), (0, -1), (-1, 0)):
+            yy_, xx_ = y + dy, x + dx
+            if 0 <= yy_ < g.shape[0] and 0 <= xx_ < g.shape[1] and st[yy_, xx_]:
+                pairs.add((int(g[y, x]), int(g[yy_, xx_])))
+    for a_, b_ in pairs:
+        la, lb = rel(a_), rel(b_)
+        worst_ratio = max(worst_ratio, (max(la, lb) + 0.05) / (min(la, lb) + 0.05))
+    ok = not over.any() and bad_light == 0 and worst_ratio <= JOINT_STONE_MAX
+    failed |= not ok
+    print(f"stones: pixels > 1 step above base {int(over.sum())}, joints lighter than a stone {bad_light}, "
+          f"max joint/stone contrast {worst_ratio:.2f} (<= {JOINT_STONE_MAX})  {'OK' if ok else 'FAIL'}")
+    # 4. brightness cap inside the rect; stone and moss never in the ground (puddle moon glints excepted)
+    cap = rel(IDX["stone_dark"])
+    vals = np.unique(g[inside & (g != -1)])
+    too_bright = [CP.STONE[0] if False else int(v) for v in vals if rel(int(v)) > cap + 1e-12 and int(v) != IDX["moon"]]
+    moon_px = int(((g == IDX["moon"]) & inside).sum())
+    banned = [n for n in ("stone", "moss") if (g == IDX[n]).any()]
+    ok = not too_bright and not banned and moon_px <= 2 * len(L.PUDDLES)
+    failed |= not ok
+    print(f"brightness cap (<= stone_dark inside the rect): over-cap colours {too_bright or 0}, stone/moss in ground "
+          f"{banned or 0}, moon glint px {moon_px} (puddles only)  {'OK' if ok else 'FAIL'}")
+    return failed
+
+
 def write_wagon_closeup(old_path, new_path):
     """assets/preview/wagon_closeup.png: previous (v2) wagon and the new one side by side at 8x (first frames)."""
     old = Image.open(old_path).convert("RGBA").crop((0, 0, 48, 32))
@@ -297,14 +383,15 @@ def main():
             failed |= not ok
             print(f"  {label:6s} {name:42s} {ratio:5.2f} (<= {limit})  {'OK' if ok else 'FAIL'}")
     write_compare([("STAGE 0 FLOOR", s0_img, s0), ("PREVIOUS ARENA", prev_img, prev), ("NEW ARENA", cur_img, cur)])
-    v2_dir = build_commit(V2_COMMIT)
-    d_v2, d_new = depth(compose_floor(v2_dir)), depth(compose_floor(here))
-    ok = d_new >= MIN_DEPTH_VS_V2 * d_v2
+    v2_dir, v3_dir = build_commit(V2_COMMIT), build_commit(V3_COMMIT)
+    d_v3, d_new = depth(compose_floor(v3_dir)), depth(compose_floor(here))
+    ok = d_new >= MIN_DEPTH_VS_V3 * d_v3
     failed |= not ok
-    print(f"ground depth (std of 32x32 block-mean L*, floor without props): v2 {d_v2:.2f}, new {d_new:.2f} "
-          f"= {d_new / d_v2:.2f}x (>= {MIN_DEPTH_VS_V2}x)  {'OK' if ok else 'FAIL'}")
-    write_v3_compare(compose_current(v2_dir), cur_img, compose_floor(here))
+    print(f"ground depth (std of 32x32 block-mean L*, floor without props): v3 {d_v3:.2f}, new {d_new:.2f} "
+          f"= {d_new / d_v3:.2f}x (>= {MIN_DEPTH_VS_V3}x)  {'OK' if ok else 'FAIL'}")
+    write_v4_compare([prev_img, compose_current(v3_dir), cur_img], compose_floor(here))
     write_wagon_closeup(os.path.join(v2_dir, "sprites", "hunter_wagon.png"), os.path.join(here, "sprites", "hunter_wagon.png"))
+    failed |= stone_checks()
     bad = {}
     for n in LAYERS:
         c = fine_checkers(os.path.join(ROOT, "assets", "backgrounds", f"{n}.png"))

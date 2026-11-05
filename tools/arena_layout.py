@@ -69,9 +69,14 @@ FENCE_FRAGMENTS = 3  # short broken fence fragments placed next to graves
 # Small decor budget (<= 25) in loose clusters; Poisson-disc min spacing within a cluster
 SMALL_DECOR_CLUSTERS = [((64, 60), 4), ((150, 222), 4), ((300, 70), 3), ((236, 40), 3), ((420, 120), 3),
                         ((400, 200), 4), ((330, 240), 3)]
-# Worn loam paths (polylines of base points): altar -> left of the centre -> cabin, and a short one toward the well
-PATHS = [[(122, 100), (150, 132), (160, 168), (138, 200), (98, 226)], [(300, 238), (322, 214), (344, 192), (356, 180)]]
-PATH_WIDTH = (14, 20)
+# v4 cobble paths (8-14 px cobbles): altar -> down toward the cabin, routed WEST of the gallows; a short branch to the well
+PATHS = [[(118, 100), (100, 124), (94, 160), (98, 196), (92, 222)], [(316, 236), (332, 214), (348, 194), (358, 182)]]
+PATH_WIDTH = 16
+STONE_SIZE = {"calm": 42, "mid": 34, "edge": 24, "tree": 24}  # Poisson spacing (px) of flagstone seeds per zone
+ALTAR_PLAZA_R = 40
+PUDDLES = [(408, 156, 13, 6), (96, 182, 12, 5)]  # (x, y, rx, ry): one by the giant tree roots, one by the gallows
+CRACKS_MAX, CRACKS_CALM_MAX = 12, 4
+WEEDS_MAX = 25
 SMALL_DECOR_MAX = 25
 SMALL_DECOR_SPACING = 7
 FREE_AREA_MIN = 0.45
@@ -88,4 +93,4 @@ def hollow_point(side, pos):
 
 # Render-side alphas (shared by the game, previews and checks via manifest.layout.alphas). PNGs stay binary-alpha
 # and palette-pure; these flat layers are made translucent at draw time.
-ALPHAS = {"forest_mist": 0.35, "fog_overlay": 0.12, "vignette": 0.35, "vignette_outer": 0.35}
+ALPHAS = {"forest_mist": 0.35, "fog_overlay": 0.07, "vignette": 0.35, "vignette_outer": 0.35}

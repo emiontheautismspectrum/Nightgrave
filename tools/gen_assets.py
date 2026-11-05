@@ -12,6 +12,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import gen_arena  # noqa: E402
+import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 from nglib import arena_previews as AP  # noqa: E402
 from nglib import board, effects, heroes, threats  # noqa: E402
@@ -107,6 +108,9 @@ def main():
     ab = AP.arena_board(art, game)
     rgb(ab, "arena_board.png")
     rgb(AP.squint_test(ab), "squint_test.png")
+    scene = AP.scene_only(art, game)  # the composed arena without threats, for close-ups
+    rgb(np.repeat(np.repeat(scene[0:70, 140:400], 2, 0), 2, 1), "forest_top_closeup.png")
+    rgb(np.repeat(np.repeat(scene[176:270, 0:120], 4, 0), 4, 1), "cabin_closeup.png")
     rgb(AP.translucency_demo(art, game), "translucency_demo.png")
     save(AP.variation_board(art), pv("variation_board.png"))
     save(AP.animation_strips(art), pv("animation_strips.png"))

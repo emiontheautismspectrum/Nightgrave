@@ -82,6 +82,13 @@ def translucency_demo(art, threat_sprites):
     return np.repeat(np.repeat(canvas, 3, axis=0), 3, axis=1)
 
 
+def scene_only(art, threat_sprites):
+    """The composed arena (props, forest, overhang) with the hero only: base for close-up previews."""
+    sp = {**art["sprites"], **threat_sprites}
+    cx, cy = art["layout"]["heroSpawn"]
+    return compose_rgb(art["backgrounds"], sp, art["props"], _hero(cx, cy), alphas=art["layout"]["alphas"])
+
+
 def squint_test(board_rgb):
     """The 3x arena board blurred (radius ~3 px at 3x): do the hero and threats still stand out, is the clearing calm?"""
     from PIL import Image, ImageFilter

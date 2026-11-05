@@ -396,94 +396,355 @@ def root_mushroom_spots():
     return spots[:L.GLOW_MUSHROOMS]
 
 
-def ground(sprites, decals_, props, ritual):
-    """v3 forest floor: one colour story (teal-green floor, loam paths, cool moonlit patches), depth from large flat
-    organic shapes only (value zones, diagonal moonbeams, top-left -> bottom-right falloff, cast shadows)."""
-    r = rng(5)
-    g = C.new(W, H)
-    xx, yy = C.grid(W, H)
-    n1 = C.value_noise(W, H, 56, rng(51))
-    n2 = C.value_noise(W, H, 28, rng(52))
-    v = 0.48 + (n1 - 0.5) * 0.55 + (n2 - 0.5) * 0.18
-    # (c) slow value falloff: lighter top-left, darker bottom-right, in wide flat bands after quantisation
-    v += 0.22 - 0.44 * (((xx - AX0) / (AX1 - AX0)) * 0.55 + ((yy - AY0) / (AY1 - AY0)) * 0.45)
-    # (b) wide diagonal moonbeam patches from the top-left (away from the hero spawn area)
-    for bx, by, ln, wd in ((92, 60, 80, 16), (300, 52, 70, 13), (72, 168, 60, 12), (238, 220, 64, 12)):
+STONE = ["bg0", "bg1", "fog", "mist", "stone_dark"]  # v4 stone ramp, darkest first (cap = stone_dark)
+MOSS = ["forest", "fern"]
+SOIL = ["earth", "loam"]
+STEP_DOWN = {"stone_dark": "mist", "mist": "fog", "fog": "bg1", "bg1": "bg0", "bg0": "bg0", "fern": "forest",
+             "forest": "bg0", "loam": "earth", "earth": "bg0"}
+STEP_UP = {"bg0": "bg1", "bg1": "fog", "fog": "mist", "mist": "stone_dark", "stone_dark": "stone_dark", "forest": "fern",
+           "fern": "fern", "earth": "loam", "loam": "loam"}
+
+
+def _poly_dist(px, py, poly):
+    best = 1e9
+    for (x0, y0), (x1, y1) in zip(poly, poly[1:]):
+        vx, vy = x1 - x0, y1 - y0
+        t = max(0.0, min(1.0, ((px - x0) * vx + (py - y0) * vy) / (vx * vx + vy * vy)))
+        best = min(best, math.hypot(px - x0 - t * vx, py - y0 - t * vy))
+    return best
+
+
+def _value_field(xx, yy):
+    """Large flat value structure: lit upper-left/altar/left of centre, shade bottom-right/forest edge/under the tree,
+    diagonal moonbeams from the top-left, wide top-left -> bottom-right falloff. Returns ~0..1."""
+    n1 = C.value_noise(W, H, 64, rng(51))
+    v = 0.5 + (n1 - 0.5) * 0.35
+    v += 0.45 - 0.9 * (((xx - AX0) / (AX1 - AX0)) * 0.55 + ((yy - AY0) / (AY1 - AY0)) * 0.45)
+    for bx, by, ln, wd in ((92, 60, 84, 18), (300, 56, 66, 13), (70, 170, 60, 13), (236, 222, 60, 12)):
         u = ((xx - bx) + (yy - by)) / math.sqrt(2)
         w_ = ((xx - bx) - (yy - by)) / math.sqrt(2)
-        beam = (u / ln) ** 2 + (w_ / wd) ** 2
-        v += 0.18 * np.clip(1.2 - beam, 0, 1)
-    # (a) shade near the forest edge and under the giant tree
+        v += 0.22 * np.clip(1.2 - ((u / ln) ** 2 + (w_ / wd) ** 2), 0, 1)
+    ax, ay = L.PORTAL_ALTAR
+    v += 0.12 * np.clip(1 - np.hypot(xx - ax, yy - ay) / 60, 0, 1)
     din = np.minimum.reduce([xx - AX0, AX1 - xx, yy - AY0, AY1 - yy])
-    v -= 0.22 * np.clip(1 - din / 26, 0, 1)
+    v -= 0.4 * np.clip(1 - din / 34, 0, 1)
     gx, gy = L.GIANT_TREE
-    v -= 0.3 * np.clip(1 - (((xx - gx) / 70) ** 2 + ((yy - gy + 10) / 46) ** 2), 0, 1)
-    # the centre: same floor, one tone calmer and slightly darker so the hero pops
-    cx0, cy0, cx1, cy1 = CZ
-    calm = np.clip(1 - np.maximum(np.maximum(cx0 - xx, xx - cx1), np.maximum(cy0 - yy, yy - cy1)) / 14, 0, 1)
-    v = v * (1 - calm) + 0.4 * calm
-    idx = np.digitize(v, [0.22, 0.44, 0.74])  # mist (cool moonlight) only in the brightest beam cores
-    base = np.array([C.ci(t) for t in LADDER], dtype=np.int16)[idx]
-    base = majority(base, 3, 2)  # flat organic patches >= 6x6
-    # the region the ground covers: arena + an irregular soft band outside it (darker, so the clamp reads)
+    v -= 0.4 * np.clip(1 - (((xx - gx) / 72) ** 2 + ((yy - gy + 8) / 48) ** 2), 0, 1)
+    return v, din
+
+
+def stone_layout():
+    """The flagstone layout: seeds (Poisson by zone, concentric at the altar, cobbles on the paths), Lloyd-relaxed Voronoi
+    labels, per-stone base tone (index into STONE), joints, and which cells are missing / broken / sunken."""
+    r = rng(60)
+    xx, yy = C.grid(W, H)
+    v, din = _value_field(xx, yy)
+    ax, ay = L.PORTAL_ALTAR
+    gx, gy = L.GIANT_TREE
+
+    def zone(x, y):
+        if CZ[0] <= x <= CZ[2] and CZ[1] <= y <= CZ[3]:
+            return "calm"
+        d_in = min(x - AX0, AX1 - x, y - AY0, AY1 - y)
+        if math.hypot(x - gx, y - gy) < 60:
+            return "tree"
+        return "edge" if d_in < 26 else "mid"
+
+    fixed = []  # altar plaza: concentric rings; paths: two rows of cobbles
+    fixed.append((ax, ay))
+    for rad, n in ((13, 6), (25, 10), (37, 15)):
+        for k in range(n):
+            a_ = 2 * math.pi * k / n + rad * 0.07
+            fixed.append((ax + math.cos(a_) * rad, ay + math.sin(a_) * rad * 0.8))
+    for path in L.PATHS:
+        for (x0, y0), (x1, y1) in zip(path, path[1:]):
+            seg = math.hypot(x1 - x0, y1 - y0)
+            nx, ny = -(y1 - y0) / seg, (x1 - x0) / seg
+            for k in range(int(seg // 9) + 1):
+                t = k * 9 / seg
+                for side in (-1, 0, 1):  # three rows of cobbles, staggered
+                    jitter = r.uniform(-1.2, 1.2)
+                    off = (k % 2) * 4.5 if side == 0 else 0
+                    fixed.append((x0 + (x1 - x0) * (t + off / seg) + nx * side * 5.5 + jitter,
+                                  y0 + (y1 - y0) * (t + off / seg) + ny * side * 5.5))
+    pts = list(fixed)
+    pt_arr = np.array(pts)
+    for _ in range(9000):
+        x, y = r.uniform(AX0 - 14, AX1 + 14), r.uniform(AY0 - 14, AY1 + 14)
+        if math.hypot(x - ax, y - ay) < L.ALTAR_PLAZA_R or any(_poly_dist(x, y, pth) < L.PATH_WIDTH / 2 + 2 for pth in L.PATHS):
+            continue
+        sz = L.STONE_SIZE[zone(x, y)] * r.uniform(0.85, 1.12)
+        if (np.hypot(pt_arr[:, 0] - x, pt_arr[:, 1] - y) < sz * 0.82).any():
+            continue
+        pts.append((x, y))
+        pt_arr = np.array(pts)
+    nfix = len(fixed)
+    seeds = np.array(pts, dtype=np.float64)
+
+    def labels_of(sd):
+        lab = np.zeros((H, W), dtype=np.int32)
+        for y0_ in range(0, H, 30):
+            ys_ = yy[y0_:y0_ + 30, :, None]
+            xs_ = xx[y0_:y0_ + 30, :, None]
+            d2 = (xs_ - sd[None, None, :, 0]) ** 2 + (ys_ - sd[None, None, :, 1]) ** 2
+            lab[y0_:y0_ + 30] = np.argmin(d2, axis=2)
+        return lab
+
+    for _ in range(2):  # Lloyd relaxation (fixed seeds stay put)
+        lab = labels_of(seeds)
+        cnt = np.bincount(lab.ravel(), minlength=len(seeds))
+        mx = np.bincount(lab.ravel(), weights=xx.ravel(), minlength=len(seeds))
+        my = np.bincount(lab.ravel(), weights=yy.ravel(), minlength=len(seeds))
+        ok = cnt > 0
+        moved = seeds.copy()
+        moved[ok, 0], moved[ok, 1] = mx[ok] / cnt[ok], my[ok] / cnt[ok]
+        moved[:nfix] = seeds[:nfix]
+        seeds = moved
+    lab = labels_of(seeds)
+    n = len(seeds)
+    # cobbles never grow beyond the path corridor: those pixels go to the nearest flagstone instead
+    pd = np.full((H, W), 1e9)
+    for pth in L.PATHS:
+        for (x0, y0), (x1, y1) in zip(pth, pth[1:]):
+            vx, vy = x1 - x0, y1 - y0
+            t = np.clip(((xx - x0) * vx + (yy - y0) * vy) / (vx * vx + vy * vy), 0, 1)
+            pd = np.minimum(pd, np.hypot(xx - x0 - t * vx, yy - y0 - t * vy))
+    is_cobble = np.zeros(n, dtype=bool)
+    is_cobble[32:nfix] = True
+    stray = is_cobble[lab] & (pd > L.PATH_WIDTH / 2 + 1)
+    if stray.any():
+        others = np.nonzero(~is_cobble)[0]
+        sub_lab = labels_of(seeds[others])
+        lab[stray] = others[sub_lab[stray]]
+    cnt = np.bincount(lab.ravel(), minlength=n)
+    cxs = np.bincount(lab.ravel(), weights=xx.ravel(), minlength=n) / np.maximum(cnt, 1)
+    cys = np.bincount(lab.ravel(), weights=yy.ravel(), minlength=n) / np.maximum(cnt, 1)
+    # joints: 1 px boundary (right/down neighbour differs), widened to 2 px on some pairs; rounded junctions
+    jr = np.zeros((H, W), dtype=bool)
+    jr[:, :-1] |= lab[:, :-1] != lab[:, 1:]
+    jr[:-1, :] |= lab[:-1, :] != lab[1:, :]
+    junction = np.zeros((H, W), dtype=bool)
+    junction[:-1, :-1] = (lab[:-1, :-1] != lab[1:, 1:]) & (lab[:-1, 1:] != lab[1:, :-1])
+    joint = jr.copy()
+    joint[1:, 1:] |= junction[:-1, :-1]
+    # per-stone base tone from the value field at its centroid, with a calm irregular rhythm
+    vi = v[np.clip(cys.astype(int), 0, H - 1), np.clip(cxs.astype(int), 0, W - 1)]
+    tone = np.clip(np.round(-0.3 + vi * 5.0), 1, 4).astype(int)  # use the whole ramp: shade bg1 .. lit stone_dark
+    tone += (r.random(n) < 0.18).astype(int) * r.choice([-1, 1], n)
+    tone = np.clip(tone, 1, 4)
+    calm = (cxs >= CZ[0]) & (cxs <= CZ[2]) & (cys >= CZ[1]) & (cys <= CZ[3])
+    tone[calm] = np.where(r.random(calm.sum()) < 0.7, 2, 3)  # calm centre: fog / mist only
+    path_cell = np.zeros(n, dtype=bool)
+    path_cell[len(fixed) - (len(fixed) - 1 - 31):nfix] = True  # cobbles (all fixed seeds after the plaza's 32)
+    # neighbouring stones differ by at most one step
+    pairs = set()
+    for a_, b_ in ((lab[:, :-1], lab[:, 1:]), (lab[:-1, :], lab[1:, :])):
+        m = a_ != b_
+        pairs |= set(zip(a_[m].tolist(), b_[m].tolist()))
+    for _ in range(8):
+        changed = False
+        for i, j in pairs:
+            if tone[i] - tone[j] > 1:
+                tone[i] = tone[j] + 1
+                changed = True
+            elif tone[j] - tone[i] > 1:
+                tone[j] = tone[i] + 1
+                changed = True
+        if not changed:
+            break
+    tone[path_cell] = np.maximum(1, tone[path_cell] - 1)  # cobbles: one step darker than the flagstones
+    # missing stones (soil / moss showing): rare in the mid ring, frequent at the forest edge and under the tree
+    dcell = np.minimum.reduce([cxs - AX0, AX1 - cxs, cys - AY0, AY1 - cys])
+    p_missing = np.where(dcell < 30, 0.65 * (1 - np.clip(dcell, 0, 30) / 30), 0.04)
+    p_missing = np.where(np.hypot(cxs - gx, cys - gy) < 58, np.maximum(p_missing, 0.5), p_missing)
+    p_missing[calm | path_cell] = 0
+    p_missing[:32] = 0  # altar plaza is intact
+    missing = r.random(n) < p_missing
+    sunken = (~missing) & ~calm & (r.random(n) < 0.12)
+    broken = (~missing) & ~calm & (r.random(n) < 0.05)
+    lit_edge = (~missing) & (tone < 4) & (r.random(n) < 0.12)
+    return dict(lab=lab, tone=tone, joint=joint, missing=missing, sunken=sunken, broken=broken, lit_edge=lit_edge,
+                cx=cxs, cy=cys, calm=calm, path=path_cell, n=n, v=v, din=din)
+
+
+def ground(sprites, decals_, props, ritual, return_masks=False):
+    """v4 stone courtyard reclaimed by the forest (see ASSETS_SPEC.md 'Ground (v4)')."""
+    r = rng(5)
+    S = stone_layout()
+    lab, tone, joint = S["lab"], S["tone"], S["joint"]
+    xx, yy = C.grid(W, H)
+    din = S["din"]
+    ci_stone = np.array([C.ci(t) for t in STONE], dtype=np.int16)
+    g = C.new(W, H)
+    decal = np.zeros((H, W), dtype=bool)  # pixels that are not plain stone/joint (moss, soil, cracks, roots, ...)
+    # region the ground covers: arena + an irregular soft band outside it
     edge_noise = (C.value_noise(W, H, 12, rng(53)) - 0.5) * 6
     dx = np.maximum(0, np.maximum(AX0 - xx, xx - AX1))
     dy = np.maximum(0, np.maximum(AY0 - yy, yy - AY1))
     sd = np.where(din > 0, -din, np.maximum(dx, dy))
     cover = sd + edge_noise < L.EDGE_BAND
-    g[cover] = base[cover]
-    band = cover & (sd + edge_noise * 0.5 > 0.5)
-    g[band] = C.ci("bg0")
-    # (e) worn loam paths with irregular edges (low contrast)
-    pn = C.value_noise(W, H, 10, rng(55))
-    for path in L.PATHS:
-        for (x0_, y0_), (x1_, y1_) in zip(path, path[1:]):
-            vx, vy = x1_ - x0_, y1_ - y0_
-            l2 = vx * vx + vy * vy
-            t = np.clip(((xx - x0_) * vx + (yy - y0_) * vy) / l2, 0, 1)
-            d = np.sqrt((xx - x0_ - t * vx) ** 2 + (yy - y0_ - t * vy) ** 2)
-            half = (L.PATH_WIDTH[0] + (L.PATH_WIDTH[1] - L.PATH_WIDTH[0]) * pn) / 2
-            m = cover & (d <= half) & ~band
-            g[m & ~((xx >= cx0) & (xx < cx1) & (yy >= cy0) & (yy < cy1))] = C.ci("loam")
-    g = np.where(cover, majority(np.where(cover, g, C.ci("bg0")), 2, 1), g)
-    # rune circle: faint carved ring + rune slots, one step from the calm centre tone
+    # stones: base tone, then a second flat tone (sunken: darker lower-right edge; lit: 1 px top-left edge)
+    g[cover] = ci_stone[tone[lab]][cover]
+    left = np.roll(lab, 1, 1)
+    up = np.roll(lab, 1, 0)
+    right = np.roll(lab, -1, 1)
+    down = np.roll(lab, -1, 0)
+    nb_min0 = np.minimum.reduce([tone[lab], tone[right], tone[down], tone[left], tone[up]])
+    # lit top-left edge only on stones with no darker neighbour (joint -> lit edge stays within 2 steps)
+    st_lit = S["lit_edge"][lab] & ((left != lab) | (up != lab)) & ~joint & (nb_min0 == tone[lab])
+    g[st_lit & cover] = ci_stone[np.minimum(4, tone[lab] + 1)][st_lit & cover]
+    st_sunk = S["sunken"][lab] & ((right != lab) | (down != lab) | np.roll(joint, -1, 1) | np.roll(joint, -1, 0)) & ~joint
+    g[st_sunk & cover] = ci_stone[np.maximum(0, tone[lab] - 1)][st_sunk & cover]
+    # joints: one step darker than the darker of the two stones they separate
+    # joint = one step below its own stone, never lighter than any stone pixel actually drawn next to it
+    order = {int(c): i for i, c in enumerate(ci_stone)}
+    step = np.vectorize(lambda c: order.get(int(c), 9))(g)
+    step[joint] = 9
+    nb_px = np.minimum.reduce([np.roll(step, 1, 0), np.roll(step, -1, 0), np.roll(step, 1, 1), np.roll(step, -1, 1)])
+    jstep = np.maximum(0, np.minimum(tone[lab] - 1, nb_px))
+    g[joint & cover] = ci_stone[jstep][joint & cover]
+    # missing stones: soil or moss (flat), forest floor in deep shade
+    miss = S["missing"][lab] & cover
+    soil = C.value_noise(W, H, 18, rng(56))
+    fill = np.where(soil > 0.62, C.ci("earth"), np.where(soil > 0.45, C.ci("fern"), C.ci("forest")))
+    fill = np.where((din < 10) & (soil < 0.7), C.ci("forest"), fill)
+    g[miss] = fill[miss]
+    decal |= miss
+    # broken slabs: one crack line through the stone (joint tone)
+    for i in np.nonzero(S["broken"])[0][:14]:
+        a_ = r.uniform(0, math.pi)
+        x0, y0 = S["cx"][i] - math.cos(a_) * 14, S["cy"][i] - math.sin(a_) * 14
+        line = C.new(W, H)
+        C.line(line, x0, y0, x0 + math.cos(a_) * 28, y0 + math.sin(a_) * 28, "bg0")
+        m = (line != C.T) & (lab == i) & ~joint & cover
+        g[m] = ci_stone[max(0, tone[i] - 1)]
+    # forest edge: the stone gives way to forest floor (flat patches), one step darker outside the rect
+    edge_floor = cover & ((din < 6 + (soil - 0.5) * 10) | (sd > 0))
+    floor_t = np.where(soil > 0.55, C.ci("forest"), C.ci("bg1"))
+    g[edge_floor] = floor_t[edge_floor]
+    out = cover & (sd + edge_noise * 0.5 > 0.5)
+    g[out] = np.where(soil[out] > 0.5, C.ci("bg0"), C.ci("forest"))
+    decal |= edge_floor
+    # broken low curb at the rect: fragments with gaps (stone_dark top, mist face)
+    hollows = [L.hollow_point(s_, p_) for s_, p_ in L.HOLLOWS]
+    for side in range(4):
+        pos = 0
+        length = (AX1 - AX0) if side < 2 else (AY1 - AY0)
+        while pos < length:
+            seg = int(r.integers(10, 26))
+            gap = int(r.integers(6, 20))
+            for k in range(pos, min(length, pos + seg)):
+                if side < 2:
+                    x, y = AX0 + k, (AY0 if side == 0 else AY1 - 3)
+                else:
+                    x, y = (AX0 if side == 2 else AX1 - 3), AY0 + k
+                if any(math.hypot(x - hx, y - hy) < 14 for hx, hy in hollows):
+                    continue
+                for t in range(3):
+                    px, py = (x, y + t) if side < 2 else (x + t, y)
+                    if 0 <= px < W and 0 <= py < H:
+                        g[py, px] = C.ci("stone_dark") if t == 0 else C.ci("mist" if t == 1 else "bg1")
+                        decal[py, px] = True
+            pos += seg + gap
+    # fern moss: soft patches 8-20 px at stone corners in the mid ring and the edges, weeds in joints
+    for _ in range(16):
+        x, y = r.uniform(AX0 + 8, AX1 - 8), r.uniform(AY0 + 8, AY1 - 8)
+        if CZ[0] - 6 <= x <= CZ[2] + 6 and CZ[1] - 6 <= y <= CZ[3] + 6:
+            continue
+        rx, ry = r.uniform(4, 10), r.uniform(3, 7)
+        m = (((xx - x) / rx) ** 2 + ((yy - y) / ry) ** 2 <= 1) & cover
+        g[m] = C.ci("fern")  # one flat tone (a joint/fern alternation would read as dither)
+        decal |= m
+    weeds = 0
+    jy, jx = np.nonzero(joint & cover & ~decal)
+    order = r.permutation(len(jx))
+    for k in order:
+        if weeds >= L.WEEDS_MAX:
+            break
+        x, y = int(jx[k]), int(jy[k])
+        if CZ[0] - 6 <= x <= CZ[2] + 6 and CZ[1] - 6 <= y <= CZ[3] + 6:
+            continue
+        for ddx, ddy in ((0, 0), (0, -1), (1, -1)):
+            if 0 <= y + ddy < H and 0 <= x + ddx < W:
+                g[y + ddy, x + ddx] = C.ci("fern")
+                decal[y + ddy, x + ddx] = True
+        weeds += 1
+    # hairline cracks (<= 12, <= 4 in the calm centre): one step darker, inside a single stone
+    cracks, calm_cracks = 0, 0
+    for i in r.permutation(S["n"]):
+        if cracks >= L.CRACKS_MAX or S["missing"][i]:
+            continue
+        if S["calm"][i]:
+            if calm_cracks >= L.CRACKS_CALM_MAX:
+                continue
+            calm_cracks += 1
+        x, y = S["cx"][i], S["cy"][i]
+        line = C.new(W, H)
+        px, py = x, y
+        for _k in range(3):
+            nx, ny = px + r.uniform(-5, 5), py + r.uniform(-4, 4)
+            C.line(line, px, py, nx, ny, "bg0")
+            px, py = nx, ny
+        m = (line != C.T) & (lab == i) & ~joint & cover
+        g[m] = ci_stone[max(0, tone[i] - 1)]
+        decal |= m
+        cracks += 1
+    # altar plaza: 2-3 slabs with faint carved rune lines (one step darker)
+    for i, ang in ((2, 0.4), (9, 1.2), (20, 2.6)):
+        x, y = S["cx"][i], S["cy"][i]
+        line = C.new(W, H)
+        C.line(line, x - 3, y - 2, x + 2, y + 3, "bg0")
+        C.line(line, x + 2, y - 3, x - 1, y + 1, "bg0")
+        m = (line != C.T) & (lab == i) & ~joint & cover
+        g[m] = ci_stone[max(0, tone[i] - 1)]
+        decal |= m
+    # leaf litter (3 clusters) and needle specks in shade (soil tones, neighbouring steps)
+    for lx, ly in ((76, 210), (300, 52), (420, 228)):
+        for _ in range(7):
+            x, y = int(lx + r.uniform(-10, 10)), int(ly + r.uniform(-6, 6))
+            for ddx in (0, 1):
+                if 0 <= x + ddx < W:
+                    g[y, x + ddx] = C.ci("earth")
+                    decal[y, x + ddx] = True
+    shade = (S["v"] < 0.32) & cover & ~joint
+    sy_, sx_ = np.nonzero(shade)
+    for k in r.permutation(len(sx_))[:24]:
+        g[sy_[k], sx_[k]] = C.ci("earth") if g[sy_[k], sx_[k]] in (C.ci("forest"), C.ci("bg1"), C.ci("bg0")) else g[sy_[k], sx_[k]]
+        decal[sy_[k], sx_[k]] = True
+    # rune circle: faint carved ring + rune slots in the calm centre (one step darker)
     d = np.sqrt((xx - L.RITUAL_CENTER[0]) ** 2 + (yy - L.RITUAL_CENTER[1]) ** 2)
-    ring = np.abs(d - L.RITUAL_RADIUS) < 0.55
-    g[ring & (g == C.ci("forest"))] = C.ci("bg1")
+    ring = (np.abs(d - L.RITUAL_RADIUS) < 0.55) & cover & ~joint
+    g[ring] = ci_stone[np.maximum(0, tone[lab] - 1)][ring]
     for (rx, ry) in ritual:
-        g[(np.sqrt((xx - rx) ** 2 + (yy - ry) ** 2) <= 5.2) & cover] = C.ci("bg1")
-    # giant tree roots: ground relief (lit top-left edge, dark underside), under the y-sorted layer
+        m = ((xx - rx) ** 2 + (yy - ry) ** 2 <= 4.5 ** 2) & cover
+        g[m] = ci_stone[np.maximum(0, tone[lab] - 1)][m]
+        decal |= m
+    decal |= ring
+    # giant tree roots: relief over the stones (bark tones bg1 / earth / loam, lit top-left, dark underside)
     rm = np.zeros((H, W), dtype=bool)
     for pts in giant_roots():
         for x, y, th in pts:
             rm |= (xx - x) ** 2 + (yy - y) ** 2 <= (th / 2) ** 2
-    up = np.roll(rm, 1, 0) & np.roll(rm, 1, 1)
-    low = np.roll(rm, -1, 0)
-    shadow = np.roll(rm, -1, 0) | np.roll(np.roll(rm, -1, 0), -1, 1)
-    g[shadow & ~rm & cover] = C.ci("bg0")  # arching roots cast a thin dark underside
+    up_r = np.roll(rm, 1, 0) & np.roll(rm, 1, 1)
+    shadow = (np.roll(rm, -1, 0) | np.roll(np.roll(rm, -1, 0), -1, 1)) & ~rm & cover
+    g[shadow] = C.ci("bg0")
     g[rm] = C.ci("earth")
-    g[rm & ~up] = C.ci("loam")  # lit top-left edge
-    g[rm & ~low] = C.ci("bg1")
-    # (f) low-contrast ground details in clusters (never in the calm zone or on the roots)
-    groups = [("fern", 3), ("grass_clump", 3), ("leaf_cluster", 2), ("moss_rock", 2), ("root_tendril", 1), ("pale_mushroom", 1)]
-    centres = [(80, 60), (310, 64), (64, 180), (190, 228), (410, 210), (300, 236), (420, 70), (140, 46), (110, 236),
-               (420, 150), (60, 130), (240, 44)]
-    for k, (cx_, cy_) in enumerate(centres):
-        for j in range(4):
-            name, _w = groups[(k + j) % len(groups)]
-            variants = [n for n in decals_ if n.startswith(name + "_")]
-            dsp = decals_[variants[int(r.integers(0, len(variants)))]][0]
-            x = int(cx_ + r.uniform(-14, 14))
-            y = int(cy_ + r.uniform(-8, 8))
-            bb = (x, y, x + dsp.shape[1], y + dsp.shape[0])
-            if boxes_overlap(bb, CZ) or rm[max(0, y):y + dsp.shape[0], max(0, x):x + dsp.shape[1]].any():
-                continue
-            C.paste(g, dsp if r.random() < 0.5 else dsp[:, ::-1], x, y)
+    g[rm & ~up_r] = C.ci("loam")
+    g[rm & ~np.roll(rm, -1, 0)] = C.ci("bg1")
+    decal |= rm | shadow
+    # puddles (<= 2): soft dark shape with a tiny moon glint
+    for px_, py_, rx, ry in L.PUDDLES:
+        m = (((xx - px_) / rx) ** 2 + ((yy - py_) / ry) ** 2 <= 1) & cover
+        g[m] = C.ci("bg0")
+        g[int(py_) - 1, int(px_) - 2:int(px_)] = C.ci("moon")
+        decal |= m
     # hollows: dark gaps leading into the trees
-    for s_, p_ in L.HOLLOWS:
-        hx, hy = L.hollow_point(s_, p_)
-        g[((xx - hx) ** 2 + (yy - hy) ** 2 <= 11 ** 2) & cover] = C.ci("bg0")
-    # (d) flat cast shadows under every prop: lower-right, 40-60% of its width, `forest` or darker
+    for hx, hy in hollows:
+        m = ((xx - hx) ** 2 + (yy - hy) ** 2 <= 11 ** 2) & cover
+        g[m] = C.ci("bg0")
+        decal |= m
+    # flat cast shadows under props: lower-right, 40-60% of the prop width, one step darker
+    shadow_m = np.zeros((H, W), dtype=bool)
     for p in props:
         if p["kind"] in ("eyes", "glow") or p.get("overlayOf"):
             continue
@@ -492,15 +753,15 @@ def ground(sprites, decals_, props, ritual):
         if not len(foot):
             continue
         fx0, fx1 = (p["w"] - 1 - foot.max(), p["w"] - 1 - foot.min()) if p["flip"] else (foot.min(), foot.max())
-        fw = fx1 - fx0 + 1
-        rx = max(2.0, fw * 0.25 + (p["w"] * 0.05))
-        rx = min(rx, p["w"] * 0.3)
+        rx = min(max(2.0, p["w"] * 0.25), p["w"] * 0.3)
         ry = max(1.5, min(5.0, rx / 2.5))
         cxs = p["x"] + (fx0 + fx1) / 2 + rx * 0.6
-        m = (((xx - cxs) / rx) ** 2 + ((yy - p["baseY"] - 1) / ry) ** 2 <= 1) & cover
-        dark = np.isin(g, [C.ci("bg0"), C.ci("forest"), C.ci("bg1")])
-        g[m & dark] = C.ci("bg0")
-        g[m & ~dark] = C.ci("forest")
+        shadow_m |= (((xx - cxs) / rx) ** 2 + ((yy - p["baseY"] - 1) / ry) ** 2 <= 1) & cover
+    g0 = g.copy()  # one step darker, computed from the original tones (no chained steps)
+    for src, dst in STEP_DOWN.items():
+        g[shadow_m & (g0 == C.ci(src))] = C.ci(dst)
+    if return_masks:
+        return g, dict(S, decal=decal | shadow_m, cover=cover)
     return g
 
 

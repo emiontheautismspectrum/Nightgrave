@@ -39,7 +39,7 @@
  },
  "layout": {
   "alphas": {
-   "fog_overlay": 0.12,
+   "fog_overlay": 0.07,
    "forest_mist": 0.35,
    "vignette": 0.35,
    "vignette_outer": 0.35
