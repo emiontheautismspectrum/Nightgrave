@@ -348,6 +348,12 @@
    "h": 16,
    "w": 16
   },
+  "blood_sigil": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 32,
+   "w": 32
+  },
   "bone_pile_0": {
    "frames": 2,
    "group": "arena",
@@ -852,6 +858,18 @@
    "h": 6,
    "w": 7
   },
+  "orb_armored": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 10,
+   "w": 10
+  },
+  "orb_armored_crack": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 10,
+   "w": 10
+  },
   "orb_large": {
    "frames": 2,
    "group": "gameplay",
@@ -863,6 +881,12 @@
    "group": "gameplay",
    "h": 6,
    "w": 6
+  },
+  "orb_split": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 8,
+   "w": 8
   },
   "parry_fizzle": {
    "frames": 4,

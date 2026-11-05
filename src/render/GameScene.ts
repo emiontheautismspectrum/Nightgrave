@@ -403,6 +403,8 @@ export class GameScene extends Phaser.Scene {
     for (const s of this.orbs.values()) s.destroy();
     this.orbs.clear();
     for (const v of this.casterViews.values()) for (const o of [v.body, v.tele, v.fx]) o.destroy();
+    for (const sp of this.sigilViews.values()) sp.destroy();
+    this.sigilViews.clear();
     this.casterViews.clear();
     for (const p of this.props) p.s.setAlpha(1);
     this.overhang.setAlpha(1);
@@ -587,6 +589,7 @@ export class GameScene extends Phaser.Scene {
     this.shadow.setPosition(hx, hy + 5).setDepth(D_YSORT + hy + 3.9);
     this.pulse.setPosition(hx, hy - 2).setDepth(D_YSORT + hy + 4.1);
     this.drawCasters();
+    this.drawSigils();
     this.bossView.draw(st, p);
     this.drawChevron();
     if (st.alive) {
@@ -612,6 +615,7 @@ export class GameScene extends Phaser.Scene {
       }
       s.setPosition(Math.round(pr.x), Math.round(pr.y)).setDepth(D_YSORT + pr.y + s.height / 2);
       if (pr.kind === 'wraith') s.setFlipX(pr.vx < 0);
+      if (pr.kind === 'orb_armored' && pr.armor === 0 && s.anims.currentAnim?.key !== 'orb_armored_crack') s.play('orb_armored_crack');
       if (isFading(st, pr) && s.anims.currentAnim?.key !== 'wraith_fade') s.play('wraith_fade');
     }
 
@@ -701,6 +705,29 @@ export class GameScene extends Phaser.Scene {
     }
     this.lastDir.x = h.dirX;
     this.lastDir.y = h.dirY;
+  }
+
+  private sigilViews = new Map<number, Phaser.GameObjects.Sprite>();
+  /** Blood sigils: thin red outline while telegraphed, filled while lethal, then fading (frames from sim ticks). */
+  private drawSigils(): void {
+    const st = this.sim.state;
+    const t = st.tick;
+    const seen = new Set<number>();
+    for (const g of st.sigils) {
+      seen.add(g.id);
+      let sp = this.sigilViews.get(g.id);
+      if (!sp) {
+        sp = this.add.sprite(Math.round(g.x), Math.round(g.y), ATLAS, frame('blood_sigil')).setDepth(D_GROUND_TELE + 1);
+        this.sigilViews.set(g.id, sp);
+      }
+      const f = t < g.fill ? (t >> 3) & 1 : 2 + ((t >> 3) & 1);
+      sp.setFrame(frame('blood_sigil', f)).setAlpha(t >= g.end ? Math.max(0, 1 - (t - g.end) / Math.max(1, g.gone - g.end)) : 1);
+    }
+    for (const [id, sp] of this.sigilViews)
+      if (!seen.has(id)) {
+        sp.destroy();
+        this.sigilViews.delete(id);
+      }
   }
 
   /** Touch buttons in the side margin: semi-transparent circles with cooldown rings (replace the desktop icons). */

@@ -5,7 +5,7 @@ import { makeParams, ticks, type SimParams } from './params';
 import { isDouble, isSlow, runPickups } from './pickups';
 import { toSeed } from './rng';
 import { NEVER, type Hero, type Projectile, type SimState } from './state';
-import { isFading, moveProjectile, runDirector, type DirectorOptions } from './waves';
+import { isFading, moveProjectile, runDirector, sigilHits, splitBurst, type DirectorOptions } from './waves';
 
 export { spawnProjectile } from './waves';
 
@@ -51,6 +51,7 @@ export function createState(seed: number, difficulty: Difficulty, p: SimParams =
     patternAt: p.graceTicks + Math.round(p.gapMin),
     telegraphs: [],
     casters: [],
+    sigils: [],
     waveClock: 0,
     boss: null,
     beams: [],
@@ -218,7 +219,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       const dy = pr.y - h.y;
       const r = p.parryRadius + pr.radius;
       const d2 = dx * dx + dy * dy;
-      if (pr.parryable && !isFading(s, pr) && d2 <= r * r) cand.push({ pr, d2 });
+      if (pr.parryable && !isFading(s, pr) && pr.crackedBy !== h.parryStart && d2 <= r * r) cand.push({ pr, d2 });
     }
     cand.sort((a, b) => a.d2 - b.d2 || a.pr.id - b.pr.id);
     const hit = new Set<number>();
@@ -226,7 +227,20 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
     for (const { pr, d2 } of cand) {
       if (h.parryKills >= p.parryMaxKills) break;
       h.parryKills++;
+      if (pr.armor > 0) {
+        // armored orb: this parry only cracks the shell and pushes it a few px straight away from the hero
+        pr.armor--;
+        pr.crackedBy = h.parryStart;
+        const d = Math.sqrt(d2) || 1;
+        pr.x += ((pr.x - h.x) / d) * p.newThreats.armored.crackPush;
+        pr.y += ((pr.y - h.y) / d) * p.newThreats.armored.crackPush;
+        h.parryHit = true; // a hit, not a whiff (short cooldown), but no points and no multiplier step
+        s.lastParryTick = t;
+        s.events.push({ type: 'parry_crack', id: pr.id, x: pr.x, y: pr.y });
+        continue;
+      }
       hit.add(pr.id);
+      if (pr.kind === 'orb_split') splitBurst(s, p, pr);
       const first = !h.parryHit;
       const dbl = isDouble(s) ? p.pickups.doubleScore.factor : 1;
       const points = (first ? p.parryBase : p.extraKillPoints) * s.multiplier * dbl; // hundredths of a point
@@ -259,6 +273,12 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
         s.events.push({ type: 'death', x: h.x, y: h.y, by: pr.id });
         break;
       }
+    }
+    const sg = s.alive ? sigilHits(s, p) : 0;
+    if (sg) {
+      s.alive = false;
+      s.deathTick = t;
+      s.events.push({ type: 'death', x: h.x, y: h.y, by: -2 });
     }
     if (s.alive && beamHits(s, p)) {
       s.alive = false;

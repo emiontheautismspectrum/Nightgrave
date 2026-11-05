@@ -3,7 +3,7 @@ import type { Difficulty } from '../data/tuning';
 /** Sentinel start tick meaning "never happened" (JSON-safe, unlike -Infinity). */
 export const NEVER = -1_000_000_000;
 
-export type ProjectileKind = 'orb_small' | 'orb_large' | 'rune_shard' | 'blade' | 'wraith';
+export type ProjectileKind = 'orb_small' | 'orb_large' | 'rune_shard' | 'blade' | 'wraith' | 'orb_armored' | 'orb_split';
 
 export interface Projectile {
   id: number;
@@ -29,6 +29,22 @@ export interface Projectile {
   fadeEnd: number;
   /** Boss attack serial that launched it (0 = not a boss projectile). */
   boss: number;
+  /** Shell left (armored orb: 1 = the next parry only cracks it). */
+  armor: number;
+  /** parryStart of the pulse that cracked it / burst its parent (-1 = never): that pulse cannot also destroy it. */
+  crackedBy: number;
+}
+
+/** Blood sigil ground hazard: [start, fill) telegraph, [fill, end) lethal, [end, gone) fading (harmless). */
+export interface Sigil {
+  id: number;
+  x: number;
+  y: number;
+  r: number;
+  start: number;
+  fill: number;
+  end: number;
+  gone: number;
 }
 
 export type BossKind = 'eye' | 'lich';
@@ -174,6 +190,9 @@ export type SimEvent =
   | { type: 'caster_fizzle'; id: number }
   | { type: 'wave'; wave: number }
   | { type: 'death'; x: number; y: number; by: number }
+  | { type: 'parry_crack'; id: number; x: number; y: number }
+  | { type: 'split'; id: number; x: number; y: number }
+  | { type: 'sigil'; id: number; x: number; y: number }
   | { type: 'boss_intro'; kind: BossKind }
   | { type: 'boss_attack'; kind: BossKind; pattern: BossPattern; remaining: number }
   | { type: 'boss_segment'; remaining: number; reflected: boolean }
@@ -213,6 +232,7 @@ export interface SimState {
   patternAt: number;
   telegraphs: Telegraph[];
   casters: Caster[];
+  sigils: Sigil[];
   /** Ticks of normal wave time elapsed (paused during boss fights and the break after them). */
   waveClock: number;
   boss: Boss | null;

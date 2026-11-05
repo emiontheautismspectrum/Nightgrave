@@ -87,6 +87,18 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
     const active = sim.state.beams.length > 0 || (sim.state.boss?.attack?.pattern === 'beam' && sim.state.boss.attack.fire - sim.state.tick <= 4);
     if (opts.beamDash && active && c < 0 && c > -18) dashAway = [nx, ny];
   }
+  // blood sigils: keep out of the circle while it is telegraphed or lethal; dash out if caught inside a lethal one
+  for (const g of sim.state.sigils) {
+    if (sim.state.tick >= g.end) continue;
+    const rx = h.x - g.x;
+    const ry = h.y - g.y;
+    const d = Math.sqrt(rx * rx + ry * ry) || 1;
+    if (d < g.r + 12) {
+      fx += (rx / d) * 4;
+      fy += (ry / d) * 4;
+      if (sim.state.tick >= g.fill - 3 && d < g.r + p.heroRadius + 1) dashAway = [rx / d, ry / d];
+    }
+  }
   // converging shots can cancel each other's sidestep: break the tie by stepping across the most urgent one
   if (nearT < 45 && Math.abs(fx) + Math.abs(fy) < 0.05) {
     const l = Math.sqrt(nearPerp[0] * nearPerp[0] + nearPerp[1] * nearPerp[1]) || 1;

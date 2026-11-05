@@ -78,6 +78,7 @@ export interface SimParams {
   /** Difficulty speed multiplier (boss and pickup code scales base speeds by it). */
   diffSpeed: number;
   bosses: typeof TUNING.bosses;
+  newThreats: typeof TUNING.newThreats;
   pickups: typeof TUNING.pickups;
   /** Parry active ticks by ember charge count (index = charges, last entry = cap). */
   parryActiveByCharge: number[];
@@ -174,6 +175,7 @@ export function makeParams(difficulty: Difficulty): SimParams {
     shardFanArc: T.casters.shardFan.arc,
     diffSpeed: d.speed,
     bosses: T.bosses,
+    newThreats: T.newThreats,
     pickups: T.pickups,
     parryActiveByCharge: emberTable(),
   };

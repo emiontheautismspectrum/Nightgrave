@@ -42,6 +42,8 @@ export function spawnProjectile(
     : kind === 'rune_shard' ? p.shardRadius
     : kind === 'blade' ? p.bladeRadius
     : kind === 'wraith' ? p.wraithRadius
+    : kind === 'orb_armored' ? p.newThreats.armored.radius
+    : kind === 'orb_split' ? p.newThreats.split.radius
     : p.smallRadius;
   const pr: Projectile = {
     id: s.nextId++,
@@ -60,6 +62,8 @@ export function spawnProjectile(
     expires: extra.expires ?? -1,
     fadeEnd: extra.fadeEnd ?? -1,
     boss: extra.boss ?? 0,
+    armor: kind === 'orb_armored' ? 1 : 0,
+    crackedBy: -1,
   };
   s.projectiles.push(pr);
   s.events.push({
@@ -198,6 +202,92 @@ function wraiths(s: SimState, p: SimParams, sp: number): void {
   }
 }
 
+// ------------------------------------------------------------------ Polish 2 threats
+
+function armoredOrbs(s: SimState, p: SimParams, sp: number): void {
+  const n = countFor(p.patterns.armored, s.wave);
+  const v = (p.newThreats.armored.speed * p.diffSpeed * sp) / 60;
+  for (let i = 0; i < n; i++) {
+    const [x, y] = edgePoint(s, p);
+    const [dx, dy] = aimAtHero(s, x, y, p.spread);
+    spawnProjectile(s, p, 'orb_armored', x, y, dx * v, dy * v);
+  }
+}
+
+function splitOrbs(s: SimState, p: SimParams, sp: number): void {
+  const n = countFor(p.patterns.split, s.wave);
+  const v = (p.newThreats.split.speed * p.diffSpeed * sp) / 60;
+  for (let i = 0; i < n; i++) {
+    const [x, y] = edgePoint(s, p);
+    const [dx, dy] = aimAtHero(s, x, y, p.spread);
+    spawnProjectile(s, p, 'orb_split', x, y, dx * v, dy * v);
+  }
+}
+
+/**
+ * A parried splitting orb bursts into small orbs flying OUTWARD (away from the hero, spread +-childSpread), spawned
+ * outside the hero's hit radius; it is the player's own parry that triggers them (telegraphed by the orb itself).
+ */
+export function splitBurst(s: SimState, p: SimParams, pr: Projectile): void {
+  const c = p.newThreats.split;
+  let dx = pr.x - s.hero.x;
+  let dy = pr.y - s.hero.y;
+  const d = Math.sqrt(dx * dx + dy * dy);
+  if (d > 1e-6) {
+    dx /= d;
+    dy /= d;
+  } else {
+    dx = 1;
+    dy = 0;
+  }
+  const minR = p.heroRadius + p.smallRadius + 4;
+  const ox = s.hero.x + dx * Math.max(d, minR);
+  const oy = s.hero.y + dy * Math.max(d, minR);
+  const v = (c.childSpeed * p.diffSpeed) / 60;
+  for (let k = 0; k < c.children; k++) {
+    const n = c.children as number;
+    const a = n === 1 ? 0 : -c.childSpread + (2 * c.childSpread * k) / (n - 1);
+    const [ux, uy] = rotate(dx, dy, a);
+    const kid = spawnProjectile(s, p, 'orb_small', ox, oy, ux * v, uy * v, {}, 15);
+    kid.crackedBy = s.hero.parryStart; // the pulse that burst the orb cannot also destroy its pieces
+  }
+  s.events.push({ type: 'split', id: pr.id, x: pr.x, y: pr.y });
+}
+
+/** A blood sigil away from the hero and from other sigils (seeded), never more than maxActive at once. */
+function bloodSigil(s: SimState, p: SimParams): boolean {
+  const c = p.newThreats.sigil;
+  if (s.sigils.length >= c.maxActive) return false;
+  const min2 = c.minHeroDist * c.minHeroDist;
+  for (let i = 0; i < 8; i++) {
+    const x = range(s, p.x0 + c.edgeInset, p.x1 - c.edgeInset);
+    const y = range(s, p.y0 + c.edgeInset, p.y1 - c.edgeInset);
+    if (dist2(x, y, s.hero.x, s.hero.y) < min2) continue;
+    if (s.sigils.some((g) => dist2(g.x, g.y, x, y) < (4 * c.radius) * (4 * c.radius))) continue;
+    const start = s.tick;
+    const fill = start + Math.max(15, Math.round(c.telegraphSeconds * 60));
+    const end = fill + Math.round(c.lethalSeconds * 60);
+    s.sigils.push({ id: s.nextId++, x, y, r: c.radius, start, fill, end, gone: end + Math.round(c.fadeSeconds * 60) });
+    s.events.push({ type: 'sigil', id: s.nextId - 1, x, y });
+    return true;
+  }
+  return false;
+}
+
+export function runSigils(s: SimState): void {
+  if (s.sigils.length) s.sigils = s.sigils.filter((g) => s.tick < g.gone);
+}
+
+/** Is the hero inside a lethal (filled) sigil? */
+export function sigilHits(s: SimState, p: SimParams): number {
+  for (const g of s.sigils) {
+    if (s.tick < g.fill || s.tick >= g.end) continue;
+    const r = g.r + p.heroRadius;
+    if (dist2(g.x, g.y, s.hero.x, s.hero.y) < r * r) return g.id;
+  }
+  return 0;
+}
+
 // ------------------------------------------------------------------ casters
 
 const SHADE_ATTACKS: CasterAttack[] = ['orbFan', 'wraith', 'shardFan'];
@@ -275,7 +365,7 @@ function runCasters(s: SimState, p: SimParams, sp: number): void {
   s.casters = keep;
 }
 
-type PatternKey = 'orbFan' | 'runeBurst' | 'blades' | 'wraiths' | 'heavyOrbs' | 'shade' | 'stalker';
+type PatternKey = 'orbFan' | 'runeBurst' | 'blades' | 'wraiths' | 'heavyOrbs' | 'shade' | 'stalker' | 'armored' | 'split' | 'sigil';
 const PATTERNS: [PatternKey, (s: SimState, p: SimParams, sp: number) => void][] = [
   ['orbFan', orbFan],
   ['runeBurst', runeBurst],
@@ -285,6 +375,10 @@ const PATTERNS: [PatternKey, (s: SimState, p: SimParams, sp: number) => void][] 
   // a summon that cannot happen (cap reached, source busy) falls back to an orb fan
   ['shade', (s, p, sp) => void (summon(s, p, 'shade') || orbFan(s, p, sp))],
   ['stalker', (s, p, sp) => void (summon(s, p, 'stalker') || orbFan(s, p, sp))],
+  ['armored', armoredOrbs],
+  ['split', splitOrbs],
+  // a sigil that cannot be placed (cap reached, no free spot) falls back to an orb fan
+  ['sigil', (s, p, sp) => void (bloodSigil(s, p) || orbFan(s, p, sp))],
 ];
 
 function pickPattern(s: SimState, p: SimParams): (s: SimState, p: SimParams, sp: number) => void {
@@ -320,6 +414,7 @@ function fireTelegraphs(s: SimState, p: SimParams): void {
 }
 
 export function runDirector(s: SimState, p: SimParams, opts: DirectorOptions): void {
+  runSigils(s);
   if (s.tick < p.graceTicks) return;
   const startWave = opts.startWave ?? 0;
   // boss fight (incl. its death sequence) and the break after it: the wave clock is paused, nothing new is set up;

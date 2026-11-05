@@ -30,7 +30,8 @@ from nglib.palette import IDX, RGB  # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
 TARGET = {"violet": 3.0, "blood": 2.5}
-PROJECTILES = {"orb_small": "violet", "orb_large": "violet", "rune_shard": "violet", "wraith": "violet", "blade": "blood"}
+PROJECTILES = {"orb_small": "violet", "orb_large": "violet", "rune_shard": "violet", "wraith": "violet", "blade": "blood",
+               "orb_armored": "violet", "orb_split": "violet", "blood_sigil": "blood"}
 CALM_MAX = 1.6
 
 

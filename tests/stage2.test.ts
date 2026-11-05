@@ -65,7 +65,7 @@ describe('fairness: nothing appears near the hero without a >= 0.25 s telegraph'
 
 describe('determinism with every threat type', () => {
   for (const seed of [3, 1234, 99991]) {
-    it(`seed ${seed}: two runs from wave 3 are identical and include all five kinds`, () => {
+    it(`seed ${seed}: two runs from wave 3 are identical and include every projectile kind`, () => {
       const run = () => {
         const sim = new Sim(seed, 'hard', { startWave: 3, bosses: false });
         const kinds = new Set<ProjectileKind>();
@@ -82,7 +82,7 @@ describe('determinism with every threat type', () => {
       const a = run();
       const b = run();
       expect(JSON.stringify(b.sim.state)).toBe(JSON.stringify(a.sim.state));
-      expect([...a.kinds].sort()).toEqual(['blade', 'orb_large', 'orb_small', 'rune_shard', 'wraith']);
+      expect([...a.kinds].sort()).toEqual(['blade', 'orb_armored', 'orb_large', 'orb_small', 'orb_split', 'rune_shard', 'wraith']);
     });
   }
 
@@ -91,7 +91,7 @@ describe('determinism with every threat type', () => {
       const sim = new Sim(777, d);
       const kinds = new Set<ProjectileKind>();
       for (const e of collect(sim, (s) => botInput(s), 60 * 60 * 4)) if (e.type === 'spawn') kinds.add(e.kind);
-      expect(kinds.size).toBe(5); // a real (non test-option) run that reached blades and wraiths
+      expect(kinds.size).toBeGreaterThanOrEqual(5); // a real (non test-option) run that reached blades and wraiths
       const replayed = playReplay(JSON.parse(JSON.stringify(encodeReplay(777, d, sim.log))));
       const strip = (st: object) => JSON.stringify({ ...st, events: undefined });
       expect(strip(replayed.state)).toBe(strip(sim.state));

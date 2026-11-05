@@ -113,7 +113,68 @@ def wraith_fade():
     return [_wraith(i, keep) for i, keep in enumerate((0.75, 0.5, 0.25, 0.07))]
 
 
+def _armored(i, crack=0):
+    """Armored orb: violet core inside a bone shell (rim); crack frames split the shell."""
+    a = C.new(10, 10)
+    C.disc(a, 5, 5, 4.4, "bone")
+    C.disc(a, 5, 5, 2.9, "violet")
+    a[(a == C.ci("violet")) & (C.grid(10, 10)[0] + C.grid(10, 10)[1] > 11)] = C.ci("violet_dark")
+    C.put(a, 4 + i, 4, "bone")
+    if crack:  # broken shell: a dark gap through the rim and missing chips
+        for x, y in ((2, 2), (3, 3), (7, 7), (8, 6), (2, 7)):
+            C.put(a, x, y, "violet_dark" if crack == 1 else C.T)
+        if crack == 2:
+            for x, y in ((1, 5), (5, 1), (8, 3)):
+                C.put(a, x, y, C.T)
+    return C.outline(a)
+
+
+def orb_armored():
+    return [_armored(0), _armored(1)]
+
+
+def orb_armored_crack():
+    return [_armored(0, 1), _armored(1, 2)]
+
+
+def orb_split():
+    """Splitting orb (8x8, slightly larger): a violet orb with a bone seam that shows it will burst into three."""
+    frames = []
+    for i in range(2):
+        a = C.new(8, 8)
+        C.disc(a, 4, 4, 3.3, "violet")
+        for k in range(3):  # three seams meeting in the centre
+            ang = k * 2.094 + i * 0.3
+            C.put(a, int(4 + math.cos(ang) * 2), int(4 + math.sin(ang) * 2), "bone")
+        C.put(a, 4, 4, "bone")
+        frames.append(C.outline(a))
+    return frames
+
+
+def blood_sigil():
+    """Blood sigil ground hazard, 32x32: frames 0-1 telegraph (thin red circle outline, pulsing), 2-3 lethal fill."""
+    frames = []
+    xx, yy = C.grid(32, 32)
+    d = np.sqrt((xx - 16) ** 2 + (yy - 16) ** 2)
+    for i in range(4):
+        a = C.new(32, 32)
+        if i < 2:
+            a[(d <= 14.5) & (d >= 13.3 - i)] = C.ci("blood")
+            for k in range(6):  # tick marks around the ring
+                ang = k * math.pi / 3 + i * 0.26
+                C.put(a, int(16 + math.cos(ang) * 11), int(16 + math.sin(ang) * 11), "blood_dark")
+        else:
+            a[d <= 14.5] = C.ci("blood_dark")
+            a[(d <= 14.5) & (d >= 12.8)] = C.ci("blood")
+            for k in range(3):  # a bright inner rune triangle
+                ang = k * 2.094 + (i - 2) * 1.047
+                C.line(a, 16 + math.cos(ang) * 8, 16 + math.sin(ang) * 8, 16 + math.cos(ang + 2.094) * 8, 16 + math.sin(ang + 2.094) * 8, "blood")
+        frames.append(a)
+    return frames
+
+
 SPRITES = {
+    "orb_armored": orb_armored, "orb_armored_crack": orb_armored_crack, "orb_split": orb_split, "blood_sigil": blood_sigil,
     "orb_small": orb_small, "orb_large": orb_large, "rune_shard": rune_shard,
     "blade": blade, "wraith": wraith, "wraith_fade": wraith_fade,
 }

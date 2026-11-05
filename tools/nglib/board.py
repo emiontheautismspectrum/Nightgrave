@@ -70,7 +70,8 @@ def stress_board(art, game, title, count=80, seed=4242):
     x0, y0, x1, y1 = art["layout"]["arena"]
     cx, cy = art["layout"]["heroSpawn"]
     heroes = [(cx, cy), (x0 + 30, y1 - 14)]
-    kinds = (["orb_small"] * 30 + ["orb_large"] * 12 + ["rune_shard"] * 20 + ["blade"] * 9 + ["wraith"] * 9)[:count]
+    kinds = (["orb_small"] * 26 + ["orb_large"] * 10 + ["rune_shard"] * 18 + ["blade"] * 8 + ["wraith"] * 8
+             + ["orb_armored"] * 5 + ["orb_split"] * 4 + ["blood_sigil"] * 1)[:count]
     actors = []
     for hx, hy in heroes:
         actors += [("hero_shadow", 0, hx - 6, hy + 2, hy + 4, False), ("knight_idle", 0, hx - 8, hy - 12, hy + 4, False)]

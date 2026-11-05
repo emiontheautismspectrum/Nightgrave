@@ -9,6 +9,7 @@ SPRITES = {
     # threats
     "orb_small": (6, 6, 2), "orb_large": (10, 10, 2), "rune_shard": (8, 8, 2),
     "blade": (16, 16, 4), "wraith": (16, 16, 4), "wraith_fade": (16, 16, 4),
+    "orb_armored": (10, 10, 2), "orb_armored_crack": (10, 10, 2), "orb_split": (8, 8, 2), "blood_sigil": (32, 32, 4),
     # effects
     "parry_pulse": (24, 24, 4), "parry_spark": (4, 4, 8), "dash_trail": (16, 16, 3),
     "knight_bash": (32, 32, 4), "knight_cloak_trail": (16, 16, 3), "dust_puff": (8, 8, 4),

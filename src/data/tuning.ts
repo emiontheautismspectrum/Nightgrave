@@ -65,6 +65,12 @@ export const TUNING = {
     heavyOrbs: { weight: 1, unlockWave: 1, count: 2, countPerWave: 0.2, maxCount: 4 },
     /** Casters (see `casters`): a shade rises at the portal altar, a stalker steps out of a forest hollow. */
     shade: { weight: 2, unlockWave: 0 },
+    /** Polish 2 threats. Armored orb: two parries (the first cracks it and pushes it 6 px away). */
+    armored: { weight: 1.5, unlockWave: 2, count: 1, countPerWave: 0.2, maxCount: 3 },
+    /** Splitting orb: a parry bursts it into 3 small orbs flying outward, away from the hero. */
+    split: { weight: 1.5, unlockWave: 3, count: 1, countPerWave: 0.15, maxCount: 2 },
+    /** Blood sigil: red ground hazard (unparryable): telegraph, then lethal, then fades; at most 2 active. */
+    sigil: { weight: 1.2, unlockWave: 5 },
     stalker: { weight: 2.5, unlockWave: 1 },
   },
   /**
@@ -148,6 +154,12 @@ export const TUNING = {
     points: 50,
     slowTime: { weight: 1, seconds: 6, factor: 0.5 },
     doubleScore: { weight: 1, seconds: 10, factor: 2 },
+  },
+  /** Polish 2 threat details (see patterns.armored / split / sigil for weights and unlocks). */
+  newThreats: {
+    armored: { radius: 4.5, speed: 80, crackPush: 6 },
+    split: { radius: 3.5, speed: 85, children: 3, childSpread: 0.6, childSpeed: 95 },
+    sigil: { radius: 14, telegraphSeconds: 0.6, lethalSeconds: 1.5, fadeSeconds: 0.3, maxActive: 2, edgeInset: 30, minHeroDist: 40 },
   },
   difficulty: {
     // Polish 2: spread wider so the harder base rules leave Easy/Medium approachable (bot-calibrated, see balance.ts)
