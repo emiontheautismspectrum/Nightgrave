@@ -137,6 +137,9 @@ Clear only the champion message of an entry:
 curl -s -X POST https://nightgrave-api.<your-subdomain>.workers.dev/api/admin/clear-message/123 -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
 ```
 
+Pause all new submissions (kill switch; the board keeps working): set `SUBMISSIONS_ENABLED = "false"` in
+`server/wrangler.toml` and run `npx wrangler deploy`; set it back to `"true"` and deploy again to resume.
+
 A wrong or missing token answers `404` (the admin routes do not reveal themselves). The blocked-word list is
 `src/shared/profanity.json`: extend it, then rebuild Pages and redeploy the Worker (both use it).
 

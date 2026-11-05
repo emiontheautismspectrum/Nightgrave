@@ -6,6 +6,8 @@ compatibility_date = "2025-06-01"
 [vars]
 # Comma-separated list of allowed browser origins: your Pages domain (and localhost for development).
 ALLOWED_ORIGINS = "https://nightgrave.pages.dev,http://localhost:5173"
+# Kill switch: "false" pauses new submissions (the board keeps working). See DEPLOY.md.
+SUBMISSIONS_ENABLED = "true"
 
 [[d1_databases]]
 binding = "DB"

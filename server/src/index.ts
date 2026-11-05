@@ -19,6 +19,8 @@ export interface Env {
   DB: D1Database;
   ADMIN_TOKEN?: string;
   VERIFIER_TOKEN?: string;
+  /** Kill switch: "false" pauses POST /api/submit (503 paused); the board keeps working. Default "true". */
+  SUBMISSIONS_ENABLED?: string;
   IP_SALT?: string;
   ALLOWED_ORIGINS?: string;
 }
@@ -413,6 +415,7 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
     if (url.pathname === '/api/submit' && req.method === 'POST') {
       // browsers always send Origin on cross-origin POST: refuse foreign sites (non-browser clients send none)
       if (origin && !allowed.includes(origin)) return reject('origin', 403, req, env);
+      if ((env.SUBMISSIONS_ENABLED ?? 'true').trim().toLowerCase() === 'false') return reject('paused', 503, req, env);
       return await postSubmit(req, env, now);
     }
     if (parts[1] === 'api' && parts[2] === 'verify') {

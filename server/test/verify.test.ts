@@ -238,3 +238,16 @@ describe('private data in responses and logs', () => {
       for (const m of line.matchAll(/\$\{([^}]*)\}/g)) expect(m[1], line).not.toMatch(/TOKEN|headers|replay|body|\braw\b|\bit\.|\bip\b/i);
   });
 });
+
+describe('kill switch', () => {
+  it('SUBMISSIONS_ENABLED=false pauses submit (503 paused) and the board still works', async () => {
+    env.SUBMISSIONS_ENABLED = 'false';
+    const r = await submit(RUN.log, RUN.score);
+    expect(r.status).toBe(503);
+    expect(((await r.json()) as { reason: string }).reason).toBe('paused');
+    expect(await pending()).toEqual([]);
+    expect((await handle(new Request('https://api.test/api/daily', { headers: { 'CF-Connecting-IP': '5.4.3.2' } }), env, NOW)).status).toBe(200);
+    env.SUBMISSIONS_ENABLED = 'true';
+    expect((await submit(RUN.log, RUN.score)).status).toBe(200);
+  });
+});
