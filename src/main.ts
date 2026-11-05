@@ -2,6 +2,7 @@ import '@fontsource/press-start-2p/400.css';
 import Phaser from 'phaser';
 import { TITLE, VIEW_HEIGHT, VIEW_WIDTH } from './config';
 import { dailySeed, utcDateKey } from './daily';
+import { getServerDate } from './net/api';
 import { audio } from './render/audio';
 import { onAudioEvent } from './render/events';
 import { GameScene, type RunConfig } from './render/GameScene';
@@ -64,7 +65,8 @@ async function boot(): Promise<void> {
       makeRun:
         difficulty === 'hard'
           ? () => {
-              const key = utcDateKey(new Date());
+              // the server's date when the API answered (a wrong local clock cannot shift the seed), else local UTC
+              const key = getServerDate() ?? utcDateKey(new Date());
               return { seed: dailySeed(key), label: `HARD - DAILY ${key}`, date: key };
             }
           : () => ({ seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 1, label: '' }),

@@ -5,6 +5,7 @@
  */
 import Phaser from 'phaser';
 import { AXIS_MAX, BTN_DASH, BTN_PARRY, sanitizeInput, type InputFrame } from '../sim/input';
+import { fieldFocused } from './SubmitPanel';
 import { TouchModel } from './touch';
 
 const PARRY_KEYS = new Set(['KeyJ', 'KeyZ']);
@@ -118,6 +119,7 @@ export class InputCollector {
     on('pointercancel', (e) => this.touch.cancel(e.pointerId));
     const kb = scene.input.keyboard;
     const down = (e: KeyboardEvent) => {
+      if (fieldFocused()) return; // typing a name: keys only type
       if (MOVE_KEYS[e.code] || PARRY_KEYS.has(e.code) || DASH_KEYS.has(e.code)) e.preventDefault();
       if (e.repeat) return;
       if (PAUSE_KEYS.has(e.code)) {

@@ -4,6 +4,8 @@
  */
 import Phaser from 'phaser';
 import { TITLE, VIEW_HEIGHT, VIEW_WIDTH } from '../config';
+import { fetchBoard, online, type Board } from '../net/api';
+import { addDays } from '../shared/daily';
 import { DIFFICULTIES, persist, save } from '../storage';
 import { audio } from './audio';
 import { ARENA_PROPS, ATLAS, MANIFEST, bgKey, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
@@ -19,6 +21,11 @@ export class TitleScene extends Phaser.Scene {
   private cfg!: TitleConfig;
   private menu!: MenuView;
   private fog!: Phaser.GameObjects.TileSprite;
+  /** Board state for the title: lines are rendered only with Phaser text objects. */
+  private board: Board | null = null;
+  private boardState: 'offline' | 'loading' | 'error' | 'ready' = online() ? 'loading' : 'offline';
+  private champion: { label: string; name: string; message: string | null } | null = null;
+  private onBoardPage = false;
 
   constructor() {
     super('title');
@@ -53,6 +60,61 @@ export class TitleScene extends Phaser.Scene {
     audio.setMusic('music_menu');
     audio.setAmbience(false);
     this.showMain();
+    void this.loadBoard();
+  }
+
+  private async loadBoard(): Promise<void> {
+    if (!online()) return;
+    const b = await fetchBoard();
+    if (!this.scene.isActive()) return;
+    if (!b) {
+      this.boardState = 'error';
+    } else {
+      this.board = b;
+      this.boardState = 'ready';
+      if (b.champion) this.champion = { label: "TODAY'S CHAMPION", ...b.champion };
+      else {
+        const y = await fetchBoard(addDays(b.date, -1));
+        if (!this.scene.isActive()) return;
+        if (y?.champion) this.champion = { label: "YESTERDAY'S CHAMPION", ...y.champion };
+      }
+    }
+    if (this.onBoardPage) this.showBoard();
+    else this.menu.refresh();
+  }
+
+  /** Always 3 lines (the menu re-renders a fixed number of lines). */
+  private boardLines(): string[] {
+    if (this.boardState === 'offline') return ['', '', 'ONLINE BOARD: OFFLINE'];
+    if (this.boardState === 'loading') return ['', '', 'ONLINE BOARD: LOADING'];
+    if (this.boardState === 'error') return ['', '', 'BOARD UNAVAILABLE'];
+    const c = this.champion;
+    if (!c) return ['', '', 'NO CHAMPION YET TODAY'];
+    return ['', c.label, c.message ? `${c.name}: ${c.message}` : c.name];
+  }
+
+  private showBoard(): void {
+    this.onBoardPage = true;
+    const b = this.board;
+    const lines: string[] = [];
+    if (this.boardState === 'loading') lines.push('LOADING');
+    else if (!b) lines.push(this.boardState === 'offline' ? 'ONLINE BOARD: OFFLINE' : 'BOARD UNAVAILABLE');
+    else {
+      lines.push(`HARD DAILY ${b.date} UTC`, '', '#  NAME              SCORE  HERO    TIME');
+      for (const e of b.top)
+        lines.push(`${String(e.rank).padStart(2)} ${e.name.padEnd(16)} ${String(e.score).padStart(7)}  ${e.hero.toUpperCase().padEnd(6)} ${String(Math.floor(e.durationTicks / 60)).padStart(4)}S`);
+      if (!b.top.length) lines.push('NO RUNS YET TODAY');
+    }
+    this.menu.show({
+      title: "TODAY'S BEST",
+      items: [],
+      top: 48,
+      lines: () => lines,
+      onBack: () => {
+        this.onBoardPage = false;
+        this.showMain(5);
+      },
+    });
   }
 
   private ctx(): MenuCtx {
@@ -74,9 +136,10 @@ export class TitleScene extends Phaser.Scene {
         { label: () => `HERO ${sv.hero.toUpperCase()}`, onActivate: () => this.menu.show(heroPage(() => this.showMain(2), () => this.showMain(2))) },
         { label: () => 'SETTINGS', onActivate: () => this.menu.show(settingsPage(this.ctx(), () => this.showMain(3))) },
         { label: () => 'BEST SCORES', onActivate: () => this.showBest() },
-        { label: () => 'CREDITS', onActivate: () => this.menu.show(creditsPage(() => this.showMain(5))) },
+        { label: () => "TODAY'S BEST", onActivate: () => this.showBoard() },
+        { label: () => 'CREDITS', onActivate: () => this.menu.show(creditsPage(() => this.showMain(6))) },
       ],
-      lines: () => ['', '', '', 'ONLINE BOARD: COMING SOON'],
+      lines: () => this.boardLines(),
     };
     this.menu.show(page, focus);
   }

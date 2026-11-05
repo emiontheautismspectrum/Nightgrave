@@ -200,6 +200,8 @@ export class MenuView {
 
   private onKey(e: KeyboardEvent): void {
     if (!this.active || this.fresh) return;
+    const a = typeof document !== 'undefined' ? document.activeElement : null;
+    if (a && a.tagName === 'INPUT') return; // a text field has the keyboard
     switch (e.code) {
       case 'ArrowUp':
       case 'KeyW':

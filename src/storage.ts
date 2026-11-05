@@ -46,6 +46,20 @@ export interface SaveData {
   best: Record<Difficulty, BestEntry[]>;
   /** Hard "Today's best" per UTC date (newest first, at most DAILY_DAYS dates). */
   daily: { date: string; entry: BestEntry }[];
+  /** Random UUID v4 for the online board (no account). A new one per session if storage is blocked. */
+  playerId: string;
+  /** Last name used on the board (remembered, re-validated on use). */
+  boardName: string;
+}
+
+const UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+export function newPlayerId(): string {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  b[6] = ((b[6] ?? 0) & 0x0f) | 0x40;
+  b[8] = ((b[8] ?? 0) & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -63,7 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export function defaultSave(): SaveData {
-  return { v: 1, settings: { ...DEFAULT_SETTINGS }, hero: 'knight', difficulty: 'medium', best: { easy: [], medium: [], hard: [] }, daily: [] };
+  return { v: 1, settings: { ...DEFAULT_SETTINGS }, hero: 'knight', difficulty: 'medium', best: { easy: [], medium: [], hard: [] }, daily: [], playerId: newPlayerId(), boardName: '' };
 }
 
 // ------------------------------------------------------------------ validation
@@ -131,6 +145,8 @@ export function validateSave(raw: unknown): SaveData {
   }
   out.daily.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   out.daily = out.daily.slice(0, DAILY_DAYS);
+  if (typeof raw.playerId === 'string' && UUID4.test(raw.playerId)) out.playerId = raw.playerId;
+  if (typeof raw.boardName === 'string' && raw.boardName.length <= 32) out.boardName = raw.boardName;
   return out;
 }
 

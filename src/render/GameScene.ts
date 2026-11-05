@@ -15,6 +15,8 @@ import { ARENA_PROPS, ATLAS, MANIFEST, bgKey, createAnimations, frame, preloadAs
 import { audio } from './audio';
 import { pickMusic, SoundDiffer } from './audioLogic';
 import { BossView } from './BossView';
+import { online } from '../net/api';
+import { SubmitPanel } from './SubmitPanel';
 import { emitAudioEvent } from './events';
 import { InputCollector } from './input';
 import { settingsPage, type MenuCtx } from './menus';
@@ -70,6 +72,8 @@ export class GameScene extends Phaser.Scene {
   private runLabel = '';
   /** UTC date the run's seed was derived from (Hard): its daily best goes under this date, even across midnight. */
   private runDate = '';
+  private runSeed = 0;
+  private submit: SubmitPanel | null = null;
   private sounds = new SoundDiffer();
   private menu!: MenuView;
   private hint: Phaser.GameObjects.Container | null = null;
@@ -167,6 +171,7 @@ export class GameScene extends Phaser.Scene {
     window.addEventListener('focus', onFocus);
     window.addEventListener('resize', onOrient);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.submit?.close();
       document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('focus', onFocus);
@@ -181,7 +186,7 @@ export class GameScene extends Phaser.Scene {
   // ------------------------------------------------------------------ pause, touch, settings
 
   private uiHit(x: number, y: number): boolean {
-    if (this.menu?.active || this.hint) return true;
+    if (this.menu?.active || this.hint || this.submit?.hit(x, y)) return true;
     const b = PAUSE_BTN;
     return x >= b.x - 4 && x <= b.x + b.w + 4 && y >= b.y - 4 && y <= b.y + b.h + 4;
   }
@@ -354,6 +359,9 @@ export class GameScene extends Phaser.Scene {
     this.bossView.reset();
     this.runLabel = run.label;
     this.runDate = run.date ?? utcDateKey(new Date());
+    this.runSeed = run.seed;
+    this.submit?.close();
+    this.submit = null;
     this.hudDaily.setText(run.label);
     for (const s of this.orbs.values()) s.destroy();
     this.orbs.clear();
@@ -499,6 +507,12 @@ export class GameScene extends Phaser.Scene {
     this.panelText.setColor(isNew ? C.gold : C.bone);
     this.panel.setVisible(true);
     this.input2.takeConfirm(); // ignore the press that was in flight when we died
+    // Hard only, online, never a dev run: offer the board if the score would enter today's top 10
+    if (d === 'hard' && online() && shouldSaveRun('death', this.cfg.startWave)) {
+      const sim = this.sim;
+      this.submit = new SubmitPanel(this, D_HUD + 6);
+      void this.submit.offer({ date: this.runDate, seed: this.runSeed, score, hero, log: sim.log }, () => this.sim === sim);
+    }
   }
 
   private draw(): void {

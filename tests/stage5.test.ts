@@ -32,8 +32,10 @@ const throwingKV: KV = {
 
 describe('storage', () => {
   it('blocked or missing storage -> defaults, no crash; writes fail softly', () => {
-    expect(loadSave(null)).toEqual(defaultSave());
-    expect(loadSave(throwingKV)).toEqual(defaultSave());
+    const noId = (x: ReturnType<typeof defaultSave>) => ({ ...x, playerId: '' });
+    expect(noId(loadSave(null))).toEqual(noId(defaultSave()));
+    expect(noId(loadSave(throwingKV))).toEqual(noId(defaultSave()));
+    expect(loadSave(null).playerId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(writeSave(defaultSave(), throwingKV)).toBe(false);
     expect(writeSave(defaultSave(), null)).toBe(false);
   });
