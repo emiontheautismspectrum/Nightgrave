@@ -220,6 +220,18 @@ export class InputCollector {
     return this.pointerSeen ? this.mouse : null;
   }
 
+  /**
+   * The movement part of the frame the next tick would get, WITHOUT consuming presses or switching modes (the dash
+   * indicator reads it).
+   */
+  peek(): InputFrame {
+    const [ax, ay] = this.axis();
+    if (ax !== 0 || ay !== 0 || this.mode === 'axis') return sanitizeInput({ cursor: false, mx: Math.round(ax * AXIS_MAX), my: Math.round(ay * AXIS_MAX), buttons: 0 });
+    const c = this.last === 'touch' ? this.touch.cursor : this.pointerSeen ? this.mouse : null;
+    if (!c) return sanitizeInput({ cursor: false, mx: 0, my: 0, buttons: 0 });
+    return sanitizeInput({ cursor: true, mx: Math.round(c.x), my: Math.round(c.y), buttons: 0 });
+  }
+
   /** One frame for one sim tick. Consumes latched presses. */
   sample(): InputFrame {
     const [ax, ay] = this.axis();

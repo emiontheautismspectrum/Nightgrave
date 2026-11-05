@@ -8,7 +8,7 @@ import { VIEW_HEIGHT, VIEW_WIDTH } from '../config';
 import { TICK_RATE, type Difficulty } from '../data/tuning';
 import { utcDateKey } from '../daily';
 import { encodeReplay, type Replay } from '../sim/replay';
-import { dashCooldownLeft, isDashing, isFading, isParryActive, parryCooldownLeft, parryCooldownOf, Sim } from '../sim/sim';
+import { dashCooldownLeft, dashDirection, isDashing, isFading, isParryActive, parryCooldownLeft, parryCooldownOf, Sim } from '../sim/sim';
 import { HOLLOWS, RUNES } from '../data/arena';
 import type { SimEvent } from '../sim/state';
 import { bestScore, mergeFromDisk, persist, recordRun, save, shouldSaveRun } from '../storage';
@@ -80,6 +80,8 @@ export class GameScene extends Phaser.Scene {
   private hint: Phaser.GameObjects.Container | null = null;
   private pauseBtn!: Phaser.GameObjects.Container;
   private touchGfx!: Phaser.GameObjects.Graphics;
+  /** Dash direction chevron (render-only; the same pure rule the sim uses). */
+  private chevron!: Phaser.GameObjects.Graphics;
   private touchIcons: Phaser.GameObjects.Image[] = [];
   private fxLow = false;
   private slowFor = 0;
@@ -157,6 +159,7 @@ export class GameScene extends Phaser.Scene {
     this.menu = new MenuView(this, D_HUD + 10, 0.7);
     this.buildPauseButton();
     this.touchGfx = this.add.graphics().setDepth(D_HUD);
+    this.chevron = this.add.graphics();
     this.touchIcons = [this.add.image(0, 0, ATLAS, frame('icon_parry')), this.add.image(0, 0, ATLAS, frame('icon_dash'))];
     for (const i of this.touchIcons) i.setDepth(D_HUD + 1);
     // auto-pause when the tab loses focus or becomes hidden, or the device turns to portrait
@@ -526,6 +529,7 @@ export class GameScene extends Phaser.Scene {
     this.pulse.setPosition(hx, hy - 2).setDepth(D_YSORT + hy + 4.1);
     this.drawCasters();
     this.bossView.draw(st, p);
+    this.drawChevron();
     if (st.alive) {
       const anim = this.hero.anims.currentAnim?.key ?? '';
       const busy = this.hero.anims.isPlaying && (anim.endsWith('_parry') || anim.endsWith('_pulse'));
@@ -591,6 +595,32 @@ export class GameScene extends Phaser.Scene {
       x: st.hero.x, y: st.hero.y, tick: st.tick, alive: st.alive, parryStart: st.hero.parryStart, paused: this.driver.paused,
       menu: this.menu.active, hint: !!this.hint,
     };
+  }
+
+  /**
+   * Small amber chevron ~10 px from the hero centre pointing where a dash would go right now (dashDirection: the same
+   * function the sim uses). Bright when the dash is ready, dimmed on cooldown, hidden during the dash and after death.
+   */
+  private drawChevron(): void {
+    const g = this.chevron;
+    g.clear();
+    const st = this.sim.state;
+    const p = this.sim.params;
+    if (!st.alive || isDashing(st, p)) return;
+    const h = st.hero;
+    const [dx, dy] = dashDirection(h, this.input2.peek(), p);
+    const cx = h.x + dx * 10;
+    const cy = h.y - 2 + dy * 10;
+    const px = -dy;
+    const py = dx;
+    const ready = dashCooldownLeft(st, p) === 0;
+    g.setDepth(D_YSORT + h.y + 4.2);
+    g.fillStyle(0xffb347, ready ? 1 : 0.35);
+    // a 6 px chevron: tip ahead, two wings back (pixel-rounded vertices)
+    const r = (v: number) => Math.round(v);
+    g.fillTriangle(r(cx + dx * 3), r(cy + dy * 3), r(cx - dx * 2 + px * 3), r(cy - dy * 2 + py * 3), r(cx - dx * 2 - px * 3), r(cy - dy * 2 - py * 3));
+    g.fillStyle(0x0b0d12, ready ? 1 : 0.35);
+    g.fillTriangle(r(cx), r(cy), r(cx - dx * 3 + px * 2), r(cy - dy * 3 + py * 2), r(cx - dx * 3 - px * 2), r(cy - dy * 3 - py * 2));
   }
 
   /** Touch buttons in the side margin: semi-transparent circles with cooldown rings (replace the desktop icons). */

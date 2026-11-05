@@ -4,7 +4,7 @@ import { beamHits, onBossParry } from './boss';
 import { makeParams, ticks, type SimParams } from './params';
 import { isDouble, isSlow, runPickups } from './pickups';
 import { toSeed } from './rng';
-import { NEVER, type Projectile, type SimState } from './state';
+import { NEVER, type Hero, type Projectile, type SimState } from './state';
 import { isFading, moveProjectile, runDirector, type DirectorOptions } from './waves';
 
 export { spawnProjectile } from './waves';
@@ -104,25 +104,11 @@ export function clampToArena(x: number, y: number, p: SimParams): [number, numbe
   return [x < p.x0 + i ? p.x0 + i : x > p.x1 - i ? p.x1 - i : x, y < p.y0 + i ? p.y0 + i : y > p.y1 - i ? p.y1 - i : y];
 }
 
-// ------------------------------------------------------------------ the tick
-
 /**
- * Advance the simulation by exactly one tick. Pure function of (state, input, params, options): no
- * clocks, no Math.random. Order: input -> abilities -> hero move -> director (spawns) ->
- * projectile move -> parry -> hits -> expiry/despawn. Does nothing once the hero is dead.
+ * Movement intent for one tick: unit direction (ix, iy) and how far the hero wants to go (want, px). Pure: the sim and
+ * the renderer (dash indicator) share it, so the indicator can never disagree with the real dash.
  */
-export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimOptions = {}): void {
-  s.events = [];
-  if (!s.alive) return;
-  const input = sanitizeInput(rawInput);
-  const h = s.hero;
-  const t = s.tick;
-
-  // 1. buffer presses
-  if (input.buttons & BTN_PARRY) h.parryBufferedUntil = t + p.parryBuffer;
-  if (input.buttons & BTN_DASH) h.dashBufferedUntil = t + p.dashBuffer;
-
-  // 2. movement intent (unit direction + how far the hero wants to go this tick)
+export function moveIntent(h: Pick<Hero, 'x' | 'y'>, input: InputFrame, p: SimParams): { ix: number; iy: number; want: number } {
   let ix = 0;
   let iy = 0;
   let want = 0;
@@ -146,6 +132,35 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       want = Math.min(m, 1) * p.heroSpeed;
     }
   }
+  return { ix, iy, want };
+}
+
+/** The direction a dash pressed with this input would take: toward the movement intent, else the last facing. */
+export function dashDirection(h: Pick<Hero, 'x' | 'y' | 'dirX' | 'dirY'>, input: InputFrame, p: SimParams): [number, number] {
+  const { ix, iy, want } = moveIntent(h, sanitizeInput(input), p);
+  return want > 0 ? [ix, iy] : [h.dirX, h.dirY];
+}
+
+// ------------------------------------------------------------------ the tick
+
+/**
+ * Advance the simulation by exactly one tick. Pure function of (state, input, params, options): no
+ * clocks, no Math.random. Order: input -> abilities -> hero move -> director (spawns) ->
+ * projectile move -> parry -> hits -> expiry/despawn. Does nothing once the hero is dead.
+ */
+export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimOptions = {}): void {
+  s.events = [];
+  if (!s.alive) return;
+  const input = sanitizeInput(rawInput);
+  const h = s.hero;
+  const t = s.tick;
+
+  // 1. buffer presses
+  if (input.buttons & BTN_PARRY) h.parryBufferedUntil = t + p.parryBuffer;
+  if (input.buttons & BTN_DASH) h.dashBufferedUntil = t + p.dashBuffer;
+
+  // 2. movement intent (unit direction + how far the hero wants to go this tick)
+  const { ix, iy, want } = moveIntent(h, input, p);
 
   // 3. abilities (a buffered press fires on the first tick its cooldown allows)
   if (h.parryBufferedUntil >= t && t - h.parryStart >= parryCooldownOf(s, p)) {
@@ -157,8 +172,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   if (h.dashBufferedUntil >= t && t - h.dashStart >= p.dashCooldown) {
     h.dashStart = t;
     h.dashBufferedUntil = -1;
-    h.dashDirX = want > 0 ? ix : h.dirX;
-    h.dashDirY = want > 0 ? iy : h.dirY;
+    [h.dashDirX, h.dashDirY] = dashDirection(h, input, p);
     s.events.push({ type: 'dash_start', dirX: h.dashDirX, dirY: h.dashDirY });
   }
 
