@@ -21,7 +21,8 @@ export interface MenuCtx {
   onShowTouchHint?: () => void;
 }
 
-export const DIFF_LABEL = (d: Difficulty): string => (d === 'hard' ? `DAILY ${utcDateKey(new Date())}` : d.toUpperCase());
+/** Difficulties are always named EASY / MEDIUM / HARD (internal ids unchanged). */
+export const DIFF_LABEL = (d: Difficulty): string => d.toUpperCase();
 
 const onOff = (b: boolean): string => (b ? 'ON' : 'OFF');
 const step10 = (v: number, d: number): number => Math.max(0, Math.min(100, v + d * 10));
@@ -118,7 +119,7 @@ export function bestPage(back: () => void, show: (p: MenuPage) => void, d: Diffi
     title: 'BEST SCORES',
     top: 52,
     onBack: back,
-    items: [{ label: () => DIFF_LABEL(d).replace(/^DAILY .*/, 'HARD (DAILY)'), onLeft: () => go(-1), onRight: () => go(1) }],
+    items: [{ label: () => DIFF_LABEL(d), onLeft: () => go(-1), onRight: () => go(1) }],
     lines: () => {
       const list = save().best[d];
       const out = ['', BEST_HEADER];
@@ -154,30 +155,35 @@ export function creditsPage(back: () => void): MenuPage {
   };
 }
 
-const HERO_LINES = { knight: 'KNIGHT  SHIELD FLASH, CLOAK DASH', wisp: 'WISP  FLARE PULSE, FLAME STREAK' };
+const HERO_LINES = { knight: ['SHIELD FLASH', 'CLOAK DASH'], wisp: ['FLARE PULSE', 'FLAME STREAK'] };
+const HERO_X = { knight: 160, wisp: 320 };
 
+/** Each hero: sprite, name (the focusable item: "> <" + highlight when focused), one short line, a SELECTED tag. */
 export function heroPage(back: () => void, onPick: () => void): MenuPage {
   return {
     title: 'HERO',
-    top: 150,
-    gap: 16,
     onBack: back,
     items: (['knight', 'wisp'] as const).map((h) => ({
-      label: () => `${save().hero === h ? '* ' : ''}${HERO_LINES[h]}`,
+      label: () => h.toUpperCase(),
+      x: HERO_X[h],
+      y: 132,
       onActivate: () => {
         save().hero = h;
         persist();
         onPick();
       },
     })),
-    lines: () => ['', 'COSMETIC ONLY: BOTH HEROES HAVE IDENTICAL STATS'],
+    lines: () => ['COSMETIC ONLY - SAME STATS'],
+    linesTop: 186,
     decorate: (scene: Phaser.Scene) => {
       const out: Phaser.GameObjects.GameObject[] = [];
-      (['knight', 'wisp'] as const).forEach((h, i) => {
-        const x = 190 + i * 100;
-        const sp = scene.add.sprite(x, 100, ATLAS, frame(`${h}_idle`)).setScale(3).setDepth(1001);
+      (['knight', 'wisp'] as const).forEach((h) => {
+        const x = HERO_X[h];
+        const sp = scene.add.sprite(x, 98, ATLAS, frame(`${h}_idle`)).setScale(3).setDepth(1001);
         if (scene.anims.exists(`${h}_idle`)) sp.play(`${h}_idle`);
-        out.push(sp, snap(addText(scene, x, 128, h.toUpperCase(), { color: save().hero === h ? C.gold : C.dim }).setOrigin(0.5).setDepth(1001)));
+        out.push(sp);
+        HERO_LINES[h].forEach((l, k) => out.push(snap(addText(scene, x, 146 + k * 10, l, { color: C.dim }).setOrigin(0.5).setDepth(1001))));
+        if (save().hero === h) out.push(snap(addText(scene, x, 170, 'SELECTED', { color: C.gold }).setOrigin(0.5).setDepth(1001)));
       });
       return out;
     },

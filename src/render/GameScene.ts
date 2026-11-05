@@ -29,7 +29,9 @@ import { C, MenuView, onTap, type MenuPage } from './ui';
 /** Frame time above this for PERF_WINDOW_MS lowers effects for the rest of the session (render only). */
 const PERF_SLOW_MS = 20;
 const PERF_WINDOW_MS = 3000;
-const PAUSE_BTN = { x: 452, y: 5, w: 20, h: 16 };
+/** Top HUD band inside the arena width (x 48..432): score, multiplier, wave, ember, pickup timers, daily label, pause. */
+const PAUSE_BTN = { x: 410, y: 5, w: 20, h: 16 };
+const HUD_X = { score: 52, mult: 124, wave: 172, daily: 304 };
 const FADE_MS = 120;
 // draw order (CLAUDE.md "Arena"): ground < ground telegraphs < y-sorted world < fog/vignette/overhang < HUD
 const D_GROUND_TELE = 3;
@@ -366,11 +368,12 @@ export class GameScene extends Phaser.Scene {
 
   private buildHud(): void {
     // top band above the arena (y 4..22) on a subtle dark translucent strip
-    this.add.rectangle(4, 4, VIEW_WIDTH - 8, 18, 0x0b0d12, 0.55).setOrigin(0).setDepth(D_HUD - 1);
-    this.hudScore = addText(this, 8, 9, '');
-    this.hudMult = addText(this, 78, 9, '', { color: '#ffb347' });
-    this.hudWave = addText(this, 126, 9, '', { color: '#7f93b8' });
-    this.hudDaily = addText(this, 292, 9, '', { color: '#7f93b8' });
+    this.add.rectangle(48, 4, 384, 18, 0x0b0d12, 0.55).setOrigin(0).setDepth(D_HUD - 1);
+    // one baseline (y 9), fixed gaps
+    this.hudScore = addText(this, HUD_X.score, 9, '');
+    this.hudMult = addText(this, HUD_X.mult, 9, '', { color: '#ffb347' });
+    this.hudWave = addText(this, HUD_X.wave, 9, '', { color: '#7f93b8' });
+    this.hudDaily = addText(this, HUD_X.daily, 9, '', { color: '#7f93b8' });
     this.banner = addText(this, VIEW_WIDTH / 2, 70, '').setOrigin(0.5).setAlpha(0);
     // ability cooldown icons in the left margin at the bottom (x 8..40, y 214..262); touch buttons replace them
     this.icons = {
@@ -644,7 +647,7 @@ export class GameScene extends Phaser.Scene {
     this.hudScore.setText(`${this.sim.score}`);
     this.hudMult.setText(`X${(st.multiplier / 100).toFixed(2)}`);
     this.hudWave.setText(st.wave >= 0 ? `WAVE ${st.wave + 1}` : '');
-    this.hudDaily.setText(this.runLabel.replace('HARD - ', ''));
+    this.hudDaily.setText(this.cfg.difficulty === 'hard' ? `HARD ${this.runDate.slice(5)}` : '');
     const touch = this.cfg.isTouch();
     for (const o of Object.values(this.icons)) o.setVisible(!touch);
     if (!touch) {

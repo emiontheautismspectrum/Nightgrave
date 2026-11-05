@@ -19,6 +19,9 @@ export interface MenuItem {
   onRight?: () => void;
   /** Not focusable (a heading or spacer). */
   disabled?: boolean;
+  /** Optional fixed position (e.g. heroes side by side); default: the centred vertical list. */
+  x?: number;
+  y?: number;
 }
 
 export interface MenuPage {
@@ -30,6 +33,8 @@ export interface MenuPage {
   onBack?: () => void;
   /** Extra objects for this page (e.g. hero sprites); destroyed when the page changes. */
   decorate?: (scene: Phaser.Scene, rowY: (i: number) => number) => Phaser.GameObjects.GameObject[];
+  /** y of the first text line (default: right under the items). */
+  linesTop?: number;
   /** First row y (default 64) and row spacing (default 14). */
   top?: number;
   gap?: number;
@@ -49,12 +54,19 @@ export function onTap(o: Phaser.GameObjects.GameObject, fn: (p: Phaser.Input.Poi
   });
 }
 
+/** Content of every menu page starts here (the page title sits at y 30 above it). */
+export const MENU_TOP = 58;
+export const PANEL_PAD = 8;
+
 const PAD = { a: 0, b: 1, start: 9, up: 12, down: 13, left: 14, right: 15 };
 
 export class MenuView {
   private objs: Phaser.GameObjects.GameObject[] = [];
   private rows: UIText[] = [];
   private lineTexts: UIText[] = [];
+  /** The dark panel behind the page, sized to its content (+ even padding) on every refresh. */
+  private panel: Phaser.GameObjects.Rectangle | null = null;
+  private deco: Phaser.GameObjects.GameObject[] = [];
   private page: MenuPage | null = null;
   private focus = 0;
   private padPrev: Record<string, boolean> = {};
@@ -80,9 +92,12 @@ export class MenuView {
     if (!this.active) this.fresh = true;
     this.active = true;
     const s = this.scene;
-    const top = page.top ?? 64;
+    // every page: title at y 30, the panel content starting at the same y below it
+    const top = Math.max(MENU_TOP, page.top ?? MENU_TOP);
     const gap = page.gap ?? 14;
     if (this.dim > 0) this.objs.push(s.add.rectangle(0, 0, s.scale.width, s.scale.height, 0x0b0d12, this.dim).setOrigin(0).setDepth(this.depth).setInteractive());
+    this.panel = s.add.rectangle(0, 0, 10, 10, 0x0b0d12, 0.8).setOrigin(0).setStrokeStyle(1, 0x3a4558).setDepth(this.depth + 0.5);
+    this.objs.push(this.panel);
     this.objs.push(snap(addText(s, s.scale.width / 2, 30, page.title, { size: 16, color: C.bone }).setOrigin(0.5).setDepth(this.depth + 1)));
     if (page.onBack) {
       const back = addText(s, 8, 8, '< BACK', { color: C.dim }).setDepth(this.depth + 1);
@@ -91,7 +106,7 @@ export class MenuView {
       this.objs.push(back);
     }
     page.items.forEach((it, i) => {
-      const t = addText(s, s.scale.width / 2, top + i * gap, '', { color: C.bone }).setOrigin(0.5).setDepth(this.depth + 1);
+      const t = addText(s, it.x ?? s.scale.width / 2, it.y ?? top + i * gap, '', { color: C.bone }).setOrigin(0.5).setDepth(this.depth + 1);
       if (!it.disabled) {
         // a fixed, generous tap target (>= 12 px tall) around the row; the label width changes with its value
         t.setInteractive({ hitArea: new Phaser.Geom.Rectangle(0, -3, 1, 14), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
@@ -108,13 +123,16 @@ export class MenuView {
     });
     this.objs.push(...this.rows);
     const lines = page.lines?.() ?? [];
-    const firstLineY = page.items.length ? top + page.items.length * gap + 6 : top;
+    const placed = page.items.filter((it) => it.y === undefined).length;
+    const lowest = Math.max(top - gap, ...page.items.map((it, i) => it.y ?? top + i * gap));
+    const firstLineY = page.linesTop ?? (page.items.length ? (placed === page.items.length ? top + placed * gap + 6 : lowest + gap) : top);
     lines.forEach((l, i) => {
       const t = snap(addText(s, s.scale.width / 2, firstLineY + i * 11, l, { color: C.dim }).setOrigin(0.5, 0).setDepth(this.depth + 1));
       this.lineTexts.push(t);
     });
     this.objs.push(...this.lineTexts);
-    if (page.decorate) this.objs.push(...page.decorate(s, (i) => top + i * gap));
+    this.deco = page.decorate ? page.decorate(s, (i) => top + i * gap) : [];
+    this.objs.push(...this.deco);
     const first = page.items.findIndex((it) => !it.disabled);
     this.focus = focus >= 0 && focus < page.items.length && !page.items[focus]?.disabled ? focus : Math.max(0, first);
     this.refresh();
@@ -150,6 +168,46 @@ export class MenuView {
     });
     const lines = p.lines?.() ?? [];
     this.lineTexts.forEach((t, i) => snap(setTextValue(t, lines[i] ?? '')));
+    this.fitPanel();
+  }
+
+  /** Size the panel to everything on the page except the title and BACK (even padding on every side). */
+  private fitPanel(): void {
+    if (!this.panel) return;
+    const content = [...this.rows, ...this.lineTexts.filter((t) => t.text.trim() !== ''), ...this.deco] as unknown as { getBounds?: () => Phaser.Geom.Rectangle }[];
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const o of content) {
+      const b = o.getBounds?.();
+      if (!b || b.width === 0) continue;
+      x0 = Math.min(x0, b.x);
+      y0 = Math.min(y0, b.y);
+      x1 = Math.max(x1, b.right);
+      y1 = Math.max(y1, b.bottom);
+    }
+    if (!Number.isFinite(x0)) {
+      this.panel.setVisible(false);
+      return;
+    }
+    const pad = PANEL_PAD;
+    const w = Math.max(160, x1 - x0 + 2 * pad);
+    const cx = this.scene.scale.width / 2;
+    this.panel.setVisible(true).setPosition(Math.round(cx - w / 2), Math.round(y0 - pad)).setSize(Math.round(w), Math.round(y1 - y0 + 2 * pad));
+    this.panel.setDisplaySize(Math.round(w), Math.round(y1 - y0 + 2 * pad));
+    if (import.meta.env.DEV || import.meta.env.VITE_SMOKE === '1') {
+      // layout snapshot for the automated layout check (dev / smoke builds only)
+      const box = (o: { getBounds: () => Phaser.Geom.Rectangle }) => {
+        const b = o.getBounds();
+        return [b.x, b.y, b.width, b.height];
+      };
+      (window as unknown as { __ngLayout?: object }).__ngLayout = {
+        title: this.page?.title,
+        panel: [this.panel.x, this.panel.y, this.panel.width, this.panel.height],
+        texts: [...this.rows, ...this.lineTexts, ...(this.deco.filter((o) => o instanceof Phaser.GameObjects.BitmapText) as UIText[])].filter((t) => t.text.trim() !== '').map((t) => ({ box: box(t), text: t.text, focusable: !!t.input })),
+      };
+    }
   }
 
   private setFocus(i: number): void {

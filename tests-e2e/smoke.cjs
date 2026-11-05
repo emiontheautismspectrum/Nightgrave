@@ -71,7 +71,7 @@ async function phone(browser) {
   d = await dbg(page);
   ok(d && d.parryStart !== ps, 'phone: the PARRY button triggers a parry');
   await page.screenshot({ path: path.join(OUT, 'touch_layout.png') });
-  await tap(462, 13); // pause button
+  await tap(420, 13); // pause button (right end of the top band, inside the arena width)
   await sleep(300);
   d = await dbg(page);
   ok(d && d.paused && d.menu, 'phone: the pause button pauses');

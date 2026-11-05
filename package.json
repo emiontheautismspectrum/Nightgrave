@@ -15,7 +15,8 @@
     "e2e:board": "node tests-e2e/board_e2e.cjs",
     "verify:pending": "vite-node tools/verify/pending.ts",
     "verify:replay": "vite-node tools/verify/replay.ts",
-    "e2e:crisp": "node tests-e2e/crisp.cjs"
+    "e2e:crisp": "node tests-e2e/crisp.cjs",
+    "e2e:layout": "node tests-e2e/layout.cjs"
   },
   "dependencies": {
     "@fontsource/press-start-2p": "5.2.7",

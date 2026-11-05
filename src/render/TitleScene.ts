@@ -4,7 +4,8 @@
  */
 import Phaser from 'phaser';
 import { TITLE, VIEW_HEIGHT, VIEW_WIDTH } from '../config';
-import { fetchBoard, online, type Board } from '../net/api';
+import { fetchBoard, getServerDate, online, type Board } from '../net/api';
+import { utcDateKey } from '../daily';
 import { addDays } from '../shared/daily';
 import { DIFFICULTIES, persist, save } from '../storage';
 import { audio } from './audio';
@@ -56,8 +57,6 @@ export class TitleScene extends Phaser.Scene {
     this.add.image(0, 0, bgKey('vignette')).setOrigin(0).setDepth(801).setAlpha(al.vignette ?? 1);
     this.add.image(0, 0, bgKey('vignette_outer')).setOrigin(0).setDepth(801).setAlpha(al.vignette_outer ?? 1);
     this.add.image(0, 0, bgKey('forest_near')).setOrigin(0).setDepth(802);
-    // a calm dark plate behind the menu so it reads over the arena
-    this.add.rectangle(VIEW_WIDTH / 2, 150, 300, 190, 0x0b0d12, 0.72).setDepth(990);
     this.menu = new MenuView(this, 1000);
     audio.setMusic('music_menu');
     audio.setAmbience(false);
@@ -85,27 +84,29 @@ export class TitleScene extends Phaser.Scene {
     else this.menu.refresh();
   }
 
-  /** Always 3 lines (the menu re-renders a fixed number of lines). */
+  /** Always 3 lines (the menu re-renders a fixed number of lines); never wider than the panel. */
   private boardLines(): string[] {
-    if (this.boardState === 'offline') return ['', '', 'ONLINE BOARD: OFFLINE'];
-    if (this.boardState === 'loading') return ['', '', 'ONLINE BOARD: LOADING'];
-    if (this.boardState === 'error') return ['', '', 'BOARD UNAVAILABLE'];
+    if (this.boardState === 'offline') return ['ONLINE BOARD: OFFLINE', '', ''];
+    if (this.boardState === 'loading') return ['ONLINE BOARD: LOADING', '', ''];
+    if (this.boardState === 'error') return ['BOARD UNAVAILABLE', '', ''];
     const c = this.champion;
-    if (!c) return ['', '', 'NO CHAMPION YET TODAY'];
-    return ['', c.label, c.message ? `${c.name}: ${c.message}` : c.name];
+    if (!c) return ['NO CHAMPION YET TODAY', '', ''];
+    return [c.label, c.name, c.message ? `"${c.message}"` : ''];
   }
 
   private showBoard(): void {
     this.onBoardPage = true;
     const b = this.board;
     const lines: string[] = [];
-    if (this.boardState === 'loading') lines.push('LOADING');
-    else if (!b) lines.push(this.boardState === 'offline' ? 'ONLINE BOARD: OFFLINE' : 'BOARD UNAVAILABLE');
+    // nothing to show: a short centred message (the panel sizes itself to it)
+    if (this.boardState === 'loading') lines.push('LOADING...');
+    else if (this.boardState === 'offline') lines.push('BOARD OFFLINE.', 'YOUR HARD RUNS ARE SAVED LOCALLY.');
+    else if (!b) lines.push('BOARD UNAVAILABLE.');
+    else if (!b.top.length) lines.push('NO VERIFIED RUNS YET TODAY.', 'BE THE FIRST!');
     else {
-      lines.push(`HARD DAILY ${b.date} UTC`, '', '#  NAME              SCORE  HERO    TIME');
+      lines.push(`HARD ${b.date} UTC`, '', '#  NAME              SCORE  HERO    TIME');
       for (const e of b.top)
         lines.push(`${String(e.rank).padStart(2)} ${e.name.padEnd(16)} ${String(e.score).padStart(7)}  ${e.hero.toUpperCase().padEnd(6)} ${String(Math.floor(e.durationTicks / 60)).padStart(4)}S`);
-      if (!b.top.length) lines.push('NO RUNS YET TODAY');
     }
     this.menu.show({
       title: "TODAY'S BEST",
@@ -130,20 +131,21 @@ export class TitleScene extends Phaser.Scene {
       top: 76,
       items: [
         { label: () => 'PLAY', onActivate: () => this.cfg.startRun(this) },
-        // one line of controls for the active input device (switches when another device is used)
-        { label: () => controlsLine(getDevice()), disabled: true },
         {
           label: () => `DIFFICULTY ${DIFF_LABEL(sv.difficulty)}`,
           onLeft: () => ((sv.difficulty = DIFFICULTIES[(DIFFICULTIES.indexOf(sv.difficulty) + 2) % 3]!), persist()),
           onRight: () => ((sv.difficulty = DIFFICULTIES[(DIFFICULTIES.indexOf(sv.difficulty) + 1) % 3]!), persist()),
         },
+        // only for Hard: a dim second line with the daily seed date (not focusable)
+        { label: () => (sv.difficulty === 'hard' ? `DAILY SEED ${getServerDate() ?? utcDateKey(new Date())} - ONLINE BOARD` : ''), disabled: true },
         { label: () => `HERO ${sv.hero.toUpperCase()}`, onActivate: () => this.menu.show(heroPage(() => this.showMain(3), () => this.showMain(3))) },
         { label: () => 'SETTINGS', onActivate: () => this.menu.show(settingsPage(this.ctx(), () => this.showMain(4))) },
         { label: () => 'BEST SCORES', onActivate: () => this.showBest() },
         { label: () => "TODAY'S BEST", onActivate: () => this.showBoard() },
         { label: () => 'CREDITS', onActivate: () => this.menu.show(creditsPage(() => this.showMain(7))) },
       ],
-      lines: () => this.boardLines(),
+      // the controls hint for the active device sits below the menu block, above the online-board lines
+      lines: () => ['', controlsLine(getDevice()), '', ...this.boardLines()],
     };
     this.menu.show(page, focus);
   }

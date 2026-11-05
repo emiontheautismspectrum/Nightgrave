@@ -45,10 +45,10 @@ export class BossView {
     this.pickup = scene.add.sprite(0, 0, ATLAS, frame('pickup_slow_time')).setVisible(false);
     this.timers = [0, 1].map((i) => ({
       // top HUD band (y 4..22): pickup timers as small icons with a shrinking ring
-      icon: scene.add.sprite(262 + i * 22, 13, ATLAS, frame(i ? 'pickup_double_score' : 'pickup_slow_time')).setDepth(depth.hud),
-      ring: scene.add.image(262 + i * 22, 13, ATLAS, frame('icon_ring')).setDepth(depth.hud),
+      icon: scene.add.sprite(268 + i * 22, 13, ATLAS, frame(i ? 'pickup_double_score' : 'pickup_slow_time')).setDepth(depth.hud),
+      ring: scene.add.image(268 + i * 22, 13, ATLAS, frame('icon_ring')).setDepth(depth.hud),
     }));
-    this.ember = addText(scene, 186, 9, '', { color: '#ff7a2f' }).setDepth(depth.hud);
+    this.ember = addText(scene, 236, 9, '', { color: '#ff7a2f' }).setDepth(depth.hud);
   }
 
   reset(): void {
@@ -204,6 +204,6 @@ export class BossView {
     });
     const charges = Math.min(st.emberCharges, p.parryActiveByCharge.length - 1);
     void parryActiveTicks;
-    this.ember.setText(charges > 0 ? `EMBER ${charges}` : '');
+    this.ember.setText(charges > 0 ? `E${charges}` : ''); // ember charges (short: the band is the arena width)
   }
 }
