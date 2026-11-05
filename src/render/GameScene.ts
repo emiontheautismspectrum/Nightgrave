@@ -3,6 +3,7 @@
  * Rendering only READS sim state (and the per-tick event list); it never mutates it.
  */
 import Phaser from 'phaser';
+import { addText, setTextColor, snap, type UIText } from './text';
 import { VIEW_HEIGHT, VIEW_WIDTH } from '../config';
 import { TICK_RATE, type Difficulty } from '../data/tuning';
 import { utcDateKey } from '../daily';
@@ -100,14 +101,14 @@ export class GameScene extends Phaser.Scene {
   private orbs = new Map<number, Phaser.GameObjects.Sprite>();
   /** Ids destroyed by a parry this frame: removed instantly (the spark replaces them), others fade out. */
   private parried = new Set<number>();
-  private hudScore!: Phaser.GameObjects.Text;
-  private hudMult!: Phaser.GameObjects.Text;
-  private hudWave!: Phaser.GameObjects.Text;
-  private hudDaily!: Phaser.GameObjects.Text;
-  private banner!: Phaser.GameObjects.Text;
+  private hudScore!: UIText;
+  private hudMult!: UIText;
+  private hudWave!: UIText;
+  private hudDaily!: UIText;
+  private banner!: UIText;
   private icons!: { parry: Phaser.GameObjects.Image; parryRing: Phaser.GameObjects.Image; dash: Phaser.GameObjects.Image; dashRing: Phaser.GameObjects.Image };
   private panel!: Phaser.GameObjects.Container;
-  private panelText!: Phaser.GameObjects.Text;
+  private panelText!: UIText;
   private bossView!: BossView;
   private vigOuter!: Phaser.GameObjects.Image;
 
@@ -194,7 +195,7 @@ export class GameScene extends Phaser.Scene {
   private buildPauseButton(): void {
     const b = PAUSE_BTN;
     const bg = this.add.rectangle(0, 0, b.w, b.h, 0x0b0d12, 0.6).setOrigin(0).setStrokeStyle(1, 0x3a4558);
-    const t = this.add.text(b.w / 2, b.h / 2, 'II', { fontFamily: FONT, fontSize: '8px', color: C.bone }).setOrigin(0.5);
+    const t = addText(this, b.w / 2 - 7, b.h / 2 - 4, 'II', { color: C.bone });
     this.pauseBtn = this.add.container(b.x, b.y, [bg, t]).setDepth(D_HUD + 1).setSize(b.w, b.h);
     this.pauseBtn.setInteractive(new Phaser.Geom.Rectangle(-4, -4, b.w + 8, b.h + 8), Phaser.Geom.Rectangle.Contains);
     onTap(this.pauseBtn, () => this.togglePause());
@@ -277,7 +278,7 @@ export class GameScene extends Phaser.Scene {
     this.driver.pause('hint');
     const lines = ['DRAG ANYWHERE TO MOVE', '', 'PARRY: BIG BUTTON', `${save().settings.leftHanded ? 'LEFT' : 'RIGHT'} SIDE, DASH ABOVE IT`, '', 'SECOND FINGER TAP = PARRY', '', 'TAP TO START'];
     const bg = this.add.rectangle(0, 0, VIEW_WIDTH, VIEW_HEIGHT, 0x0b0d12, 0.8).setOrigin(0);
-    const t = this.add.text(VIEW_WIDTH / 2, VIEW_HEIGHT / 2, lines.join('\n'), { fontFamily: FONT, fontSize: '8px', color: C.bone, align: 'center', lineSpacing: 4 }).setOrigin(0.5);
+    const t = snap(addText(this, VIEW_WIDTH / 2, VIEW_HEIGHT / 2, lines.join('\n'), { color: C.bone, align: 'center', lineSpacing: 4 }).setOrigin(0.5));
     this.hint = this.add.container(0, 0, [bg, t]).setDepth(D_HUD + 20);
     const shownAt = this.time.now;
     bg.setInteractive().on('pointerup', () => {
@@ -329,12 +330,11 @@ export class GameScene extends Phaser.Scene {
   private buildHud(): void {
     // top band above the arena (y 4..22) on a subtle dark translucent strip
     this.add.rectangle(4, 4, VIEW_WIDTH - 8, 18, 0x0b0d12, 0.55).setOrigin(0).setDepth(D_HUD - 1);
-    const style = { fontFamily: FONT, fontSize: '8px', color: '#d9d2c0' };
-    this.hudScore = this.add.text(8, 9, '', style);
-    this.hudMult = this.add.text(78, 9, '', { ...style, color: '#ffb347' });
-    this.hudWave = this.add.text(126, 9, '', { ...style, color: '#7f93b8' });
-    this.hudDaily = this.add.text(292, 9, '', { ...style, color: '#7f93b8' });
-    this.banner = this.add.text(VIEW_WIDTH / 2, 70, '', { ...style, color: '#d9d2c0' }).setOrigin(0.5).setAlpha(0);
+    this.hudScore = addText(this, 8, 9, '');
+    this.hudMult = addText(this, 78, 9, '', { color: '#ffb347' });
+    this.hudWave = addText(this, 126, 9, '', { color: '#7f93b8' });
+    this.hudDaily = addText(this, 292, 9, '', { color: '#7f93b8' });
+    this.banner = addText(this, VIEW_WIDTH / 2, 70, '').setOrigin(0.5).setAlpha(0);
     // ability cooldown icons in the left margin at the bottom (x 8..40, y 214..262); touch buttons replace them
     this.icons = {
       parry: this.add.image(24, 228, ATLAS, frame('icon_parry')),
@@ -343,7 +343,7 @@ export class GameScene extends Phaser.Scene {
       dashRing: this.add.image(24, 251, ATLAS, frame('icon_ring')),
     };
     const bg = this.add.rectangle(0, 0, 232, 96, 0x0b0d12, 0.92).setStrokeStyle(1, 0x3a4558);
-    this.panelText = this.add.text(0, 0, '', { ...style, align: 'center', lineSpacing: 5 }).setOrigin(0.5);
+    this.panelText = addText(this, 0, 0, '', { align: 'center', lineSpacing: 5 }).setOrigin(0.5);
     this.panel = this.add.container(VIEW_WIDTH / 2, VIEW_HEIGHT / 2, [bg, this.panelText]).setVisible(false);
     for (const o of [this.hudScore, this.hudMult, this.hudWave, this.banner, this.hudDaily, this.panel, ...Object.values(this.icons)])
       o.setDepth(D_HUD);
@@ -453,7 +453,7 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'wave':
         if (e.wave > 0) {
-          this.banner.setText(`WAVE ${e.wave + 1}`).setAlpha(1);
+          snap(this.banner.setText(`WAVE ${e.wave + 1}`).setAlpha(1));
           this.tweens.add({ targets: this.banner, alpha: 0, delay: 900, duration: 400 });
         }
         break;
@@ -504,7 +504,7 @@ export class GameScene extends Phaser.Scene {
         this.cfg.isTouch() ? 'TAP TO RETRY' : 'CLICK / SPACE / A TO RETRY',
       ].join('\n'),
     );
-    this.panelText.setColor(isNew ? C.gold : C.bone);
+    snap(setTextColor(this.panelText, isNew ? C.gold : C.bone));
     this.panel.setVisible(true);
     this.input2.takeConfirm(); // ignore the press that was in flight when we died
     // Hard only, online, never a dev run: offer the board if the score would enter today's top 10

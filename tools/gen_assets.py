@@ -196,6 +196,8 @@ def main():
     save(AP.animation_strips(art), pv("animation_strips.png"))
     rgb(boss_board(art, game), "boss_board.png")
     write_web_manifest(read_title(), game)
+    import gen_font  # noqa: E402  pixel-exact bitmap font for the game's text
+    gen_font.main()
     for n in art["notes"]:
         print("note:", n)
     print(f"generated {len(sprites)} sprites ({len(art['sprites'])} arena), {len(art['props'])} placed props, "

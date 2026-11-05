@@ -5,6 +5,7 @@
  * Text is only ever set through Phaser text objects (never innerHTML).
  */
 import Phaser from 'phaser';
+import { addText, setTextColor, setTextValue, snap, type UIText } from './text';
 import { emitAudioEvent } from './events';
 
 export const FONT = '"Press Start 2P", monospace';
@@ -51,8 +52,8 @@ const PAD = { a: 0, b: 1, start: 9, up: 12, down: 13, left: 14, right: 15 };
 
 export class MenuView {
   private objs: Phaser.GameObjects.GameObject[] = [];
-  private rows: Phaser.GameObjects.Text[] = [];
-  private lineTexts: Phaser.GameObjects.Text[] = [];
+  private rows: UIText[] = [];
+  private lineTexts: UIText[] = [];
   private page: MenuPage | null = null;
   private focus = 0;
   private padPrev: Record<string, boolean> = {};
@@ -81,17 +82,18 @@ export class MenuView {
     const top = page.top ?? 64;
     const gap = page.gap ?? 14;
     if (this.dim > 0) this.objs.push(s.add.rectangle(0, 0, s.scale.width, s.scale.height, 0x0b0d12, this.dim).setOrigin(0).setDepth(this.depth).setInteractive());
-    this.objs.push(s.add.text(s.scale.width / 2, 30, page.title, { fontFamily: FONT, fontSize: '16px', color: C.bone }).setOrigin(0.5).setDepth(this.depth + 1));
+    this.objs.push(snap(addText(s, s.scale.width / 2, 30, page.title, { size: 16, color: C.bone }).setOrigin(0.5).setDepth(this.depth + 1)));
     if (page.onBack) {
-      const back = s.add.text(8, 8, '< BACK', { fontFamily: FONT, fontSize: '8px', color: C.dim }).setPadding(4, 4, 4, 4).setDepth(this.depth + 1);
-      back.setInteractive({ useHandCursor: true });
+      const back = addText(s, 8, 8, '< BACK', { color: C.dim }).setDepth(this.depth + 1);
+      back.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-4, -4, back.width + 8, back.height + 8), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
       onTap(back, () => this.back());
       this.objs.push(back);
     }
     page.items.forEach((it, i) => {
-      const t = s.add.text(s.scale.width / 2, top + i * gap, '', { fontFamily: FONT, fontSize: '8px', color: C.bone }).setOrigin(0.5).setPadding(8, 3, 8, 3).setDepth(this.depth + 1);
+      const t = addText(s, s.scale.width / 2, top + i * gap, '', { color: C.bone }).setOrigin(0.5).setDepth(this.depth + 1);
       if (!it.disabled) {
-        t.setInteractive({ useHandCursor: true });
+        // a fixed, generous tap target (>= 12 px tall) around the row; the label width changes with its value
+        t.setInteractive({ hitArea: new Phaser.Geom.Rectangle(0, -3, 1, 14), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
         t.on('pointerover', () => this.setFocus(i));
         onTap(t, (p: Phaser.Input.Pointer) => {
           this.setFocus(i);
@@ -107,7 +109,7 @@ export class MenuView {
     const lines = page.lines?.() ?? [];
     const firstLineY = page.items.length ? top + page.items.length * gap + 6 : top;
     lines.forEach((l, i) => {
-      const t = s.add.text(s.scale.width / 2, firstLineY + i * 11, l, { fontFamily: FONT, fontSize: '8px', color: C.dim }).setOrigin(0.5, 0).setDepth(this.depth + 1);
+      const t = snap(addText(s, s.scale.width / 2, firstLineY + i * 11, l, { color: C.dim }).setOrigin(0.5, 0).setDepth(this.depth + 1));
       this.lineTexts.push(t);
     });
     this.objs.push(...this.lineTexts);
@@ -139,11 +141,14 @@ export class MenuView {
       if (!t) return;
       const on = i === this.focus && !it.disabled;
       const lab = it.label();
-      t.setText(it.onLeft || (it.onRight && !it.onActivate) ? `${on ? '<' : ' '} ${lab} ${on ? '>' : ' '}` : on ? `> ${lab} <` : lab);
-      t.setColor(it.disabled ? C.stone : on ? C.gold : C.bone);
+      setTextValue(t, it.onLeft || (it.onRight && !it.onActivate) ? `${on ? '<' : ' '} ${lab} ${on ? '>' : ' '}` : on ? `> ${lab} <` : lab);
+      setTextColor(t, it.disabled ? C.stone : on ? C.gold : C.bone);
+      snap(t);
+      const hit = t.input?.hitArea as Phaser.Geom.Rectangle | undefined;
+      if (hit) hit.setTo(-8, -3, t.width + 16, 14);
     });
     const lines = p.lines?.() ?? [];
-    this.lineTexts.forEach((t, i) => t.setText(lines[i] ?? ''));
+    this.lineTexts.forEach((t, i) => snap(setTextValue(t, lines[i] ?? '')));
   }
 
   private setFocus(i: number): void {

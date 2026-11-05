@@ -4,6 +4,7 @@ import atlasUrl from '../../assets/atlas/nightgrave.png?url';
 import atlasData from '../../assets/atlas/nightgrave.json';
 import manifest from '../../assets/atlas/manifest.json';
 import arenaProps from '../../assets/data/arena_props.json';
+import { preloadFont } from './text';
 
 export const ATLAS = 'ng';
 export const MANIFEST = manifest;
@@ -58,6 +59,7 @@ const ANIM: Partial<Record<SpriteName, { fps: number; loop: boolean }>> = {
 };
 
 export function preloadAssets(scene: Phaser.Scene): void {
+  preloadFont(scene);
   scene.load.atlas(ATLAS, atlasUrl, atlasData);
   for (const name of Object.keys(manifest.backgrounds)) {
     const url = Object.entries(backgroundUrls).find(([path]) => path.endsWith(`/${name}.png`))?.[1];

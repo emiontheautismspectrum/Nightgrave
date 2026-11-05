@@ -5,6 +5,7 @@
  * tap outside the fields) still restarts instantly. Text is set with .value / Phaser text only (never innerHTML).
  */
 import Phaser from 'phaser';
+import { addText, setTextColor, setTextValue, type UIText } from './text';
 import { reasonText, submitRun, wouldRank, fetchBoard } from '../net/api';
 import { encodeInputLog } from '../shared/replayCodec';
 import { validateMessage, validateName, type TextError } from '../shared/text';
@@ -32,8 +33,8 @@ export const fieldFocused = (): boolean => {
 export class SubmitPanel {
   private inputs: HTMLInputElement[] = [];
   private objs: Phaser.GameObjects.GameObject[] = [];
-  private status!: Phaser.GameObjects.Text;
-  private note: Phaser.GameObjects.Text | null = null;
+  private status!: UIText;
+  private note: UIText | null = null;
   private busy = false;
   private done = false;
   /** Game-px rects of the clickable UI (the game must not treat presses there as "restart"). */
@@ -90,14 +91,14 @@ export class SubmitPanel {
     const s = this.scene;
     const y0 = 186;
     const label = (x: number, y: number, t: string, col: string = C.dim) =>
-      s.add.text(x, y, t, { fontFamily: FONT, fontSize: '8px', color: col }).setDepth(this.depth);
+      addText(s, x, y, t, { color: col }).setDepth(this.depth);
     this.objs.push(s.add.rectangle(240, y0 + 26, 300, 58, 0x0b0d12, 0.92).setStrokeStyle(1, 0x3a4558).setDepth(this.depth - 1));
     this.objs.push(label(96, y0, rank === 1 ? 'TODAY\'S BEST! RANK 1' : `TODAY'S TOP 10: RANK ${rank}`, C.gold));
     this.field('NAME', 16, save().boardName);
     if (this.wantsMessage) this.field('MESSAGE (OPTIONAL)', 40, '');
     const btn = (x: number, t: string, fn: () => void) => {
-      const o = s.add.text(x, y0 + 40, t, { fontFamily: FONT, fontSize: '8px', color: C.bone }).setPadding(4, 3, 4, 3).setDepth(this.depth);
-      o.setInteractive({ useHandCursor: true });
+      const o = addText(s, x, y0 + 40, t, { color: C.bone }).setDepth(this.depth);
+      o.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-4, -3, o.width + 8, o.height + 6), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
       onTap(o, fn);
       this.rects.push([o.x - 4, o.y - 4, o.x + o.width + 4, o.y + o.height + 4]);
       this.objs.push(o);
@@ -141,14 +142,14 @@ export class SubmitPanel {
         msg = `MESSAGE: ${ERR[r.error]}`;
       }
     }
-    if (!this.busy && !this.done) this.status?.setText(msg).setColor(C.ember);
+    if (!this.busy && !this.done && this.status) setTextColor(setTextValue(this.status, msg), C.ember);
     return ok;
   }
 
   private async submit(): Promise<void> {
     if (this.busy || this.done || !this.validate()) return;
     this.busy = true;
-    this.status.setText('SENDING...').setColor(C.dim);
+    setTextColor(setTextValue(this.status, 'SENDING...'), C.dim);
     const name = validateName(this.inputs[0]?.value ?? '');
     const msgRaw = this.inputs[1]?.value.trim() ?? '';
     const r = this.run;
@@ -172,14 +173,14 @@ export class SubmitPanel {
     });
     this.busy = false;
     if (!this.objs.length) return; // closed meanwhile
-    if (!res) this.status.setText('BOARD UNAVAILABLE').setColor(C.ember);
+    if (!res) setTextColor(setTextValue(this.status, 'BOARD UNAVAILABLE'), C.ember);
     else if (res.accepted) {
       this.done = true;
       // shown on the board only after the replay is re-simulated by the verifier
-      this.status.setText(res.provisionalRank ? `SUBMITTED (RANK ${res.provisionalRank}). ON THE BOARD AFTER` : 'SUBMITTED. ON THE BOARD AFTER').setColor(C.gold);
+      setTextColor(setTextValue(this.status, res.provisionalRank ? `SUBMITTED (RANK ${res.provisionalRank}). ON THE BOARD AFTER` : 'SUBMITTED. ON THE BOARD AFTER'), C.gold);
       this.note?.setText('VERIFICATION (USUALLY WITHIN 20 MINUTES)');
       for (const el of this.inputs) el.disabled = true;
-    } else this.status.setText(reasonText(res.reason)).setColor(C.ember);
+    } else setTextColor(setTextValue(this.status, reasonText(res.reason)), C.ember);
   }
 
   close(): void {

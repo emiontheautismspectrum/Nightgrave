@@ -32,13 +32,44 @@ function available(): { w: number; h: number } {
 }
 
 /**
- * Zoom: the largest integer that fits (pixel-perfect). Phones in landscape are often below 2x; there a fractional
- * fit is used instead of a tiny 1x canvas (nearest-neighbour keeps it sharp enough).
+ * Zoom in DEVICE pixels (crisp at any devicePixelRatio, e.g. Windows 125%): the largest integer number of device pixels
+ * per game pixel that fits. The canvas CSS size is then 480*z/dpr x 270*z/dpr, so every game pixel is an exact z x z
+ * block of device pixels (nearest-neighbour). Below 2 device px per game px (small phones) a fractional fit is used.
  */
+export function deviceZoom(availW: number, availH: number, dpr: number): { cssZoom: number; device: number; exact: boolean } {
+  const d = Math.max(0.5, dpr || 1);
+  const device = Math.floor(Math.min((availW * d) / VIEW_WIDTH, (availH * d) / VIEW_HEIGHT));
+  if (device >= 2) return { cssZoom: device / d, device, exact: true };
+  const frac = Math.max(0.5, Math.min(availW / VIEW_WIDTH, availH / VIEW_HEIGHT));
+  return { cssZoom: frac, device: frac * d, exact: false };
+}
+
 function fitZoom(): number {
   const { w, h } = available();
-  const exact = Math.min(w / VIEW_WIDTH, h / VIEW_HEIGHT);
-  return exact >= 2 ? Math.floor(exact) : Math.max(0.5, exact);
+  return deviceZoom(w, h, window.devicePixelRatio).cssZoom;
+}
+
+/** Put the canvas on whole device pixels (centring could land on a half device pixel and smear the pixel grid). */
+function alignCanvas(game: Phaser.Game): void {
+  const c = game.canvas;
+  const host = document.getElementById('game');
+  if (!c || !host) return;
+  const dpr = window.devicePixelRatio || 1;
+  const { w, h } = available();
+  const cs = getComputedStyle(host);
+  const cw = c.getBoundingClientRect().width;
+  const ch = c.getBoundingClientRect().height;
+  // a whole number of device pixels that is also a multiple of the browser's 1/64 CSS px layout unit
+  const snapDevice = (cssPx: number): number => {
+    for (let k = Math.floor(cssPx * dpr); k >= 0; k--) if (Math.abs((k / dpr) * 64 - Math.round((k / dpr) * 64)) < 1e-6) return k / dpr;
+    return 0;
+  };
+  const left = (parseFloat(cs.paddingLeft) || 0) + snapDevice((w - cw) / 2);
+  const top = (parseFloat(cs.paddingTop) || 0) + snapDevice((h - ch) / 2);
+  c.style.position = 'absolute';
+  c.style.left = `${left}px`;
+  c.style.top = `${top}px`;
+  c.style.margin = '0';
 }
 
 function updateRotateOverlay(): void {
@@ -112,10 +143,26 @@ async function boot(): Promise<void> {
   document.addEventListener('visibilitychange', () => audio.setHidden(document.hidden));
   const resize = () => {
     game.scale.setZoom(fitZoom());
+    alignCanvas(game);
     updateRotateOverlay();
   };
   addEventListener('resize', resize);
   addEventListener('orientationchange', resize);
+  document.addEventListener('fullscreenchange', resize);
+  // devicePixelRatio changes (browser zoom, moving the window to another monitor): re-arm a resolution query each time
+  const watchDpr = () => {
+    try {
+      matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener('change', () => {
+        resize();
+        watchDpr();
+      }, { once: true });
+    } catch {
+      /* old browser: resize events still cover most cases */
+    }
+  };
+  watchDpr();
+  game.events.once(Phaser.Core.Events.READY, resize);
+  setTimeout(resize, 0);
   updateRotateOverlay();
 }
 

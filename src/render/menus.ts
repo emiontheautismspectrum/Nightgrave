@@ -3,6 +3,7 @@
  * they never touch sim state.
  */
 import Phaser from 'phaser';
+import { addText, snap } from './text';
 import { TITLE } from '../config';
 import { utcDateKey } from '../daily';
 import { clampSensitivity, persist, save, todaysBest, type BestEntry, type Difficulty } from '../storage';
@@ -178,7 +179,7 @@ export function heroPage(back: () => void, onPick: () => void): MenuPage {
         const x = 190 + i * 100;
         const sp = scene.add.sprite(x, 100, ATLAS, frame(`${h}_idle`)).setScale(3).setDepth(1001);
         if (scene.anims.exists(`${h}_idle`)) sp.play(`${h}_idle`);
-        out.push(sp, scene.add.text(x, 128, h.toUpperCase(), { fontFamily: FONT, fontSize: '8px', color: save().hero === h ? C.gold : C.dim }).setOrigin(0.5).setDepth(1001));
+        out.push(sp, snap(addText(scene, x, 128, h.toUpperCase(), { color: save().hero === h ? C.gold : C.dim }).setOrigin(0.5).setDepth(1001)));
       });
       return out;
     },
