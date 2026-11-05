@@ -149,6 +149,10 @@ export interface Hero {
   parryStart: number;
   /** Whether the current/last parry destroyed at least one projectile (decides its cooldown). */
   parryHit: boolean;
+  /** Projectiles destroyed by the current/last pulse (capped at parryMaxKills). */
+  parryKills: number;
+  /** The current/last pulse already stepped the multiplier (a close parry). */
+  parryClose: boolean;
   /** A parry press is buffered until this tick (inclusive); -1 = none. */
   parryBufferedUntil: number;
   /** Tick on which the current/last dash started (NEVER = long ago). */

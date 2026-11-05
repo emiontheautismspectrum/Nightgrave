@@ -71,8 +71,12 @@ describe('determinism with every threat type', () => {
         const kinds = new Set<ProjectileKind>();
         const frames = mulberryInputs(seed, 60 * 150);
         // mostly the bot (so the run lives long enough to see every kind), with scripted noise mixed in
-        for (const e of collect(sim, (s, t) => (t % 7 ? botInput(s) : (frames[t] ?? idle())), 60 * 150))
-          if (e.type === 'spawn') kinds.add(e.kind);
+        // an immortal hero (test only): the harder Polish 2 rules would end the run before every kind appears
+        for (let t = 0; t < 60 * 150; t++) {
+          sim.state.alive = true;
+          sim.step(t % 7 ? botInput(sim) : (frames[t] ?? idle()));
+          for (const e of sim.state.events) if (e.type === 'spawn') kinds.add(e.kind);
+        }
         return { sim, kinds };
       };
       const a = run();
@@ -189,25 +193,43 @@ describe('waves', () => {
   it('difficulty multipliers match CLAUDE.md', () => {
     const m = (d: Difficulty) => new Sim(1, d).params;
     const base = m('medium');
-    expect(m('easy').smallSpeed / base.smallSpeed).toBeCloseTo(0.8, 12);
-    expect(m('hard').smallSpeed / base.smallSpeed).toBeCloseTo(1.25, 12);
-    expect(m('easy').density).toBe(0.7);
-    expect(m('hard').density).toBe(1.4);
+    // Polish 2 values (CLAUDE.md "Difficulty"): easy 0.65/0.5, medium 0.85/0.75, hard 1.1/1.2
+    expect(m('easy').smallSpeed / base.smallSpeed).toBeCloseTo(0.65 / 0.85, 12);
+    expect(m('hard').smallSpeed / base.smallSpeed).toBeCloseTo(1.1 / 0.85, 12);
+    expect(m('easy').density).toBe(0.5);
+    expect(base.density).toBe(0.75);
+    expect(m('hard').density).toBe(1.2);
   });
 });
 
 describe('multi-kill scoring', () => {
-  it('a pulse that destroys a whole ring is ONE successful parry: one multiplier step, reduced extra points', () => {
+  it('a pulse destroys at most parryMaxKills (nearest first): ONE parry, one multiplier step, reduced extra points', () => {
     const sim = new Sim(1, 'medium', { spawner: false });
     const p = sim.params;
     const h = sim.state.hero;
     for (let k = 0; k < 16; k++) spawnProjectile(sim.state, p, 'rune_shard', h.x + 3, h.y, 0, 0);
     sim.step({ ...idle(), buttons: BTN_PARRY });
-    expect(sim.state.projectiles).toHaveLength(0);
+    expect(sim.state.projectiles).toHaveLength(16 - p.parryMaxKills);
     expect(sim.state.parryCount).toBe(1);
     expect(sim.state.multiplier).toBe(p.multStart + p.multStep);
     // extras in the same pulse score at the already-stepped multiplier
-    expect(sim.state.parryScoreHundredths).toBe(p.parryBase * p.multStart + 15 * p.extraKillPoints * (p.multStart + p.multStep));
+    expect(sim.state.parryScoreHundredths).toBe(p.parryBase * p.multStart + (p.parryMaxKills - 1) * p.extraKillPoints * (p.multStart + p.multStep));
+  });
+
+  it('a far parry scores but neither steps nor resets the multiplier; a close one steps it', () => {
+    const sim = new Sim(1, 'medium', { spawner: false });
+    const p = sim.params;
+    const h = sim.state.hero;
+    sim.state.multiplier = 200;
+    spawnProjectile(sim.state, p, 'orb_small', h.x + p.parryRadius * 0.9, h.y, 0, 0); // far: outer 40%
+    sim.step({ ...idle(), buttons: BTN_PARRY });
+    expect(sim.state.parryCount).toBe(1);
+    expect(sim.state.multiplier).toBe(200);
+    expect(sim.state.parryScoreHundredths).toBe(p.parryBase * 200);
+    for (let i = 0; i < p.parryCooldown + 1; i++) sim.step(idle());
+    spawnProjectile(sim.state, p, 'orb_small', h.x + p.parryRadius * 0.4, h.y, 0, 0); // close
+    sim.step({ ...idle(), buttons: BTN_PARRY });
+    expect(sim.state.multiplier).toBe(200 + p.multStep);
   });
 });
 

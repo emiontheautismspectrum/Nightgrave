@@ -136,7 +136,8 @@ describe('dash', () => {
       sim.state.projectiles = [];
     }
     expect(isInvulnerable(sim.state, p)).toBe(false);
-    orbAt(sim, 0);
+    // the dash still moves the hero (i-frames end before the dash does): put the orb where the hero ends this tick
+    orbAt(sim, p.dashSpeed);
     sim.step(idle());
     expect(sim.state.alive).toBe(false);
   });

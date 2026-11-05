@@ -19,27 +19,32 @@ export const TUNING = {
    * whiffCooldownSeconds. Without the whiff penalty a fixed-rhythm parry in place is unbeatable:
    * orbs cannot cross the pulse-to-body gap during the short off-window.
    */
-  parry: { radius: 28, activeSeconds: 0.15, cooldownSeconds: 0.4, whiffCooldownSeconds: 1.0, bufferSeconds: 0.1 },
-  dash: { distance: 80, durationSeconds: 0.2, invulnSeconds: 0.2, cooldownSeconds: 3, bufferSeconds: 0.1 },
+  // Polish 2: parry is a skill: smaller (22 px), shorter (0.10 s), slower to recover (0.9 s after a hit, 1.4 s after a
+  // whiff), at most 3 kills per pulse; the multiplier steps only for a close parry (a kill within closeFraction of the
+  // radius).
+  parry: { radius: 22, activeSeconds: 0.1, cooldownSeconds: 0.9, whiffCooldownSeconds: 1.4, bufferSeconds: 0.1, maxKillsPerPulse: 3, closeFraction: 0.6 },
+  dash: { distance: 80, durationSeconds: 0.2, invulnSeconds: 0.12, cooldownSeconds: 3, bufferSeconds: 0.1 }, // i-frames only for the first 0.12 s
   /** Multiplier is stored as integer hundredths inside the sim (100 = x1.00). */
-  multiplier: { start: 1, step: 0.25, cap: 5, resetSeconds: 5 },
+  multiplier: { start: 1, step: 0.25, cap: 5, resetSeconds: 3 }, // resets after 3 s without a successful parry
   /**
    * A successful parry = one pulse that destroyed something. The first projectile of a pulse scores
    * parryBase x multiplier; every extra one in the same pulse scores extraKillPoints x multiplier.
    * The multiplier steps once per successful pulse (a 16-shard ring is not 16 parries).
    */
   score: { survivalPerSecond: 10, parryBase: 25, extraKillPoints: 5 },
+  // Polish 2: base projectile speeds +30% (orbs, shards, blades, wraiths, the eye's ring; caster and other boss shots use
+  // these speeds too) so the same counts feel denser.
   orbs: {
-    small: { radius: 2.5, speed: 75 },
-    large: { radius: 4.5, speed: 55 },
+    small: { radius: 2.5, speed: 98 },
+    large: { radius: 4.5, speed: 72 },
     /** Max aim error in radians, uniform in [-spread, +spread]. */
     spread: 0.3,
   },
-  runeShard: { radius: 3, speed: 62 },
+  runeShard: { radius: 3, speed: 81 },
   /** Unparryable. Curves slightly: up to curveRadPerSecond of turn, sign chosen per blade. */
-  blade: { radius: 5, speed: 80, spread: 0.25, curveRadPerSecond: 0.35 },
+  blade: { radius: 5, speed: 104, spread: 0.25, curveRadPerSecond: 0.35 },
   /** Slow homing shadow, parryable; after lifeSeconds it fades (harmless) for fadeSeconds, then is gone. */
-  wraith: { radius: 5, speed: 30, steer: 0.05, lifeSeconds: 7, fadeSeconds: 0.5 },
+  wraith: { radius: 5, speed: 39, steer: 0.05, lifeSeconds: 7, fadeSeconds: 0.5 },
   /**
    * Fairness: nothing may appear closer than minSpawnDistance to the hero unless it was telegraphed
    * for at least minTelegraphSeconds (rune bursts are; edge spawns pick a far point instead).
@@ -105,7 +110,7 @@ export const TUNING = {
       y: 62,
       cadenceSeconds: 2.0,
       windupSeconds: 0.5,
-      ring: { weight: 3, count: 12, speed: 52, spinRad: 0.21, curveRadPerSecond: 0.25 },
+      ring: { weight: 3, count: 12, speed: 68, spinRad: 0.21, curveRadPerSecond: 0.25 },
       /** Unparryable rotating beam: thin-line telegraph, then sweeps sweepDeg at degPerSecond (<= 60) and ends. */
       beam: { weight: 2, windupSeconds: 0.7, degPerSecond: 50, sweepDeg: 80, halfWidth: 2, length: 440, offsetMinPx: 18, offsetMaxPx: 34 },
       spawns: { weight: 2, count: 4, maxCount: 6, minHeroDist: 80, edgeInset: 20, spread: 0.12 },
@@ -124,7 +129,7 @@ export const TUNING = {
     },
   },
   /** Boss drop: each ember charge lengthens the parry active window for the rest of the run (stacking, capped). */
-  emberCharge: { stepSeconds: 0.02, capSeconds: 0.08 },
+  emberCharge: { stepSeconds: 0.01, capSeconds: 0.04 }, // max window 0.10 + 0.04 = 0.14 s (<= the old 0.15 s)
   /**
    * Pickups: at most one on the map, seeded spawn points (>= minHeroDist from the hero, >= edgeInset inside the arena,
    * outside the portal clear radius and prop anchors), walk-over collection within `radius`. Taking the same kind again
@@ -145,8 +150,9 @@ export const TUNING = {
     doubleScore: { weight: 1, seconds: 10, factor: 2 },
   },
   difficulty: {
-    easy: { speed: 0.8, density: 0.7 },
-    medium: { speed: 1.0, density: 1.0 },
-    hard: { speed: 1.25, density: 1.4 },
+    // Polish 2: spread wider so the harder base rules leave Easy/Medium approachable (bot-calibrated, see balance.ts)
+    easy: { speed: 0.65, density: 0.5 },
+    medium: { speed: 0.85, density: 0.75 },
+    hard: { speed: 1.1, density: 1.2 },
   } satisfies Record<Difficulty, { speed: number; density: number }>,
 } as const;

@@ -29,6 +29,8 @@ export function createState(seed: number, difficulty: Difficulty, p: SimParams =
       facing: 1,
       parryStart: NEVER,
       parryHit: true,
+      parryKills: 0,
+      parryClose: false,
       parryBufferedUntil: -1,
       dashStart: NEVER,
       dashBufferedUntil: -1,
@@ -166,6 +168,8 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   if (h.parryBufferedUntil >= t && t - h.parryStart >= parryCooldownOf(s, p)) {
     h.parryStart = t;
     h.parryHit = false;
+    h.parryKills = 0;
+    h.parryClose = false;
     h.parryBufferedUntil = -1;
     s.events.push({ type: 'parry_start' });
   }
@@ -205,28 +209,39 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   // 6. multiplier decay, then parry (parry is resolved before hits, so it always wins vs parryables)
   if (s.lastParryTick >= 0 && t - s.lastParryTick >= p.multReset) s.multiplier = p.multStart;
   if (isParryActive(s, p)) {
-    const keep: Projectile[] = [];
+    // a projectile counts only while it is inside the pulse during the active window; at most parryMaxKills per pulse
+    // (nearest first); the multiplier steps once per pulse and only for a CLOSE parry (a kill inside the inner part of
+    // the radius); a far parry still scores but neither steps nor resets the multiplier
+    const cand: { pr: Projectile; d2: number }[] = [];
     for (const pr of s.projectiles) {
       const dx = pr.x - h.x;
       const dy = pr.y - h.y;
       const r = p.parryRadius + pr.radius;
-      if (pr.parryable && !isFading(s, pr) && dx * dx + dy * dy <= r * r) {
-        // first kill of this pulse: full points, then the multiplier steps (once per pulse)
-        const first = !h.parryHit;
-        const dbl = isDouble(s) ? p.pickups.doubleScore.factor : 1;
-        const points = (first ? p.parryBase : p.extraKillPoints) * s.multiplier * dbl; // hundredths of a point
-        s.parryScoreHundredths += points;
-        s.events.push({ type: 'parry_hit', id: pr.id, x: pr.x, y: pr.y, points: points / 100, multiplier: s.multiplier / 100 });
-        if (first) {
-          s.multiplier = Math.min(p.multCap, s.multiplier + p.multStep);
-          s.parryCount++;
-        }
-        s.lastParryTick = t;
-        h.parryHit = true;
-        if (first && pr.boss > 0) onBossParry(s, p, pr.boss); // reflect bonus: once per successful pulse
-      } else keep.push(pr);
+      const d2 = dx * dx + dy * dy;
+      if (pr.parryable && !isFading(s, pr) && d2 <= r * r) cand.push({ pr, d2 });
     }
-    s.projectiles = keep;
+    cand.sort((a, b) => a.d2 - b.d2 || a.pr.id - b.pr.id);
+    const hit = new Set<number>();
+    const close2 = p.parryRadius * p.parryCloseFrac * (p.parryRadius * p.parryCloseFrac);
+    for (const { pr, d2 } of cand) {
+      if (h.parryKills >= p.parryMaxKills) break;
+      h.parryKills++;
+      hit.add(pr.id);
+      const first = !h.parryHit;
+      const dbl = isDouble(s) ? p.pickups.doubleScore.factor : 1;
+      const points = (first ? p.parryBase : p.extraKillPoints) * s.multiplier * dbl; // hundredths of a point
+      s.parryScoreHundredths += points;
+      s.events.push({ type: 'parry_hit', id: pr.id, x: pr.x, y: pr.y, points: points / 100, multiplier: s.multiplier / 100 });
+      if (first) s.parryCount++;
+      if (d2 <= close2 && !h.parryClose) {
+        s.multiplier = Math.min(p.multCap, s.multiplier + p.multStep);
+        h.parryClose = true;
+      }
+      s.lastParryTick = t;
+      h.parryHit = true;
+      if (first && pr.boss > 0) onBossParry(s, p, pr.boss); // reflect bonus: once per successful pulse
+    }
+    if (hit.size) s.projectiles = s.projectiles.filter((pr) => !hit.has(pr.id));
     // the last active tick of a parry that hit nothing: tell the renderer it was a whiff
     if (t - h.parryStart === parryActiveTicks(s, p) - 1 && !h.parryHit) s.events.push({ type: 'parry_whiff', x: h.x, y: h.y });
   }

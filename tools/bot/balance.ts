@@ -5,7 +5,6 @@
 import type { Difficulty } from '../../src/data/tuning';
 import { BTN_DASH, BTN_PARRY } from '../../src/sim/input';
 import { Sim } from '../../src/sim/sim';
-import { botInputClamped } from '../../tests/bot';
 import { SkilledBot } from '../../tests/skilled';
 
 const N = Number(process.argv[2] ?? 50);
@@ -37,7 +36,8 @@ for (const d of ['easy', 'medium', 'hard'] as Difficulty[]) {
     if (sim.state.bossesDefeated > 0) kills++;
     if (sim.state.bossWave >= 0) reachedBoss++;
     const dsim = new Sim(seed * 7919, d);
-    while (dsim.state.alive && dsim.state.tick < CAP[d]) dsim.step(botInputClamped(dsim, { parry: false }));
+    const dbot = new SkilledBot(seed, false); // the same human-like player, never parrying
+    while (dsim.state.alive && dsim.state.tick < CAP[d]) dsim.step(dbot.input(dsim));
     dodge.push(dsim.state.survivalTicks / 60);
   }
   void BTN_DASH;

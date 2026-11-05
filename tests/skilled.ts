@@ -16,7 +16,8 @@ export class SkilledBot {
   private rng: number;
   private parryAt = -1;
   private jitter = { x: 0, y: 0, until: 0 };
-  constructor(seed: number) {
+  /** parry = false: the same human-like player that never parries (the dodge-only comparison). */
+  constructor(seed: number, private parry = true) {
     this.rng = (seed * 2654435761) >>> 0 || 1;
   }
   private rnd(): number {
@@ -50,7 +51,7 @@ export class SkilledBot {
 
     // parry: find the first perceived violet threat that will actually reach the hero and when it gets "close"
     let buttons = f.buttons & ~BTN_PARRY;
-    if (this.parryAt < 0 && parryCooldownLeft(s, p) === 0) {
+    if (this.parry && this.parryAt < 0 && parryCooldownLeft(s, p) === 0) {
       let best = Infinity;
       for (const pr of seen) {
         if (!pr.parryable) continue;
