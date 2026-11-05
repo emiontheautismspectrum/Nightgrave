@@ -572,7 +572,8 @@ export class GameScene extends Phaser.Scene {
     }
     this.drawTouchButtons(touch);
     // read-only snapshot for the smoke tests (copies of plain numbers; nothing can be written back into the sim)
-    (window as unknown as { __ngDebug?: object }).__ngDebug = {
+    // dev / smoke-test builds only (VITE_SMOKE=1): never in a production bundle, it would make bots trivial
+    if (import.meta.env.DEV || import.meta.env.VITE_SMOKE === '1') (window as unknown as { __ngDebug?: object }).__ngDebug = {
       x: st.hero.x, y: st.hero.y, tick: st.tick, alive: st.alive, parryStart: st.hero.parryStart, paused: this.driver.paused,
       menu: this.menu.active, hint: !!this.hint,
     };

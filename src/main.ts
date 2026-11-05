@@ -10,6 +10,9 @@ import { save } from './storage';
 
 document.title = TITLE;
 
+/** URL parameters that change behaviour (?wave, ?play) only work in dev and in the smoke-test build. */
+const DEV_PARAMS = import.meta.env.DEV || import.meta.env.VITE_SMOKE === '1';
+
 /** Touch device: a coarse pointer, or any touch seen so far. */
 let touchSeen = false;
 const isTouch = (): boolean => touchSeen || (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
@@ -49,7 +52,7 @@ async function boot(): Promise<void> {
   }
   const q = new URLSearchParams(location.search);
   // dev-only start wave (screenshots of boss fights); never available in a production build, never saved
-  const devWave = import.meta.env.DEV && q.get('wave') ? Math.max(0, Math.min(99, Number(q.get('wave')) | 0)) : 0;
+  const devWave = DEV_PARAMS && q.get('wave') ? Math.max(0, Math.min(99, Number(q.get('wave')) | 0)) : 0;
 
   const runConfig = (): RunConfig => {
     const difficulty = save().difficulty;
@@ -91,7 +94,8 @@ async function boot(): Promise<void> {
   game.scene.add('title', TitleScene, false);
   game.scene.add('game', GameScene, false);
   // dev: ?play=1 (screenshots, smoke tests) jumps straight into a run
-  if (q.get('play') === '1') game.scene.start('game', runConfig());
+  // dev/test only: ?play=1 jumps straight into a run; production builds ignore every URL parameter
+  if (DEV_PARAMS && q.get('play') === '1') game.scene.start('game', runConfig());
   else game.scene.start('title', titleConfig);
 
   // audio: unlock on the first user input (autoplay policy; iOS needs a touch), mute while hidden
