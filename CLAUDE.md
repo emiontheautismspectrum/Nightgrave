@@ -39,22 +39,29 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Fairness (all spawns, incl. casters): >= 0.25 s (15 ticks) from the first visual cue to the first projectile;
   no projectile spawns within 60 px of the hero unless telegraphed; spawn points come from the seeded PRNG only.
 
-## Arena
+## Arena (v2: a calm forest clearing)
 - Playable rectangle 384x216 at x 48..432, y 27..243 of the 480x270 screen (16:9, 80% height). Hero spawns at (240,135)
   and moves anywhere inside the rectangle (sim clamp). Projectiles are removed 24 px outside it.
-- Border: low mossy, cracked stone curb (~6 px), broken in places. Gaps ("hollows", 2 per side) are where stalkers step in.
-- Decor never blocks anything: no colliders. Moonlit night, moon top-left: cold 1 px `moon` rim light on top-left edges,
-  hard dithered shadows lower-right, a soft "moon pool" of lighter ground at the centre, vignette at the edges.
-- Zones: GRAVEYARD upper-left inside a wrought-iron fence (author anchors in `tools/arena_layout.py`, gate on the bottom
-  side) with ~24-30 gravestones and the PORTAL ALTAR (shade spawn, at (120,78), 28 px clear radius); OPEN FIELD (centre
-  and right, calm, keeps the ritual runes); DARK FOREST outside the curb (3 parallax layers, fog, roots, eyes).
-- Landmarks (final set, one each, small render-only loops): giant rune sword with a field of fallen weapons, gallows tree
-  with cage and crows, hunter's wagon, cursed well with a beast ribcage, hunter's cabin with workshop props.
-  Keep the central 200x120 calm zone and the portal clear. Original designs only (mood references, no copying).
-- Draw order: forest far/mid (parallax) -> ground + curb + decals -> ground telegraphs -> y-sorted props, casters, hero,
+- Setting: a moonlit FOREST CLEARING (not a cemetery). Soft, calm, pleasant to look at, like the Stage 0 style board.
+  Edge: a soft irregular rim of moss, roots and a few half-buried broken ring stones (no hard curb); the ground just
+  outside the rectangle is slightly darker so the clamp still reads. Hollows (2 per side) are dark gaps in the tree line
+  where stalkers step in.
+- Decor never blocks anything: no colliders. Moon top-left: soft mid-tone rim light only, lower-right shadows, a soft
+  moon pool at the centre, flat vignette steps at the edges.
+- Calm zone x 165..340, y 75..195: nearly flat ground, no props.
+- Portal altar at (120,78) with a 20 px clear radius, standing alone in the clearing; a few graves nearby (8-12 total in
+  2-3 loose clusters plus singles) and 2-3 short broken fence fragments. No fenced graveyard.
+- Landmarks (base centre = where the sprite touches the ground; small, low-amplitude render-only loops, at most 4 animated
+  landmarks in any 200x120 window): giant ancient dead tree (top-right, trunk ~(378,125)) with a runed sword stuck in a
+  small stone base at its foot (~(378,140)) and 3 fallen weapons; gallows (138,150) with cage and crows; cursed well
+  (362,172) with a bent gas lamp (386,162) and the beast ribcage bottom-right; hunter's wagon at the top edge (~(270,44))
+  half behind the forest; hunter's cabin with workshop lower-left. Original designs only (mood references, no copying).
+- Draw order: forest far/mid (parallax) -> ground + edge + decals -> ground telegraphs -> y-sorted props, casters, hero,
   projectiles, effects -> fog -> vignette -> forest near overhang (max 8 px into the arena) -> UI.
-- Translucency: a prop/overhang drawn in front of the hero, a caster or a projectile (box + 4 px) fades to ~35% alpha in
-  ~100 ms and back when clear. Render-only; the hero keeps its outline.
+- Translucency: a prop/overhang drawn in front of the hero, a caster or a projectile (box + 4 px) fades to ~35% alpha
+  (~45% for props wider than 40 px) in ~100 ms and back when clear. Render-only; the hero keeps its outline.
+- Softness and density rules (values, dithering, budgets) live in ASSETS_SPEC.md and are enforced by
+  `tools/check_noise.py`, `tools/check_readability.py` and `tools/validate_palette.py`.
 
 ## Bosses (MVP: 2)
 - Eye Sentinel: rotating ring and beam patterns, spawns orbs.
