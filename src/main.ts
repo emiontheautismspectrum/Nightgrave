@@ -10,6 +10,8 @@ import { setDevice } from './render/hints';
 import { GameScene, type RunConfig } from './render/GameScene';
 import { TitleScene, type TitleConfig } from './render/TitleScene';
 import { save } from './storage';
+import { BoardPanel } from './web/boardPanel';
+import { computeLayout } from './web/layout';
 
 document.title = TITLE;
 
@@ -20,65 +22,59 @@ const DEV_PARAMS = import.meta.env.DEV || import.meta.env.VITE_SMOKE === '1';
 let touchSeen = false;
 const isTouch = (): boolean => touchSeen || (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
 
-/** The area inside the safe-area padding (phone notch) that the canvas may use. */
-function available(): { w: number; h: number } {
-  const host = document.getElementById('game');
-  if (!host) return { w: innerWidth, h: innerHeight };
-  const cs = getComputedStyle(host);
-  const px = (v: string) => parseFloat(v) || 0;
-  return {
-    w: (host.clientWidth || innerWidth) - px(cs.paddingLeft) - px(cs.paddingRight),
-    h: (host.clientHeight || innerHeight) - px(cs.paddingTop) - px(cs.paddingBottom),
-  };
+/** Safe-area insets (phone notch) read from a probe element padded with env(safe-area-inset-*). */
+function safeInsets(): { l: number; r: number; t: number; b: number } {
+  const p = document.getElementById('safe');
+  if (!p) return { l: 0, r: 0, t: 0, b: 0 };
+  const cs = getComputedStyle(p);
+  const n = (v: string) => parseFloat(v) || 0;
+  return { l: n(cs.paddingLeft), r: n(cs.paddingRight), t: n(cs.paddingTop), b: n(cs.paddingBottom) };
 }
+
+let board: BoardPanel | null = null;
 
 /**
- * Zoom in DEVICE pixels (crisp at any devicePixelRatio, e.g. Windows 125%): the largest integer number of device pixels
- * per game pixel that fits. The canvas CSS size is then 480*z/dpr x 270*z/dpr, so every game pixel is an exact z x z
- * block of device pixels (nearest-neighbour). Below 2 device px per game px (small phones) a fractional fit is used.
+ * Lay out the page: the framed game (crisp integer device-pixel scaling, Polish 1) with the board panel next to it
+ * (desktop), the panel under it on narrow windows, the whole screen on phones (no panel, no footer during play).
  */
-export function deviceZoom(availW: number, availH: number, dpr: number): { cssZoom: number; device: number; exact: boolean } {
-  const d = Math.max(0.5, dpr || 1);
-  const device = Math.floor(Math.min((availW * d) / VIEW_WIDTH, (availH * d) / VIEW_HEIGHT));
-  if (device >= 2) return { cssZoom: device / d, device, exact: true };
-  const frac = Math.max(0.5, Math.min(availW / VIEW_WIDTH, availH / VIEW_HEIGHT));
-  return { cssZoom: frac, device: frac * d, exact: false };
-}
-
-function fitZoom(): number {
-  const { w, h } = available();
-  return deviceZoom(w, h, window.devicePixelRatio).cssZoom;
-}
-
-/** Put the canvas on whole device pixels (centring could land on a half device pixel and smear the pixel grid). */
-function alignCanvas(game: Phaser.Game): void {
-  const c = game.canvas;
-  const host = document.getElementById('game');
-  if (!c || !host) return;
+function applyLayout(game: Phaser.Game): void {
   const dpr = window.devicePixelRatio || 1;
-  const { w, h } = available();
-  const cs = getComputedStyle(host);
-  // the size from the zoom itself (Phaser may apply the new canvas size only on its next refresh)
-  const z = game.scale.zoom;
-  const cw = VIEW_WIDTH * z;
-  const ch = VIEW_HEIGHT * z;
-  c.style.width = `${cw}px`;
-  c.style.height = `${ch}px`;
-  // a whole number of device pixels that is also a multiple of the browser's 1/64 CSS px layout unit
-  // (browser zoom reports float32 ratios such as 1.100000023841858: search only a few device px, then just round)
-  const snapDevice = (cssPx: number): number => {
-    const k0 = Math.round(cssPx * dpr);
-    for (let n = 0; n <= 12; n++)
-      for (const k of [k0 - n, k0 + n])
-        if (k >= 0 && Math.abs((k / dpr) * 64 - Math.round((k / dpr) * 64)) < 1e-3) return k / dpr;
-    return k0 / dpr;
-  };
-  const left = (parseFloat(cs.paddingLeft) || 0) + snapDevice((w - cw) / 2);
-  const top = (parseFloat(cs.paddingTop) || 0) + snapDevice((h - ch) / 2);
-  c.style.position = 'absolute';
-  c.style.left = `${left}px`;
-  c.style.top = `${top}px`;
-  c.style.margin = '0';
+  const phone = isTouch();
+  const ins = phone ? safeInsets() : { l: 0, r: 0, t: 0, b: 0 };
+  const L = computeLayout(innerWidth - ins.l - ins.r, innerHeight - ins.t - ins.b, dpr, phone);
+  const frame = document.getElementById('frame');
+  const footer = document.getElementById('footer');
+  const page = document.getElementById('page');
+  if (!frame || !page) return;
+  document.body.classList.toggle('stack', L.mode === 'stack');
+  document.body.classList.toggle('phone', L.mode === 'phone');
+  page.style.setProperty('--gp', `${L.gp}px`);
+  page.style.height = `${L.pageH}px`;
+  frame.style.left = `${L.game.x + ins.l}px`;
+  frame.style.top = `${L.game.y + ins.t}px`;
+  frame.style.width = `${L.game.w}px`;
+  frame.style.height = `${L.game.h}px`;
+  game.scale.setZoom(L.zoom);
+  const c = game.canvas;
+  if (c) {
+    c.style.width = `${L.game.w}px`;
+    c.style.height = `${L.game.h}px`;
+  }
+  if (L.panel && !phone) {
+    board ??= new BoardPanel('bpanel');
+    if (!board.root.isConnected) page.append(board.root);
+    const st = board.root.style;
+    st.display = '';
+    st.left = `${L.panel.x}px`;
+    st.top = `${L.panel.y}px`;
+    st.width = `${L.panel.w}px`;
+    st.height = L.panel.h ? `${L.panel.h}px` : '';
+    board.start();
+  } else if (board) board.root.style.display = 'none';
+  if (footer) {
+    footer.style.top = `${L.footerY}px`;
+    footer.hidden = phone;
+  }
   game.scale.updateBounds(); // Phaser maps pointers with the canvas bounds: refresh them after moving the canvas
 }
 
@@ -131,7 +127,7 @@ async function boot(): Promise<void> {
     pixelArt: true,
     roundPixels: true,
     input: { gamepad: true, activePointers: 4 },
-    scale: { mode: Phaser.Scale.NONE, zoom: fitZoom() },
+    scale: { mode: Phaser.Scale.NONE, zoom: computeLayout(innerWidth, innerHeight, window.devicePixelRatio || 1, isTouch()).zoom },
     banner: false,
     disableContextMenu: true,
   });
@@ -155,8 +151,7 @@ async function boot(): Promise<void> {
   for (const t of ['pointerdown', 'keydown', 'touchend']) addEventListener(t, unlock, { capture: true, passive: true });
   document.addEventListener('visibilitychange', () => audio.setHidden(document.hidden));
   const resize = () => {
-    game.scale.setZoom(fitZoom());
-    alignCanvas(game);
+    applyLayout(game);
     updateRotateOverlay();
   };
   addEventListener('resize', resize);

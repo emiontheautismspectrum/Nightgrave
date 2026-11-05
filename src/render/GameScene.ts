@@ -18,6 +18,7 @@ import { pickMusic, SoundDiffer } from './audioLogic';
 import { BossView } from './BossView';
 import { online } from '../net/api';
 import { SubmitPanel } from './SubmitPanel';
+import { setInRun } from '../web/runFlag';
 import { emitAudioEvent } from './events';
 import { InputCollector } from './input';
 import { settingsPage, type MenuCtx } from './menus';
@@ -178,6 +179,7 @@ export class GameScene extends Phaser.Scene {
     window.addEventListener('focus', onFocus);
     window.addEventListener('resize', onOrient);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      setInRun(false);
       this.submit?.close();
       document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('blur', onBlur);
@@ -415,6 +417,7 @@ export class GameScene extends Phaser.Scene {
     this.banner.setAlpha(0);
     this.input2.newRun();
     this.panel.setVisible(false);
+    setInRun(true); // the page's board panel never fetches during a run
     this.ctxHints = new ContextHints(!save().settings.hintsDone);
     if (save().settings.hintParrySeen) this.ctxHints.shown.add('parry');
     if (save().settings.hintDashSeen) this.ctxHints.shown.add('dash');
@@ -539,6 +542,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onDeath(): void {
+    setInRun(false);
     const st = this.sim.state;
     this.deadAt = this.time.now;
     this.menu.hide();

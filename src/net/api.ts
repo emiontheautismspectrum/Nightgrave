@@ -29,9 +29,18 @@ export interface SubmitResult {
   reason?: string;
 }
 
-/** The server's UTC date (from serverNow) once the API answered: the Hard seed date, immune to a wrong local clock. */
-let serverDate: string | null = null;
-export const getServerDate = (): string | null => serverDate;
+/**
+ * Server clock offset (serverNow - local now) once the API answered. The server's UTC date is derived from it on every
+ * call, so it rolls over at 00:00 UTC by itself (the Hard seed date, immune to a wrong local clock).
+ */
+let clockOffset: number | null = null;
+export const serverNowMs = (): number => Date.now() + (clockOffset ?? 0);
+export const hasServerClock = (): boolean => clockOffset !== null;
+export const getServerDate = (): string | null => (clockOffset === null ? null : new Date(serverNowMs()).toISOString().slice(0, 10));
+/** Test hook: set the offset directly. */
+export function setClockOffsetForTest(ms: number | null): void {
+  clockOffset = ms;
+}
 
 const str = (v: unknown, max: number): string | null => (typeof v === 'string' && v.length <= max ? v : null);
 const int = (v: unknown): number | null => (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null);
@@ -79,10 +88,28 @@ export async function fetchBoard(date?: string): Promise<Board | null> {
   try {
     const b = parseBoard(await request(`/api/daily${date ? `?date=${encodeURIComponent(date)}` : ''}`));
     if (b) {
-      const d = b.serverNow.slice(0, 10);
-      if (DATE_RE.test(d)) serverDate = d;
+      const t = Date.parse(b.serverNow);
+      if (Number.isFinite(t)) clockOffset = t - Date.now();
     }
     return b;
+  } catch {
+    return null;
+  }
+}
+
+export interface MyStanding {
+  verifiedScore: number | null;
+  verifiedRank: number | null;
+  pending: boolean;
+}
+
+/** The player's own standing for a date (playerId only in the POST body). Null on any error. */
+export async function fetchMe(date: string, playerId: string): Promise<MyStanding | null> {
+  if (!online()) return null;
+  try {
+    const r = (await request('/api/daily/me', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, playerId }) })) as Record<string, unknown>;
+    if (!r || typeof r !== 'object') return null;
+    return { verifiedScore: int(r.verifiedScore), verifiedRank: int(r.verifiedRank), pending: r.pending === true };
   } catch {
     return null;
   }

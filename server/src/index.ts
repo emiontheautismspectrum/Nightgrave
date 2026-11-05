@@ -1,6 +1,7 @@
 /**
  * Nightgrave API (Cloudflare Worker + D1): the Hard "Today's best" board.
  *   GET  /api/daily[?date=YYYY-MM-DD]   top 10 + champion of today (or yesterday), edge-cached 30 s
+ *   POST /api/daily/me                  { date, playerId } -> that player's own verified best / rank / pending
  *   POST /api/submit                    one run; the server keeps each player's best run per UTC date
  *   GET  /api/verify/pending?limit=N    pending submissions for the replay verifier (Bearer VERIFIER_TOKEN)
  *   POST /api/verify/result/:id         verifier verdict; "verified" promotes the pending run to the board
@@ -165,6 +166,42 @@ async function getDaily(req: Request, env: Env, now: number): Promise<Response> 
   }
   // serverNow is never cached: the client uses it for the Hard seed date; CORS headers are added per request
   return json({ date, serverNow: new Date(now).toISOString(), ...data }, 200, req, env, `public, max-age=${LIMITS.cacheSeconds}`);
+}
+
+/**
+ * The caller's own standing for a date: { verifiedScore, verifiedRank, pending }. playerId travels only in the JSON
+ * body (never in the URL, so it stays out of logs); never returns other players' data. Same date rule, CORS and rate
+ * limit as GET /api/daily.
+ */
+async function postMe(req: Request, env: Env, now: number): Promise<Response> {
+  const ct = (req.headers.get('Content-Type') ?? '').toLowerCase();
+  if (!ct.startsWith('application/json')) return json({ error: 'invalid' }, 415, req, env);
+  const buf = await readCapped(req, 1024);
+  if (!buf) return json({ error: 'invalid' }, 413, req, env);
+  let o: Record<string, unknown>;
+  try {
+    const raw = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(buf)) as unknown;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('shape');
+    o = raw as Record<string, unknown>;
+  } catch {
+    return json({ error: 'invalid' }, 400, req, env);
+  }
+  const keys = Object.keys(o);
+  if (keys.length !== 2 || typeof o.date !== 'string' || typeof o.playerId !== 'string' || !UUID4.test(o.playerId)) return json({ error: 'invalid' }, 400, req, env);
+  const today = utcDateKey(new Date(now));
+  if (!DATE_RE.test(o.date) || (o.date !== today && o.date !== addDays(today, -1))) return json({ error: 'date' }, 400, req, env);
+  if (!(await allow(env, `get:${await ipHash(req, env)}`, 60_000, LIMITS.getPerMinutePerIp, now))) return json({ error: 'rate' }, 429, req, env);
+  const row = await env.DB.prepare('SELECT id, score, achieved_at, verified, p_replay FROM entries WHERE date = ?1 AND player_id = ?2')
+    .bind(o.date, o.playerId).first<{ id: number; score: number; achieved_at: number; verified: number; p_replay: string | null }>();
+  if (!row) return json({ verifiedScore: null, verifiedRank: null, pending: false }, 200, req, env);
+  let verifiedRank: number | null = null;
+  if (row.verified === 1) {
+    const above = await env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM entries WHERE date = ?1 AND verified = 1 AND (score > ?2 OR (score = ?2 AND (achieved_at < ?3 OR (achieved_at = ?3 AND id < ?4))))',
+    ).bind(o.date, row.score, row.achieved_at, row.id).first<{ n: number }>();
+    verifiedRank = (above?.n ?? 0) + 1;
+  }
+  return json({ verifiedScore: row.verified === 1 ? row.score : null, verifiedRank, pending: row.p_replay !== null }, 200, req, env);
 }
 
 /** Parse and validate a submission. Returns a reason code or the clean fields. */
@@ -412,6 +449,10 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
   }
   try {
     if (url.pathname === '/api/daily' && req.method === 'GET') return await getDaily(req, env, now);
+    if (url.pathname === '/api/daily/me' && req.method === 'POST') {
+      if (origin && !allowed.includes(origin)) return json({ error: 'origin' }, 403, req, env);
+      return await postMe(req, env, now);
+    }
     if (url.pathname === '/api/submit' && req.method === 'POST') {
       // browsers always send Origin on cross-origin POST: refuse foreign sites (non-browser clients send none)
       if (origin && !allowed.includes(origin)) return reject('origin', 403, req, env);

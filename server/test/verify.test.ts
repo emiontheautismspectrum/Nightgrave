@@ -251,3 +251,52 @@ describe('kill switch', () => {
     expect((await submit(RUN.log, RUN.score)).status).toBe(200);
   });
 });
+
+describe('POST /api/daily/me and the daily reset', () => {
+  const me = (body: unknown, ip = '4.4.4.4') =>
+    handle(new Request('https://api.test/api/daily/me', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': ip }, body: JSON.stringify(body) }), env, NOW);
+  it("returns only the caller's own standing (verified, rank, pending); unknown -> nulls; never other players", async () => {
+    await submit(RUN.log, RUN.score, { playerId: pid(1) });
+    expect(await (await me({ date: DATE, playerId: pid(1) })).json()).toEqual({ verifiedScore: null, verifiedRank: null, pending: true });
+    await runVerifier();
+    const r = (await (await me({ date: DATE, playerId: pid(1) })).json()) as Record<string, unknown>;
+    expect(r).toEqual({ verifiedScore: RUN.score, verifiedRank: 1, pending: false });
+    const other = await (await me({ date: DATE, playerId: pid(2) })).text();
+    expect(JSON.parse(other)).toEqual({ verifiedScore: null, verifiedRank: null, pending: false });
+    expect(other).not.toContain(pid(1));
+    expect((await me({ date: DATE, playerId: 'nope' })).status).toBe(400);
+    expect((await me({ date: DATE, playerId: pid(1), extra: 1 })).status).toBe(400);
+    expect((await me({ date: '2026-11-01', playerId: pid(1) })).status).toBe(400);
+  });
+  it('shares the GET rate limit', async () => {
+    let last = 0;
+    for (let i = 0; i < 61; i++) last = (await me({ date: DATE, playerId: pid(9) }, '6.6.6.7')).status;
+    expect(last).toBe(429);
+  });
+  it("yesterday's board (date-1) is served and shows verified runs only", async () => {
+    const y = '2026-11-04';
+    const raw = makeD1();
+    void raw;
+    // a verified and a pending entry for yesterday, inserted directly
+    const db = env.DB as unknown as { prepare: (q: string) => { bind: (...a: unknown[]) => { run: () => Promise<unknown> } } };
+    await db.prepare("INSERT INTO entries (date, player_id, name, score, hero, duration_ticks, replay, achieved_at, verified) VALUES (?1, 'a', 'Yday', 500, 'wisp', 600, 'x', 1, 1)").bind(y).run();
+    await db.prepare("INSERT INTO entries (date, player_id, name, score, hero, duration_ticks, replay, achieved_at, verified, p_replay, p_score) VALUES (?1, 'b', 'Pend', 0, 'wisp', 0, '', 1, 0, 'r', 999)").bind(y).run();
+    const b = (await (await handle(new Request(`https://api.test/api/daily?date=${y}`, { headers: { 'CF-Connecting-IP': '3.2.1.0' } }), env, NOW)).json()) as { top: { name: string }[]; champion: { name: string } | null };
+    expect(b.top.map((e) => e.name)).toEqual(['Yday']);
+    expect(b.champion?.name).toBe('Yday');
+  });
+  it('the day boundary: at 23:59:50 the board is today; at 00:00:10 the new date is empty and yesterday is still served', async () => {
+    const before = Date.parse('2026-11-05T23:59:50Z');
+    const after = Date.parse('2026-11-06T00:00:10Z');
+    await submit(RUN.log, RUN.score, {}, before);
+    await runVerifier();
+    const g = async (q: string, t: number) => (await (await handle(new Request(`https://api.test/api/daily${q}`, { headers: { 'CF-Connecting-IP': `1.0.0.${++ip % 250}` } }), env, t)).json()) as { date: string; top: unknown[] };
+    expect((await g('', before)).top.length).toBe(1);
+    const nd = await g('', after);
+    expect(nd.date).toBe('2026-11-06');
+    expect(nd.top.length).toBe(0); // everyone starts from zero
+    expect((await g('?date=2026-11-05', after)).top.length).toBe(1); // yesterday's champion still available
+    // a run that started before midnight still counts for its own date inside the grace window
+    expect((await submit(RUN.log, RUN.score + 0, { playerId: pid(5) }, after)).status).toBe(200);
+  });
+});

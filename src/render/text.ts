@@ -33,7 +33,9 @@ export interface TextOpts {
 }
 
 export function addText(scene: Phaser.Scene, x: number, y: number, s: string, o: TextOpts = {}): UIText {
-  const t = scene.add.bitmapText(Math.round(x), Math.round(y), FONT_KEY, fontSafe(scene, s), o.size ?? 8);
+  // a BitmapText created with an EMPTY string keeps NaN bounds forever (even after setText): start with a space
+  const t = scene.add.bitmapText(Math.round(x), Math.round(y), FONT_KEY, fontSafe(scene, s) || ' ', o.size ?? 8);
+  if (s === '') t.setText('');
   t.setTint(hex(o.color ?? '#d9d2c0'));
   if (o.align === 'center') t.setCenterAlign();
   if (o.lineSpacing) t.setLineSpacing(o.lineSpacing);
@@ -55,6 +57,8 @@ export function setTextValue(t: UIText, s: string): UIText {
 export function snap(t: UIText): UIText {
   const w = t.width;
   const h = t.height;
+  // an empty text has width 0: Phaser would derive originX = 0 / 0 = NaN and keep it forever
+  if (!(w > 0) || !(h > 0)) return t;
   t.setDisplayOrigin(Math.round(w * t.originX), Math.round(h * t.originY));
   return t;
 }

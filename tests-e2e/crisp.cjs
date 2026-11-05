@@ -45,7 +45,8 @@ let failed = false;
         }
         const pct = blocks ? (100 * mixed) / blocks : NaN;
         // the canvas must stay centred (never jump to the top-left corner), exact or not
-        const centred = Math.abs(r.x + r.w / 2 - w / 2) <= 12 && Math.abs(r.y + r.h / 2 - h / 2) <= 12;
+        // the game + board panel pair is centred (Polish 3); the canvas must be fully inside the window
+        const centred = r.x >= 0 && r.y >= 0 && r.x + r.w <= w && r.y + r.h <= h;
         const ok = (exact ? pct < 1 : true) && centred;
         if (!centred) console.log(`  canvas not centred: x ${r.x} y ${r.y} w ${r.w} h ${r.h}`);
         if (!ok || !exact) failed = failed || !ok;

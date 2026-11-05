@@ -122,6 +122,21 @@ def write_web_manifest(title, game):
         region = img[o:o + big.shape[0], o:o + big.shape[1]]
         region[m] = pal[big[m]]
         Image.fromarray(img).save(os.path.join(icons, f"icon-{size}.png"), optimize=False)
+    # tiny 8x8 board icons (palette colours): knight helmet, wisp flame, phone (zoomed portrait runs)
+    icon_art = {
+        "hero-knight": ["..AAA...", ".BBBB...", ".BKKKS..", ".BBBBS..", "..SBBS..", ".BBBBBS.", ".BB.SS..", "........"],
+        "hero-wisp": ["....A...", "...AE...", "..AEEA..", ".AEGGEA.", ".EGBGBE.", ".EGGGGE.", "..EEEE..", "........"],
+        "view-zoomed": [".SSSSS..", ".SBBBS..", ".SBBBS..", ".SBBBS..", ".SBBBS..", ".SSSSS..", ".SSASS..", "........"],
+    }
+    leg = {"A": "amber", "B": "bone", "K": "bg0", "S": "stone", "E": "ember", "G": "gold"}
+    for name, rows in icon_art.items():
+        img = np.zeros((8, 8, 4), dtype=np.uint8)
+        for y, row in enumerate(rows):
+            for x, ch in enumerate(row):
+                if ch in leg:
+                    img[y, x, :3] = pal[C.ci(leg[ch])]
+                    img[y, x, 3] = 255
+        Image.fromarray(img, "RGBA").save(os.path.join(icons, f"{name}.png"), optimize=False)
     manifest = {
         "name": title, "short_name": title, "start_url": "./", "scope": "./", "display": "fullscreen",
         "orientation": "landscape", "background_color": "#0b0d12", "theme_color": "#0b0d12",

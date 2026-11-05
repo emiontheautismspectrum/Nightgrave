@@ -93,7 +93,8 @@ export class SubmitPanel {
     const label = (x: number, y: number, t: string, col: string = C.dim) =>
       addText(s, x, y, t, { color: col }).setDepth(this.depth);
     this.objs.push(s.add.rectangle(240, y0 + 26, 300, 58, 0x0b0d12, 0.92).setStrokeStyle(1, 0x3a4558).setDepth(this.depth - 1));
-    this.objs.push(label(96, y0, rank === 1 ? 'TODAY\'S BEST! RANK 1' : `TODAY'S TOP 10: RANK ${rank}`, C.gold));
+    // rank 1 is a new high score of the day and the only one that may leave a message (shown on the title and board)
+    this.objs.push(label(96, y0, rank === 1 ? 'NEW HIGH SCORE! YOUR MESSAGE:' : `TODAY'S TOP 10: RANK ${rank}`, C.gold));
     this.field('NAME', 16, save().boardName);
     if (this.wantsMessage) this.field('MESSAGE (OPTIONAL)', 40, '');
     const btn = (x: number, t: string, fn: () => void) => {

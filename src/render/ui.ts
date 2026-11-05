@@ -174,14 +174,15 @@ export class MenuView {
   /** Size the panel to everything on the page except the title and BACK (even padding on every side). */
   private fitPanel(): void {
     if (!this.panel) return;
-    const content = [...this.rows, ...this.lineTexts.filter((t) => t.text.trim() !== ''), ...this.deco] as unknown as { getBounds?: () => Phaser.Geom.Rectangle }[];
+    // empty texts (e.g. the Hard-only daily line on other difficulties) have no meaningful bounds: skip them
+    const content = [...this.rows.filter((t) => t.text.trim() !== ''), ...this.lineTexts.filter((t) => t.text.trim() !== ''), ...this.deco] as unknown as { getBounds?: () => Phaser.Geom.Rectangle }[];
     let x0 = Infinity;
     let y0 = Infinity;
     let x1 = -Infinity;
     let y1 = -Infinity;
     for (const o of content) {
       const b = o.getBounds?.();
-      if (!b || b.width === 0) continue;
+      if (!b || !(b.width > 0) || !Number.isFinite(b.x + b.y + b.width + b.height)) continue;
       x0 = Math.min(x0, b.x);
       y0 = Math.min(y0, b.y);
       x1 = Math.max(x1, b.right);
