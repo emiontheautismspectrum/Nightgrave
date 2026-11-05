@@ -52,6 +52,7 @@ export function hasProfanity(s: string): boolean {
 
 export function validateName(raw: unknown): { ok: true; value: string } | { ok: false; error: TextError } {
   if (typeof raw !== 'string' || raw.length > 200) return { ok: false, error: 'long' };
+  if (FORBIDDEN.test(raw.normalize('NFKC'))) return { ok: false, error: 'chars' }; // before whitespace folding
   const v = normalizeText(raw);
   if (!v) return { ok: false, error: 'empty' };
   if (FORBIDDEN.test(v) || !NAME_OK.test(v)) return { ok: false, error: 'chars' };
@@ -64,6 +65,7 @@ export function validateName(raw: unknown): { ok: true; value: string } | { ok: 
 
 export function validateMessage(raw: unknown): { ok: true; value: string } | { ok: false; error: TextError } {
   if (typeof raw !== 'string' || raw.length > 400) return { ok: false, error: 'long' };
+  if (FORBIDDEN.test(raw.normalize('NFKC'))) return { ok: false, error: 'chars' }; // before whitespace folding
   const v = normalizeText(raw);
   if (!v) return { ok: false, error: 'empty' };
   if (FORBIDDEN.test(v) || !MSG_OK.test(v)) return { ok: false, error: 'chars' };

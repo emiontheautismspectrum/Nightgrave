@@ -27,6 +27,6 @@ export default defineConfig(({ mode }) => {
     base: './',
     build: { target: 'es2022', assetsInlineLimit: 0, chunkSizeWarningLimit: 2000 },
     plugins: [headers(env.VITE_API_BASE ?? process.env.VITE_API_BASE ?? '')],
-    test: { include: ['tests/**/*.test.ts'], environment: 'node' },
+    test: { include: ['tests/**/*.test.ts', 'server/test/**/*.test.ts'], environment: 'node' },
   };
 });
