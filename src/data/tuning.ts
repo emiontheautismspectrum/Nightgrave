@@ -157,8 +157,11 @@ export const TUNING = {
   },
   /** Polish 2 threat details (see patterns.armored / split / sigil for weights and unlocks). */
   newThreats: {
-    armored: { radius: 4.5, speed: 80, crackPush: 6 },
-    split: { radius: 3.5, speed: 85, children: 3, childSpread: 0.6, childSpeed: 95 },
+    // a crack-only pulse recovers in crackCooldownSeconds and the cracked orb slows to crackSpeedFactor, so the
+    // promised second parry is actually reachable
+    armored: { radius: 4.5, speed: 80, crackPush: 6, crackCooldownSeconds: 0.2, crackSpeedFactor: 0.35 },
+    // pieces are harmless for childSafeSeconds (>= the 0.25 s telegraph rule): a hero running forward cannot die to them
+    split: { radius: 3.5, speed: 85, children: 3, childSpread: 0.6, childSpeed: 170, childSafeSeconds: 0.25 }, // pieces outrun the hero (150 px/s) on every difficulty
     sigil: { radius: 14, telegraphSeconds: 0.6, lethalSeconds: 1.5, fadeSeconds: 0.3, maxActive: 2, edgeInset: 30, minHeroDist: 40 },
   },
   difficulty: {

@@ -134,3 +134,50 @@ describe('blood sigil', () => {
     expect(s.alive).toBe(false);
   });
 });
+
+describe('review fixes', () => {
+  it('a hero running forward through a just-burst split orb is not killed by the pieces', () => {
+    for (const d of ['easy', 'medium', 'hard'] as const) {
+      const p = makeParams(d);
+      const s = createState(1, d, p);
+      spawnProjectile(s, p, 'orb_split', s.hero.x + 20, s.hero.y, 0, 0);
+      step(s, { cursor: true, mx: 420, my: Math.round(s.hero.y), buttons: BTN_PARRY }, p, { spawner: false });
+      for (let i = 0; i < 40; i++) step(s, { cursor: true, mx: 420, my: Math.round(s.hero.y), buttons: 0 }, p, { spawner: false });
+      expect(s.alive, d).toBe(true);
+    }
+  });
+  it('armored orb on Hard at the wave speed cap: the second parry is reachable', () => {
+    const p = makeParams('hard');
+    const s = createState(1, 'hard', p);
+    const v = (p.newThreats.armored.speed * p.diffSpeed * p.speedCap) / 60;
+    const pr = spawnProjectile(s, p, 'orb_armored', s.hero.x + 20, s.hero.y, -v, 0);
+    step(s, parry, p, { spawner: false }); // crack
+    expect(s.projectiles.find((q) => q.id === pr.id)?.armor).toBe(0);
+    let destroyed = false;
+    for (let i = 0; i < 60 && s.alive && !destroyed; i++) {
+      step(s, parry, p, { spawner: false }); // keep pressing: the buffered parry fires when the crack cooldown ends
+      destroyed = !s.projectiles.some((q) => q.id === pr.id);
+    }
+    expect(destroyed).toBe(true);
+    expect(s.alive).toBe(true);
+  });
+  it('crack + kill in one pulse: the kill still scores as the first (full points, counts as a parry)', () => {
+    const p = makeParams('medium');
+    const s = createState(1, 'medium', p);
+    spawnProjectile(s, p, 'orb_armored', s.hero.x + 4, s.hero.y, 0, 0);
+    spawnProjectile(s, p, 'orb_small', s.hero.x + 9, s.hero.y, 0, 0);
+    const before = s.lastParryTick;
+    step(s, parry, p, { spawner: false });
+    expect(s.parryCount).toBe(1);
+    expect(s.parryScoreHundredths).toBe(p.parryBase * p.multStart);
+    expect(s.lastParryTick).not.toBe(before);
+  });
+  it('a crack alone does not refresh the multiplier reset timer', () => {
+    const p = makeParams('medium');
+    const s = createState(1, 'medium', p);
+    spawnProjectile(s, p, 'orb_armored', s.hero.x + 4, s.hero.y, 0, 0);
+    const before = s.lastParryTick;
+    step(s, parry, p, { spawner: false });
+    expect(s.lastParryTick).toBe(before);
+  });
+});

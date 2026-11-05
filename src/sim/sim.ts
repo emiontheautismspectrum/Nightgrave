@@ -31,6 +31,7 @@ export function createState(seed: number, difficulty: Difficulty, p: SimParams =
       parryHit: true,
       parryKills: 0,
       parryClose: false,
+      parryScored: true,
       parryBufferedUntil: -1,
       dashStart: NEVER,
       dashBufferedUntil: -1,
@@ -81,7 +82,7 @@ export const isDashing = (s: SimState, p: SimParams): boolean => s.tick - s.hero
 export const isInvulnerable = (s: SimState, p: SimParams): boolean => s.tick - s.hero.dashStart < p.dashInvuln;
 /** Cooldown of the current/last parry: short after a hit, long after a whiff. */
 export const parryCooldownOf = (s: SimState, p: SimParams): number =>
-  s.hero.parryHit ? p.parryCooldown : p.parryWhiffCooldown;
+  !s.hero.parryHit ? p.parryWhiffCooldown : s.hero.parryScored ? p.parryCooldown : p.parryCrackCooldown;
 export const parryCooldownLeft = (s: SimState, p: SimParams): number =>
   Math.max(0, parryCooldownOf(s, p) - (s.tick - s.hero.parryStart));
 export const dashCooldownLeft = (s: SimState, p: SimParams): number =>
@@ -171,6 +172,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
     h.parryHit = false;
     h.parryKills = 0;
     h.parryClose = false;
+    h.parryScored = false;
     h.parryBufferedUntil = -1;
     s.events.push({ type: 'parry_start' });
   }
@@ -234,14 +236,16 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
         const d = Math.sqrt(d2) || 1;
         pr.x += ((pr.x - h.x) / d) * p.newThreats.armored.crackPush;
         pr.y += ((pr.y - h.y) / d) * p.newThreats.armored.crackPush;
-        h.parryHit = true; // a hit, not a whiff (short cooldown), but no points and no multiplier step
-        s.lastParryTick = t;
+        h.parryHit = true; // not a whiff (crack cooldown), but no points, no multiplier step, no reset-timer refresh
+        pr.vx *= p.newThreats.armored.crackSpeedFactor;
+        pr.vy *= p.newThreats.armored.crackSpeedFactor;
+        pr.speed *= p.newThreats.armored.crackSpeedFactor;
         s.events.push({ type: 'parry_crack', id: pr.id, x: pr.x, y: pr.y });
         continue;
       }
       hit.add(pr.id);
       if (pr.kind === 'orb_split') splitBurst(s, p, pr);
-      const first = !h.parryHit;
+      const first = !h.parryScored;
       const dbl = isDouble(s) ? p.pickups.doubleScore.factor : 1;
       const points = (first ? p.parryBase : p.extraKillPoints) * s.multiplier * dbl; // hundredths of a point
       s.parryScoreHundredths += points;
@@ -253,6 +257,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       }
       s.lastParryTick = t;
       h.parryHit = true;
+      h.parryScored = true;
       if (first && pr.boss > 0) onBossParry(s, p, pr.boss); // reflect bonus: once per successful pulse
     }
     if (hit.size) s.projectiles = s.projectiles.filter((pr) => !hit.has(pr.id));
@@ -263,7 +268,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   // 7. hits: one hit = death (fading projectiles are harmless)
   if (!isInvulnerable(s, p)) {
     for (const pr of s.projectiles) {
-      if (isFading(s, pr)) continue;
+      if (isFading(s, pr) || t < pr.safeUntil) continue;
       const dx = pr.x - h.x;
       const dy = pr.y - h.y;
       const r = p.heroRadius + pr.radius;

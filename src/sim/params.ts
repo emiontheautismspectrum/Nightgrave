@@ -20,6 +20,7 @@ export interface SimParams {
   parryWhiffCooldown: number; // ticks, measured from activation, after a parry that hit nothing
   parryBuffer: number; // ticks a press waits for the cooldown
   parryMaxKills: number;
+  parryCrackCooldown: number; // ticks, after a pulse that only cracked a shell
   parryCloseFrac: number;
   dashSpeed: number; // px per tick
   dashTicks: number;
@@ -119,6 +120,7 @@ export function makeParams(difficulty: Difficulty): SimParams {
     parryWhiffCooldown: ticks(T.parry.whiffCooldownSeconds),
     parryBuffer: ticks(T.parry.bufferSeconds),
     parryMaxKills: T.parry.maxKillsPerPulse,
+    parryCrackCooldown: ticks(T.newThreats.armored.crackCooldownSeconds),
     parryCloseFrac: T.parry.closeFraction,
     dashSpeed: T.dash.distance / dashTicks,
     dashTicks,

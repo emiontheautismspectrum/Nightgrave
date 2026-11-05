@@ -33,6 +33,8 @@ export interface Projectile {
   armor: number;
   /** parryStart of the pulse that cracked it / burst its parent (-1 = never): that pulse cannot also destroy it. */
   crackedBy: number;
+  /** Harmless before this tick (split pieces), -1 = always harmful. */
+  safeUntil: number;
 }
 
 /** Blood sigil ground hazard: [start, fill) telegraph, [fill, end) lethal, [end, gone) fading (harmless). */
@@ -169,6 +171,8 @@ export interface Hero {
   parryKills: number;
   /** The current/last pulse already stepped the multiplier (a close parry). */
   parryClose: boolean;
+  /** The current/last pulse destroyed (scored) something; a pulse that only cracked a shell has a short cooldown. */
+  parryScored: boolean;
   /** A parry press is buffered until this tick (inclusive); -1 = none. */
   parryBufferedUntil: number;
   /** Tick on which the current/last dash started (NEVER = long ago). */

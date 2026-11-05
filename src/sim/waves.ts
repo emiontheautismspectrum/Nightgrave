@@ -64,6 +64,7 @@ export function spawnProjectile(
     boss: extra.boss ?? 0,
     armor: kind === 'orb_armored' ? 1 : 0,
     crackedBy: -1,
+    safeUntil: -1,
   };
   s.projectiles.push(pr);
   s.events.push({
@@ -243,13 +244,14 @@ export function splitBurst(s: SimState, p: SimParams, pr: Projectile): void {
   const minR = p.heroRadius + p.smallRadius + 4;
   const ox = s.hero.x + dx * Math.max(d, minR);
   const oy = s.hero.y + dy * Math.max(d, minR);
-  const v = (c.childSpeed * p.diffSpeed) / 60;
+  const v = c.childSpeed / 60; // not difficulty-scaled: the pieces always outrun the hero
   for (let k = 0; k < c.children; k++) {
     const n = c.children as number;
     const a = n === 1 ? 0 : -c.childSpread + (2 * c.childSpread * k) / (n - 1);
     const [ux, uy] = rotate(dx, dy, a);
     const kid = spawnProjectile(s, p, 'orb_small', ox, oy, ux * v, uy * v, {}, 15);
     kid.crackedBy = s.hero.parryStart; // the pulse that burst the orb cannot also destroy its pieces
+    kid.safeUntil = s.tick + Math.max(15, Math.round(c.childSafeSeconds * 60)); // harmless while they fly clear
   }
   s.events.push({ type: 'split', id: pr.id, x: pr.x, y: pr.y });
 }
