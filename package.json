@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "assets": "python3 tools/gen_assets.py && python3 tools/run_checks.py",
-    "bot": "vite-node scripts/botsim.ts"
+    "bot": "vite-node scripts/botsim.ts",
+    "audio:check": "python3 tools/check_audio.py",
+    "smoke": "npm run build && node tests-e2e/smoke.cjs"
   },
   "dependencies": {
     "@fontsource/press-start-2p": "5.2.7",

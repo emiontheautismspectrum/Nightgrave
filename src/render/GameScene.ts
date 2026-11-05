@@ -5,18 +5,27 @@
 import Phaser from 'phaser';
 import { VIEW_HEIGHT, VIEW_WIDTH } from '../config';
 import { TICK_RATE, type Difficulty } from '../data/tuning';
+import { utcDateKey } from '../daily';
 import { encodeReplay, type Replay } from '../sim/replay';
 import { dashCooldownLeft, isDashing, isFading, isParryActive, parryCooldownLeft, parryCooldownOf, Sim } from '../sim/sim';
-import { playCue } from './sfx';
 import { HOLLOWS, RUNES } from '../data/arena';
 import type { SimEvent } from '../sim/state';
+import { bestScore, persist, recordRun, save, shouldSaveRun } from '../storage';
 import { ARENA_PROPS, ATLAS, MANIFEST, bgKey, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
+import { audio } from './audio';
+import { pickMusic, SoundDiffer } from './audioLogic';
 import { BossView } from './BossView';
+import { emitAudioEvent } from './events';
 import { InputCollector } from './input';
+import { settingsPage, type MenuCtx } from './menus';
+import { canRestart, portraitPause, RunDriver, type PauseReason } from './runDriver';
+import { TouchModel } from './touch';
+import { C, MenuView, type MenuPage } from './ui';
 
-const STEP_MS = 1000 / TICK_RATE;
-const MAX_STEPS_PER_FRAME = 5;
-const RESTART_LOCKOUT_MS = 300;
+/** Frame time above this for PERF_WINDOW_MS lowers effects for the rest of the session (render only). */
+const PERF_SLOW_MS = 20;
+const PERF_WINDOW_MS = 3000;
+const PAUSE_BTN = { x: 452, y: 5, w: 20, h: 16 };
 const FADE_MS = 120;
 // draw order (CLAUDE.md "Arena"): ground < ground telegraphs < y-sorted world < fog/vignette/overhang < HUD
 const D_GROUND_TELE = 3;
@@ -45,17 +54,29 @@ export interface RunConfig {
    * src/sim). `label` is shown in the HUD (Hard: the UTC date the daily seed was derived from).
    */
   makeRun: () => { seed: number; label: string };
-  /** Dev only (previews/screenshots): start at this wave. Never set in production builds. */
+  /** Dev only (previews/screenshots): start at this wave. Never set in production builds. Such runs are never saved. */
   startWave?: number;
+  isTouch: () => boolean;
+  /** Quit to the title screen. */
+  quit: (scene: Phaser.Scene) => void;
 }
 
 export class GameScene extends Phaser.Scene {
   private cfg!: RunConfig;
   private sim!: Sim;
   private input2!: InputCollector;
-  private acc = 0;
-  private best = 0;
+  private driver!: RunDriver;
   private deadAt = 0;
+  private runLabel = '';
+  private sounds = new SoundDiffer();
+  private menu!: MenuView;
+  private hint: Phaser.GameObjects.Container | null = null;
+  private pauseBtn!: Phaser.GameObjects.Container;
+  private touchGfx!: Phaser.GameObjects.Graphics;
+  private touchIcons: Phaser.GameObjects.Image[] = [];
+  private fxLow = false;
+  private slowFor = 0;
+  private mist: Phaser.GameObjects.Image | null = null;
   lastReplay: Replay | null = null;
 
   private hero!: Phaser.GameObjects.Sprite;
@@ -117,8 +138,146 @@ export class GameScene extends Phaser.Scene {
     this.reticle = this.add.image(0, 0, ATLAS, frame('cursor_reticle')).setDepth(D_HUD);
     this.buildHud();
     this.bossView = new BossView(this, { ysort: D_YSORT, fog: D_FOG, hud: D_HUD }, this.vigOuter, this.banner, al.vignette_outer ?? 1);
-    this.input2 = new InputCollector(this);
+    const st = save().settings;
+    const touch = new TouchModel({ sensitivity: st.dragSensitivity, leftHanded: st.leftHanded, secondFingerParry: st.secondFingerParry });
+    this.input2 = new InputCollector(this, touch, {
+      uiHit: (x, y) => this.uiHit(x, y),
+      hero: () => this.sim.state.hero,
+      onPause: () => this.togglePause(),
+      onTouch: () => this.applyTouchLayout(),
+      menuOpen: () => this.menu?.active === true,
+    });
+    this.menu = new MenuView(this, D_HUD + 10, 0.7);
+    this.buildPauseButton();
+    this.touchGfx = this.add.graphics().setDepth(D_HUD);
+    this.touchIcons = [this.add.image(0, 0, ATLAS, frame('icon_parry')), this.add.image(0, 0, ATLAS, frame('icon_dash'))];
+    for (const i of this.touchIcons) i.setDepth(D_HUD + 1);
+    // auto-pause when the tab loses focus or becomes hidden, or the device turns to portrait
+    const onVis = () => {
+      if (document.hidden) this.autoPause('hidden');
+      else this.driver?.resume('hidden');
+    };
+    const onBlur = () => this.autoPause('blur');
+    const onFocus = () => this.driver?.resume('blur');
+    const onOrient = () => this.checkPortrait();
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('resize', onOrient);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('resize', onOrient);
+    });
+    audio.setAmbience(true);
+    this.applySettings();
     this.newRun();
+    this.checkPortrait();
+  }
+
+  // ------------------------------------------------------------------ pause, touch, settings
+
+  private uiHit(x: number, y: number): boolean {
+    if (this.menu?.active || this.hint) return true;
+    const b = PAUSE_BTN;
+    return x >= b.x - 4 && x <= b.x + b.w + 4 && y >= b.y - 4 && y <= b.y + b.h + 4;
+  }
+
+  private buildPauseButton(): void {
+    const b = PAUSE_BTN;
+    const bg = this.add.rectangle(0, 0, b.w, b.h, 0x0b0d12, 0.6).setOrigin(0).setStrokeStyle(1, 0x3a4558);
+    const t = this.add.text(b.w / 2, b.h / 2, 'II', { fontFamily: FONT, fontSize: '8px', color: C.bone }).setOrigin(0.5);
+    this.pauseBtn = this.add.container(b.x, b.y, [bg, t]).setDepth(D_HUD + 1).setSize(b.w, b.h);
+    this.pauseBtn.setInteractive(new Phaser.Geom.Rectangle(-4, -4, b.w + 8, b.h + 8), Phaser.Geom.Rectangle.Contains);
+    this.pauseBtn.on('pointerup', () => this.togglePause());
+  }
+
+  private isPortrait(): boolean {
+    return portraitPause(window.innerWidth, window.innerHeight, this.cfg.isTouch());
+  }
+
+  private checkPortrait(): void {
+    if (!this.driver) return;
+    if (this.isPortrait()) this.autoPause('portrait');
+    else this.driver.resume('portrait');
+  }
+
+  /** Focus loss, hidden tab, portrait: pause and open the pause menu so the player resumes deliberately. */
+  private autoPause(r: PauseReason): void {
+    if (!this.driver || !this.sim.state.alive) return;
+    this.driver.pause(r);
+    if (!this.menu.active) this.openPause();
+  }
+
+  private togglePause(): void {
+    if (!this.sim.state.alive || this.hint) return;
+    if (this.menu.active) this.closePause();
+    else this.openPause();
+  }
+
+  private openPause(): void {
+    this.driver.pause('menu');
+    this.input2.clear();
+    this.showPauseMenu();
+  }
+
+  private showPauseMenu(focus = 0): void {
+    const page: MenuPage = {
+      title: 'PAUSED',
+      top: 90,
+      items: [
+        { label: () => 'RESUME', onActivate: () => this.closePause() },
+        // restart or quit from pause discards the run: it is never saved as a best score
+        { label: () => 'RESTART', onActivate: () => (this.menu.hide(), this.newRun()) },
+        { label: () => 'SETTINGS', onActivate: () => this.menu.show(settingsPage(this.menuCtx(), () => this.showPauseMenu(2))) },
+        { label: () => 'QUIT TO TITLE', onActivate: () => this.cfg.quit(this) },
+      ],
+      onBack: () => this.closePause(),
+    };
+    this.menu.show(page, focus);
+  }
+
+  private menuCtx(): MenuCtx {
+    return { menu: this.menu, isTouch: this.cfg.isTouch, onSettings: () => this.applySettings(), onShowTouchHint: () => undefined };
+  }
+
+  private closePause(): void {
+    this.menu.hide();
+    this.input2.clear();
+    this.driver.resume('menu');
+  }
+
+  private applySettings(): void {
+    const st = save().settings;
+    const t = this.input2.touch;
+    t.opts = { sensitivity: st.dragSensitivity, leftHanded: st.leftHanded, secondFingerParry: st.secondFingerParry };
+    const low = st.effects === 'low' || this.fxLow;
+    this.fog.setVisible(!low);
+    this.mist?.setVisible(!low);
+  }
+
+  private applyTouchLayout(): void {
+    if (!save().settings.touchHintSeen && !this.hint && this.sim.state.alive && this.sim.state.tick === 0) this.showTouchHint();
+  }
+
+  /** First run on a touch device: one screen of controls, dismissed by a tap. */
+  private showTouchHint(): void {
+    this.driver.pause('hint');
+    const lines = ['DRAG ANYWHERE TO MOVE', '', 'PARRY: BIG BUTTON', `${save().settings.leftHanded ? 'LEFT' : 'RIGHT'} SIDE, DASH ABOVE IT`, '', 'SECOND FINGER TAP = PARRY', '', 'TAP TO START'];
+    const bg = this.add.rectangle(0, 0, VIEW_WIDTH, VIEW_HEIGHT, 0x0b0d12, 0.8).setOrigin(0);
+    const t = this.add.text(VIEW_WIDTH / 2, VIEW_HEIGHT / 2, lines.join('\n'), { fontFamily: FONT, fontSize: '8px', color: C.bone, align: 'center', lineSpacing: 4 }).setOrigin(0.5);
+    this.hint = this.add.container(0, 0, [bg, t]).setDepth(D_HUD + 20);
+    const shownAt = this.time.now;
+    bg.setInteractive().on('pointerup', () => {
+      if (this.time.now - shownAt < 250) return; // the touch that opened it must not also close it
+      save().settings.touchHintSeen = true;
+      persist();
+      this.hint?.destroy();
+      this.hint = null;
+      this.input2.clear();
+      this.driver.resume('hint');
+    });
   }
 
   private buildArena(): void {
@@ -130,7 +289,7 @@ export class GameScene extends Phaser.Scene {
         sprite: this.add.tileSprite(0, 0, VIEW_WIDTH, VIEW_HEIGHT, bgKey(f.name)).setOrigin(0),
         k: f.parallax,
       }));
-    this.add.image(0, 0, bgKey('forest_mist')).setOrigin(0).setAlpha(MANIFEST.layout.alphas.forest_mist ?? 1);
+    this.mist = this.add.image(0, 0, bgKey('forest_mist')).setOrigin(0).setAlpha(MANIFEST.layout.alphas.forest_mist ?? 1);
     this.add.image(0, 0, bgKey('arena_ground')).setOrigin(0);
     // Runes rest on frame 0 (dim carved stone); they only glow as a rune-burst telegraph.
     this.runes = RUNES.map((r, g) => this.add.sprite(r.x, r.y, ATLAS, frame(`rune_glow_${g}` as SpriteName)));
@@ -157,23 +316,23 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildHud(): void {
+    // top band above the arena (y 4..22) on a subtle dark translucent strip
+    this.add.rectangle(4, 4, VIEW_WIDTH - 8, 18, 0x0b0d12, 0.55).setOrigin(0).setDepth(D_HUD - 1);
     const style = { fontFamily: FONT, fontSize: '8px', color: '#d9d2c0' };
-    this.hudScore = this.add.text(6, 6, '', style);
-    this.hudMult = this.add.text(6, 18, '', { ...style, color: '#ffb347' });
-    this.hudWave = this.add.text(6, 30, '', { ...style, color: '#3a4558' });
+    this.hudScore = this.add.text(8, 9, '', style);
+    this.hudMult = this.add.text(78, 9, '', { ...style, color: '#ffb347' });
+    this.hudWave = this.add.text(126, 9, '', { ...style, color: '#7f93b8' });
+    this.hudDaily = this.add.text(292, 9, '', { ...style, color: '#7f93b8' });
     this.banner = this.add.text(VIEW_WIDTH / 2, 70, '', { ...style, color: '#d9d2c0' }).setOrigin(0.5).setAlpha(0);
-    // ability icons (top-right) with a pixel cooldown ring that fills clockwise
-    const ix = VIEW_WIDTH - 40;
-    const dx = VIEW_WIDTH - 16;
+    // ability cooldown icons in the left margin at the bottom (x 8..40, y 214..262); touch buttons replace them
     this.icons = {
-      parry: this.add.image(ix, 16, ATLAS, frame('icon_parry')),
-      parryRing: this.add.image(ix, 16, ATLAS, frame('icon_ring')),
-      dash: this.add.image(dx, 16, ATLAS, frame('icon_dash')),
-      dashRing: this.add.image(dx, 16, ATLAS, frame('icon_ring')),
+      parry: this.add.image(24, 228, ATLAS, frame('icon_parry')),
+      parryRing: this.add.image(24, 228, ATLAS, frame('icon_ring')),
+      dash: this.add.image(24, 251, ATLAS, frame('icon_dash')),
+      dashRing: this.add.image(24, 251, ATLAS, frame('icon_ring')),
     };
-    this.hudDaily = this.add.text(6, 54, '', { ...style, color: '#3a4558' });
-    const bg = this.add.rectangle(0, 0, 200, 56, 0x0b0d12).setStrokeStyle(1, 0x3a4558);
-    this.panelText = this.add.text(0, 0, '', { ...style, align: 'center', lineSpacing: 6 }).setOrigin(0.5);
+    const bg = this.add.rectangle(0, 0, 232, 96, 0x0b0d12, 0.92).setStrokeStyle(1, 0x3a4558);
+    this.panelText = this.add.text(0, 0, '', { ...style, align: 'center', lineSpacing: 5 }).setOrigin(0.5);
     this.panel = this.add.container(VIEW_WIDTH / 2, VIEW_HEIGHT / 2, [bg, this.panelText]).setVisible(false);
     for (const o of [this.hudScore, this.hudMult, this.hudWave, this.banner, this.hudDaily, this.panel, ...Object.values(this.icons)])
       o.setDepth(D_HUD);
@@ -181,8 +340,13 @@ export class GameScene extends Phaser.Scene {
 
   private newRun(): void {
     const run = this.cfg.makeRun();
+    this.cfg.hero = save().hero;
     this.sim = new Sim(run.seed, this.cfg.difficulty, this.cfg.startWave ? { startWave: this.cfg.startWave } : {});
+    this.driver = new RunDriver(this.sim);
+    if (this.isPortrait()) this.driver.pause('portrait');
+    this.sounds.reset();
     this.bossView.reset();
+    this.runLabel = run.label;
     this.hudDaily.setText(run.label);
     for (const s of this.orbs.values()) s.destroy();
     this.orbs.clear();
@@ -192,34 +356,57 @@ export class GameScene extends Phaser.Scene {
     this.overhang.setAlpha(1);
     this.tweens.killTweensOf(this.banner);
     this.banner.setAlpha(0);
-    this.acc = 0;
-    this.input2.clear();
+    this.input2.newRun();
     this.panel.setVisible(false);
+    if (this.cfg.isTouch() && !save().settings.touchHintSeen && !this.hint) this.showTouchHint();
     this.hero.setVisible(true).play(`${this.cfg.hero}_idle`);
     this.shadow.setVisible(true);
   }
 
   override update(_time: number, delta: number): void {
     this.input2.pollPad();
+    if (this.menu.active && this.menu.pollPad(delta) && this.sim.state.alive) this.closePause();
+    this.watchPerf(delta);
     const st = this.sim.state;
     if (!st.alive) {
-      // Presses during the lockout are discarded every frame, so a panic click cannot restart later.
+      // Presses during the guard are discarded every frame, so the press held at death cannot skip the panel.
       const confirmed = this.input2.takeConfirm();
-      if (confirmed && this.time.now - this.deadAt > RESTART_LOCKOUT_MS) this.newRun();
+      if (confirmed && canRestart(this.time.now, this.deadAt) && !this.menu.active) this.newRun();
       this.draw();
       return;
     }
-    this.acc = Math.min(this.acc + delta, STEP_MS * MAX_STEPS_PER_FRAME);
-    while (this.acc >= STEP_MS && this.sim.state.alive) {
-      this.acc -= STEP_MS;
-      this.sim.step(this.input2.sample());
+    this.driver.advance(delta, () => this.input2.sample(), () => {
       for (const e of this.sim.state.events) this.onEvent(e);
-    }
+      for (const ev of this.sounds.tick(this.sim.state, this.sim.state.events, this.time.now)) emitAudioEvent(ev);
+    });
+    audio.setMusic(pickMusic('run', this.sim.state, audio.current()));
     // slow, small fog drift (a few px back and forth; the fog layer is full-screen and avoids the calm zone)
     this.fog.tilePositionX = Math.round(Math.sin(this.sim.state.tick / 600) * 4);
     const dx = this.sim.state.hero.x - this.sim.params.cx;
     for (const l of this.parallax) l.sprite.tilePositionX = Math.round(dx * l.k);
     this.draw();
+  }
+
+  /** Frame time over 20 ms for 3 s: lower particles and fog for the rest of the session (render only, never back). */
+  private watchPerf(delta: number): void {
+    if (this.fxLow || this.driver.paused) return;
+    this.slowFor = delta > PERF_SLOW_MS ? this.slowFor + delta : 0;
+    if (this.slowFor >= PERF_WINDOW_MS) {
+      this.fxLow = true;
+      this.applySettings();
+    }
+  }
+
+  private lowFx(): boolean {
+    return this.fxLow || save().settings.effects === 'low';
+  }
+
+  private vibrate(ms: number): void {
+    try {
+      if (save().settings.haptics && this.cfg.isTouch() && typeof navigator.vibrate === 'function') navigator.vibrate(ms);
+    } catch {
+      /* not supported */
+    }
   }
 
   private onEvent(e: SimEvent): void {
@@ -235,34 +422,28 @@ export class GameScene extends Phaser.Scene {
       }
       case 'parry_hit':
         this.parried.add(e.id);
-        playCue('parry');
-        this.burst('parry_spark', e.x, e.y);
+        if (!this.lowFx()) this.burst('parry_spark', e.x, e.y);
+        this.vibrate(12);
         break;
       case 'dash_start': {
         const t = this.add.sprite(h.x, h.y, ATLAS, frame('dash_trail')).setFlipX(e.dirX < 0);
         t.setDepth(D_YSORT + h.y + 3);
         t.play('dash_trail').once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => t.destroy());
         this.hero.play(`${this.cfg.hero}_dash`);
-        playCue('dash');
         break;
       }
       case 'parry_whiff':
         // a miss must read as a miss: dim grey puff + soft low cue, no points
         this.burst('parry_fizzle', e.x, e.y - 2);
-        playCue('whiff');
-        break;
-      case 'telegraph':
-        playCue('telegraph');
         break;
       case 'wave':
         if (e.wave > 0) {
           this.banner.setText(`WAVE ${e.wave + 1}`).setAlpha(1);
           this.tweens.add({ targets: this.banner, alpha: 0, delay: 900, duration: 400 });
-          playCue('wave');
         }
         break;
       case 'death':
-        playCue('death');
+        this.vibrate(80);
         this.onDeath();
         break;
       default:
@@ -278,19 +459,36 @@ export class GameScene extends Phaser.Scene {
   private onDeath(): void {
     const st = this.sim.state;
     this.deadAt = this.time.now;
-    // a dev start-wave run is not a real run: its replay could not play back (startWave is not recorded)
-    this.lastReplay = this.cfg.startWave ? null : encodeReplay(st.seed, st.difficulty, this.sim.log);
-    this.hero.play(`${this.cfg.hero}_death`);
+    this.menu.hide();
+    const hero = this.cfg.hero;
+    const meta = { hero, input: [...this.input2.sources] };
+    // a dev start-wave run is not a real run: no replay (startWave is not recorded) and never saved
+    this.lastReplay = this.cfg.startWave ? null : encodeReplay(st.seed, st.difficulty, this.sim.log, meta);
+    this.hero.play(`${hero}_death`);
     this.shadow.setVisible(false);
     this.burst('death_burst', st.hero.x, st.hero.y);
-    this.cameras.main.shake(120, 0.01);
+    if (save().settings.shake) this.cameras.main.shake(120, save().settings.reducedFlashes ? 0.004 : 0.01);
     const score = this.sim.score;
-    const isBest = score > this.best;
-    this.best = Math.max(this.best, score);
-    const secs = (st.survivalTicks / TICK_RATE).toFixed(1);
+    const secs = st.survivalTicks / TICK_RATE;
+    const d = this.cfg.difficulty;
+    const prevBest = bestScore(save(), d);
+    let isNew = false;
+    if (shouldSaveRun('death', this.cfg.startWave)) {
+      isNew = recordRun(save(), d, { score, hero, date: utcDateKey(new Date()), secs }, utcDateKey(new Date())).newRecord;
+      persist();
+    }
+    if (isNew) emitAudioEvent('new_record');
+    const best = Math.max(prevBest, this.cfg.startWave ? 0 : score);
     this.panelText.setText(
-      `SCORE ${score}${isBest ? ' NEW!' : ''}\nBEST ${this.best}   ${secs}S\nCLICK / SPACE TO RETRY`,
+      [
+        isNew ? 'NEW RECORD!' : `SCORE ${score}`,
+        isNew ? `SCORE ${score}` : `BEST ${best}`,
+        `TIME ${secs.toFixed(1)}S  PARRIES ${st.parryCount}`,
+        `BOSSES ${st.bossesDefeated}`,
+        this.cfg.isTouch() ? 'TAP TO RETRY' : 'CLICK / SPACE / A TO RETRY',
+      ].join('\n'),
     );
+    this.panelText.setColor(isNew ? C.gold : C.bone);
     this.panel.setVisible(true);
     this.input2.takeConfirm(); // ignore the press that was in flight when we died
   }
@@ -352,12 +550,49 @@ export class GameScene extends Phaser.Scene {
     this.updateTranslucency();
 
     const ptr = this.input.activePointer;
-    this.reticle.setVisible(this.input2.mode === 'cursor' && st.alive).setPosition(Math.round(ptr.worldX), Math.round(ptr.worldY));
+    const cur = this.input2.cursorPos();
+    this.reticle.setVisible(!!cur && st.alive && !this.driver.paused).setPosition(Math.round(cur?.x ?? ptr.worldX), Math.round(cur?.y ?? ptr.worldY));
     this.hudScore.setText(`${this.sim.score}`);
     this.hudMult.setText(`X${(st.multiplier / 100).toFixed(2)}`);
     this.hudWave.setText(st.wave >= 0 ? `WAVE ${st.wave + 1}` : '');
-    this.cooldownIcon(this.icons.parry, this.icons.parryRing, 'icon_parry', parryCooldownLeft(st, p), parryCooldownOf(st, p));
-    this.cooldownIcon(this.icons.dash, this.icons.dashRing, 'icon_dash', dashCooldownLeft(st, p), p.dashCooldown);
+    this.hudDaily.setText(this.runLabel.replace('HARD - ', ''));
+    const touch = this.cfg.isTouch();
+    for (const o of Object.values(this.icons)) o.setVisible(!touch);
+    if (!touch) {
+      this.cooldownIcon(this.icons.parry, this.icons.parryRing, 'icon_parry', parryCooldownLeft(st, p), parryCooldownOf(st, p));
+      this.cooldownIcon(this.icons.dash, this.icons.dashRing, 'icon_dash', dashCooldownLeft(st, p), p.dashCooldown);
+    }
+    this.drawTouchButtons(touch);
+    // read-only snapshot for the smoke tests (copies of plain numbers; nothing can be written back into the sim)
+    (window as unknown as { __ngDebug?: object }).__ngDebug = {
+      x: st.hero.x, y: st.hero.y, tick: st.tick, alive: st.alive, parryStart: st.hero.parryStart, paused: this.driver.paused,
+      menu: this.menu.active, hint: !!this.hint,
+    };
+  }
+
+  /** Touch buttons in the side margin: semi-transparent circles with cooldown rings (replace the desktop icons). */
+  private drawTouchButtons(touch: boolean): void {
+    const g = this.touchGfx;
+    g.clear();
+    this.touchIcons.forEach((i) => i.setVisible(touch));
+    if (!touch) return;
+    const st = this.sim.state;
+    const p = this.sim.params;
+    const t = this.input2.touch;
+    const left = { parry: parryCooldownLeft(st, p) / parryCooldownOf(st, p), dash: dashCooldownLeft(st, p) / p.dashCooldown };
+    t.buttons().forEach((b, i) => {
+      const held = t.held(b.id);
+      g.fillStyle(0x12161d, held ? 0.75 : 0.45).fillCircle(b.x, b.y, b.r);
+      g.lineStyle(1, 0x3a4558, 0.9).strokeCircle(b.x, b.y, b.r);
+      const cd = left[b.id];
+      if (cd > 0) {
+        g.lineStyle(2, 0xffb347, 0.9);
+        g.beginPath();
+        g.arc(b.x, b.y, b.r - 2, -Math.PI / 2, -Math.PI / 2 + (1 - cd) * Math.PI * 2, false);
+        g.strokePath();
+      }
+      this.touchIcons[i]?.setPosition(b.x, b.y).setFrame(frame(b.id === 'parry' ? 'icon_parry' : 'icon_dash', cd > 0 ? 1 : 0)).setAlpha(0.85);
+    });
   }
 
   private cooldownIcon(icon: Phaser.GameObjects.Image, ring: Phaser.GameObjects.Image, name: SpriteName, left: number, total: number): void {

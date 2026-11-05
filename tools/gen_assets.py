@@ -20,6 +20,7 @@ from nglib import canvas as C  # noqa: E402
 from nglib import spec  # noqa: E402
 from nglib.pack import pack  # noqa: E402
 
+SCREENSHOT_PREFIXES = ("boss_fight_", "menu_", "death_panel", "touch_layout")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
 
@@ -101,11 +102,40 @@ def boss_board(art, game):
     return np.repeat(np.repeat(img, 3, 0), 3, 1)
 
 
+def write_web_manifest(title, game):
+    """public/manifest.webmanifest + home-screen icons (the wisp on the night colour), so "Add to Home Screen" opens the
+    game fullscreen in landscape. Name comes from the TITLE constant."""
+    pub = os.path.join(ROOT, "public")
+    icons = os.path.join(pub, "icons")
+    os.makedirs(icons, exist_ok=True)
+    from nglib.palette import RGB
+    pal = np.array(RGB, dtype=np.uint8)
+    spr = game["wisp_idle"][0]
+    for size in (192, 512):
+        k = size // 24  # 16 px sprite with a margin, integer scaled
+        img = np.zeros((size, size, 3), dtype=np.uint8)
+        img[:] = pal[C.ci("bg0")]
+        big = np.repeat(np.repeat(spr, k, 0), k, 1)
+        o = (size - big.shape[0]) // 2
+        m = big != C.T
+        region = img[o:o + big.shape[0], o:o + big.shape[1]]
+        region[m] = pal[big[m]]
+        Image.fromarray(img).save(os.path.join(icons, f"icon-{size}.png"), optimize=False)
+    manifest = {
+        "name": title, "short_name": title, "start_url": "./", "scope": "./", "display": "fullscreen",
+        "orientation": "landscape", "background_color": "#0b0d12", "theme_color": "#0b0d12",
+        "icons": [{"src": f"icons/icon-{s_}.png", "sizes": f"{s_}x{s_}", "type": "image/png"} for s_ in (192, 512)],
+    }
+    with open(os.path.join(pub, "manifest.webmanifest"), "w", encoding="utf-8") as fp:
+        json.dump(manifest, fp, indent=1)
+        fp.write("\n")
+
+
 def main():
-    # gameplay screenshots (boss_fight_*.png) are captured from the running game, not generated: keep them
+    # gameplay/menu screenshots are captured from the running game (tests-e2e/smoke.cjs), not generated: keep them
     pdir = os.path.join(ASSETS, "preview")
     keep = {n: open(os.path.join(pdir, n), "rb").read() for n in (os.listdir(pdir) if os.path.isdir(pdir) else [])
-            if n.startswith("boss_fight_")}
+            if n.startswith(SCREENSHOT_PREFIXES)}
     for sub in ("sprites", "backgrounds", "atlas", "preview", "data"):
         shutil.rmtree(os.path.join(ASSETS, sub), ignore_errors=True)
     os.makedirs(pdir, exist_ok=True)
@@ -165,6 +195,7 @@ def main():
     save(AP.variation_board(art), pv("variation_board.png"))
     save(AP.animation_strips(art), pv("animation_strips.png"))
     rgb(boss_board(art, game), "boss_board.png")
+    write_web_manifest(read_title(), game)
     for n in art["notes"]:
         print("note:", n)
     print(f"generated {len(sprites)} sprites ({len(art['sprites'])} arena), {len(art['props'])} placed props, "

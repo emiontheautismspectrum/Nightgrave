@@ -26,9 +26,29 @@ export interface Replay {
   seed: number;
   difficulty: Difficulty;
   runs: [number, number, number, number, number][];
+  /**
+   * Metadata only (never fed to the sim, not part of the state): the hero shown and the input sources used.
+   * Untrusted on decode: sanitized to known values.
+   */
+  meta?: ReplayMeta;
 }
 
-export function encodeReplay(seed: number, difficulty: Difficulty, frames: readonly InputFrame[]): Replay {
+export interface ReplayMeta {
+  hero: 'knight' | 'wisp';
+  input: ('mouse' | 'keyboard' | 'gamepad' | 'touch')[];
+}
+
+const INPUTS = ['mouse', 'keyboard', 'gamepad', 'touch'] as const;
+export function sanitizeMeta(m: unknown): ReplayMeta | undefined {
+  if (!m || typeof m !== 'object') return undefined;
+  const o = m as Record<string, unknown>;
+  const hero = o.hero === 'wisp' ? 'wisp' : o.hero === 'knight' ? 'knight' : null;
+  if (!hero) return undefined;
+  const input = Array.isArray(o.input) ? INPUTS.filter((k) => (o.input as unknown[]).includes(k)) : [];
+  return { hero, input };
+}
+
+export function encodeReplay(seed: number, difficulty: Difficulty, frames: readonly InputFrame[], meta?: ReplayMeta): Replay {
   const runs: Replay['runs'] = [];
   for (const raw of frames) {
     const f = sanitizeInput(raw);
@@ -37,13 +57,14 @@ export function encodeReplay(seed: number, difficulty: Difficulty, frames: reado
     if (last && last[1] === c && last[2] === f.mx && last[3] === f.my && last[4] === f.buttons) last[0]++;
     else runs.push([1, c, f.mx, f.my, f.buttons]);
   }
-  return { v: REPLAY_VERSION, tuning: tuningHash(), seed: toSeed(seed), difficulty, runs };
+  const m = sanitizeMeta(meta);
+  return { v: REPLAY_VERSION, tuning: tuningHash(), seed: toSeed(seed), difficulty, runs, ...(m ? { meta: m } : {}) };
 }
 
 const isDifficulty = (d: unknown): d is Difficulty => typeof d === 'string' && Object.hasOwn(TUNING.difficulty, d);
 
 /** Decode an untrusted replay. Throws on malformed structure; every frame is sanitized. */
-export function decodeReplay(data: unknown): { seed: number; difficulty: Difficulty; frames: InputFrame[] } {
+export function decodeReplay(data: unknown): { seed: number; difficulty: Difficulty; frames: InputFrame[]; meta?: ReplayMeta } {
   if (!data || typeof data !== 'object') throw new Error('replay: not an object');
   const r = data as Partial<Replay>;
   if (r.v !== REPLAY_VERSION) throw new Error('replay: unsupported version');
@@ -61,7 +82,8 @@ export function decodeReplay(data: unknown): { seed: number; difficulty: Difficu
     const f = sanitizeInput({ cursor: c === 1, mx: mx as number, my: my as number, buttons: buttons as number });
     for (let i = 0; i < count; i++) frames.push({ ...f });
   }
-  return { seed: r.seed, difficulty: r.difficulty, frames };
+  const meta = sanitizeMeta(r.meta);
+  return { seed: r.seed, difficulty: r.difficulty, frames, ...(meta ? { meta } : {}) };
 }
 
 /** Re-simulate a replay from scratch. Same replay => same final state and score. */

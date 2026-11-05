@@ -27,7 +27,8 @@ errors = []
 PALETTE_EXEMPT = {"translucency_demo.png", "arena_board.png", "style_board.png", "stress_board.png", "squint_test.png",
                   "noise_compare.png", "arena_v3_compare.png", "ground_closeup.png", "wagon_closeup.png",
                   "arena_v4_compare.png", "cabin_closeup.png", "forest_top_closeup.png",
-                  "boss_fight_eye.png", "boss_fight_lich.png"}  # real game screenshots (alpha, tints)
+                  "boss_fight_eye.png", "boss_fight_lich.png",  # real game screenshots (alpha, tints)
+                  "menu_title.png", "menu_hero.png", "menu_settings.png", "death_panel.png", "touch_layout.png"}
 # Glow overlays are accents OF a landmark: their bright pixels (x placed copies) count against the parent's 2%.
 ACCENT_PARENT = {"giant_tree_crack": "giant_tree", "glow_mushrooms": "giant_tree"}
 # v2 value hierarchy: share of bone/moon-bright pixels allowed per arena sprite (decor: none; landmarks: accents)

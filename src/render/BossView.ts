@@ -9,7 +9,7 @@ import type { SimParams } from '../sim/params';
 import { parryActiveTicks } from '../sim/sim';
 import type { Boss, SimEvent, SimState } from '../sim/state';
 import { ATLAS, frame, type SpriteName } from './assets';
-import { emitAudioEvent } from './events';
+import { save } from '../storage';
 
 const BAR_X = 48;
 const BAR_Y = 250;
@@ -43,10 +43,11 @@ export class BossView {
     this.glow = scene.add.sprite(0, 0, ATLAS, frame('pickup_glow')).setVisible(false);
     this.pickup = scene.add.sprite(0, 0, ATLAS, frame('pickup_slow_time')).setVisible(false);
     this.timers = [0, 1].map((i) => ({
-      icon: scene.add.sprite(scene.scale.width - 40 + i * 24, 40, ATLAS, frame(i ? 'pickup_double_score' : 'pickup_slow_time')).setDepth(depth.hud),
-      ring: scene.add.image(scene.scale.width - 40 + i * 24, 40, ATLAS, frame('icon_ring')).setDepth(depth.hud),
+      // top HUD band (y 4..22): pickup timers as small icons with a shrinking ring
+      icon: scene.add.sprite(262 + i * 22, 13, ATLAS, frame(i ? 'pickup_double_score' : 'pickup_slow_time')).setDepth(depth.hud),
+      ring: scene.add.image(262 + i * 22, 13, ATLAS, frame('icon_ring')).setDepth(depth.hud),
     }));
-    this.ember = scene.add.text(6, 42, '', { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', color: '#ff7a2f' }).setDepth(depth.hud);
+    this.ember = scene.add.text(186, 9, '', { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', color: '#ff7a2f' }).setDepth(depth.hud);
   }
 
   reset(): void {
@@ -66,31 +67,26 @@ export class BossView {
   onEvent(e: SimEvent, st: SimState): void {
     switch (e.type) {
       case 'boss_intro':
-        emitAudioEvent(e.kind === 'eye' ? 'boss_intro_eye' : 'boss_intro_lich');
         this.banner.setText(e.kind === 'eye' ? 'EYE SENTINEL' : 'LICH MAGE').setAlpha(1);
         this.scene.tweens.killTweensOf(this.banner);
         this.scene.tweens.add({ targets: this.banner, alpha: 0, delay: 1500, duration: 400 });
         // the screen edges darken for the intro, then settle back
         this.scene.tweens.killTweensOf(this.vignette);
-        this.scene.tweens.add({ targets: this.vignette, alpha: 0.85, duration: 400, yoyo: true, hold: 1200 });
+        // reduced flashes: a gentler darkening pulse
+        this.scene.tweens.add({ targets: this.vignette, alpha: save().settings.reducedFlashes ? 0.55 : 0.85, duration: 400, yoyo: true, hold: 1200 });
         break;
       case 'boss_segment':
-        emitAudioEvent('boss_hit');
         if (st.boss) this.shatter(st.boss, e.remaining);
         break;
       case 'boss_defeated': {
-        emitAudioEvent('boss_death');
         const s = this.scene.add.sprite(Math.round(e.x), Math.round(e.y), ATLAS, frame('death_burst')).setScale(2).setDepth(this.depth.fog - 1);
         s.play('death_burst').once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => s.destroy());
-        this.scene.cameras.main.shake(200, 0.006);
+        if (save().settings.shake) this.scene.cameras.main.shake(200, 0.006);
         this.banner.setText(`+${e.points}  EMBER CHARGE`).setAlpha(1);
         this.scene.tweens.killTweensOf(this.banner);
         this.scene.tweens.add({ targets: this.banner, alpha: 0, delay: 1200, duration: 400 });
         break;
       }
-      case 'pickup_take':
-        emitAudioEvent(e.kind === 'slow' ? 'pickup_slow' : 'pickup_double');
-        break;
       default:
         break;
     }
@@ -206,6 +202,7 @@ export class BossView {
       if (on) v.ring.setFrame(frame('icon_ring', Math.min(11, Math.floor((1 - l / total[i]!) * 12))));
     });
     const charges = Math.min(st.emberCharges, p.parryActiveByCharge.length - 1);
-    this.ember.setText(charges > 0 ? `EMBER ${charges}  +${Math.round(((parryActiveTicks(st, p) - p.parryActive) / TICK_RATE) * 1000)}MS` : '');
+    void parryActiveTicks;
+    this.ember.setText(charges > 0 ? `EMBER ${charges}` : '');
   }
 }

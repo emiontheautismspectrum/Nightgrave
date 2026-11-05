@@ -1,8 +1,10 @@
 /**
- * One small render-side event hook for audio (Stage 5 attaches real sounds here). Render-only: the sim never imports it.
- * Listeners must never throw into the game loop; errors are swallowed.
+ * One small render-side event hook for sound. Sound events are derived on the render side (SoundDiffer, UI code) and
+ * emitted here; the audio manager listens. The sim never imports this. Listener errors are swallowed.
  */
-export type AudioEvent = 'boss_intro_eye' | 'boss_intro_lich' | 'boss_hit' | 'boss_death' | 'pickup_slow' | 'pickup_double';
+import type { SfxEvent } from './audioLogic';
+
+export type AudioEvent = SfxEvent;
 
 type Listener = (e: AudioEvent) => void;
 const listeners = new Set<Listener>();
