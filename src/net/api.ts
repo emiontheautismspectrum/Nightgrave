@@ -23,7 +23,9 @@ export interface Board {
 }
 export interface SubmitResult {
   accepted: boolean;
-  rank: number | null;
+  /** Accepted runs wait for replay verification before they appear on the board. */
+  pending: boolean;
+  provisionalRank: number | null;
   reason?: string;
 }
 
@@ -91,9 +93,9 @@ export async function submitRun(body: Record<string, unknown>): Promise<SubmitRe
   try {
     const r = (await request('/api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })) as Record<string, unknown>;
     if (!r || typeof r !== 'object') return null;
-    const rank = int(r.rank);
+    const rank = int(r.provisionalRank);
     const reason = typeof r.reason === 'string' && /^[a-z_]{1,20}$/.test(r.reason) ? r.reason : undefined;
-    return { accepted: r.accepted === true, rank, ...(reason ? { reason } : {}) };
+    return { accepted: r.accepted === true, pending: r.pending === true, provisionalRank: rank, ...(reason ? { reason } : {}) };
   } catch {
     return null;
   }
@@ -117,7 +119,7 @@ export function reasonText(reason: string | undefined): string {
     case 'too_high':
       return 'SCORE NOT PLAUSIBLE';
     case 'not_best':
-      return 'YOUR BEST TODAY IS HIGHER';
+      return 'YOUR BEST (OR PENDING) TODAY IS HIGHER';
     default:
       return 'COULD NOT SUBMIT';
   }

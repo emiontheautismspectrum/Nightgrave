@@ -2,7 +2,10 @@
  * Nightgrave API (Cloudflare Worker + D1): the Hard "Today's best" board.
  *   GET  /api/daily[?date=YYYY-MM-DD]   top 10 + champion of today (or yesterday), edge-cached 30 s
  *   POST /api/submit                    one run; the server keeps each player's best run per UTC date
+ *   GET  /api/verify/pending?limit=N    pending submissions for the replay verifier (Bearer VERIFIER_TOKEN)
+ *   POST /api/verify/result/:id         verifier verdict; "verified" promotes the pending run to the board
  *   DELETE /api/admin/entry/:id         moderation (Bearer ADMIN_TOKEN)
+ * Only VERIFIED runs (re-simulated from their replay by tools/verify) are ever shown on the board.
  *   POST /api/admin/clear-message/:id   moderation (Bearer ADMIN_TOKEN)
  * JSON only, never HTML; user text is never echoed back in errors; all SQL uses bound parameters.
  */
@@ -15,6 +18,7 @@ import { CLIENT_VERSION, tuningFingerprint } from '../../src/shared/version';
 export interface Env {
   DB: D1Database;
   ADMIN_TOKEN?: string;
+  VERIFIER_TOKEN?: string;
   IP_SALT?: string;
   ALLOWED_ORIGINS?: string;
 }
@@ -121,7 +125,7 @@ interface Row {
 
 async function board(env: Env, date: string): Promise<{ top: object[]; champion: { name: string; message: string | null } | null }> {
   const { results } = await env.DB.prepare(
-    'SELECT id, name, message, score, hero, duration_ticks FROM entries WHERE date = ?1 ORDER BY score DESC, achieved_at ASC, id ASC LIMIT 10',
+    'SELECT id, name, message, score, hero, duration_ticks FROM entries WHERE date = ?1 AND verified = 1 ORDER BY score DESC, achieved_at ASC, id ASC LIMIT 10',
   ).bind(date).all<Row>();
   const top = (results ?? []).map((r, i) => ({ rank: i + 1, name: r.name, score: r.score, hero: r.hero, durationTicks: r.duration_ticks }));
   const first = results?.[0];
@@ -249,25 +253,109 @@ async function postSubmit(req: Request, env: Env, now: number): Promise<Response
   const ip = await ipHash(req, env);
   if (!(await allow(env, `submit:${ip}`, 3_600_000, LIMITS.submitPerHourPerIp, now))) return reject('rate', 429, req, env);
   if (!(await allow(env, `player:${v.playerId}`, 86_400_000, LIMITS.submitPerDayPerPlayer, now))) return reject('rate', 429, req, env);
-  // keep only the player's best run per date (insert, or update if higher)
+  // the run goes into the player's PENDING slot, only if it beats BOTH their verified score and their current pending
+  // score (a weaker run never replaces a stronger pending one); the verified part stays on the board meanwhile
   const res = await env.DB.prepare(
-    `INSERT INTO entries (date, player_id, name, message, score, hero, duration_ticks, replay, achieved_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+    `INSERT INTO entries (date, player_id, name, message, score, hero, duration_ticks, replay, achieved_at, verified,
+                          p_seq, p_score, p_name, p_message, p_hero, p_duration, p_replay, p_tuning, p_client, p_at)
+     VALUES (?1, ?2, ?3, NULL, 0, ?6, 0, '', ?9, 0, 1, ?5, ?3, ?4, ?6, ?7, ?8, ?10, ?11, ?9)
      ON CONFLICT (date, player_id) DO UPDATE SET
-       name = excluded.name, message = excluded.message, score = excluded.score, hero = excluded.hero,
-       duration_ticks = excluded.duration_ticks, replay = excluded.replay, achieved_at = excluded.achieved_at
-     WHERE excluded.score > entries.score`,
-  ).bind(v.date, v.playerId, v.name, v.message, v.score, v.hero, v.durationTicks, v.replay, now).run();
-  const changed = (res.meta?.changes ?? 0) > 0;
-  const best = await env.DB.prepare('SELECT id, score, achieved_at FROM entries WHERE date = ?1 AND player_id = ?2').bind(v.date, v.playerId).first<{ id: number; score: number; achieved_at: number }>();
-  if (!best) return reject('invalid', 500, req, env);
-  const above = await env.DB.prepare(
-    'SELECT COUNT(*) AS n FROM entries WHERE date = ?1 AND (score > ?2 OR (score = ?2 AND (achieved_at < ?3 OR (achieved_at = ?3 AND id < ?4))))',
-  ).bind(v.date, best.score, best.achieved_at, best.id).first<{ n: number }>();
+       p_seq = entries.p_seq + 1, p_score = excluded.p_score, p_name = excluded.p_name, p_message = excluded.p_message,
+       p_hero = excluded.p_hero, p_duration = excluded.p_duration, p_replay = excluded.p_replay,
+       p_tuning = excluded.p_tuning, p_client = excluded.p_client, p_at = excluded.p_at
+     WHERE excluded.p_score > (CASE WHEN entries.verified = 1 THEN entries.score ELSE -1 END)
+       AND excluded.p_score > COALESCE(entries.p_score, -1)`,
+  ).bind(v.date, v.playerId, v.name, v.message, v.score, v.hero, v.durationTicks, v.replay, now, tuningFingerprint(), CLIENT_VERSION).run();
+  if ((res.meta?.changes ?? 0) === 0) return json({ accepted: false, pending: false, provisionalRank: null, reason: 'not_best' }, 200, req, env);
+  // provisional rank among the VERIFIED board (it only becomes real after verification)
+  const above = await env.DB.prepare('SELECT COUNT(*) AS n FROM entries WHERE date = ?1 AND verified = 1 AND player_id <> ?2 AND score >= ?3')
+    .bind(v.date, v.playerId, v.score).first<{ n: number }>();
   const rank = (above?.n ?? 0) + 1;
-  if (changed && rank <= 10) await purge(v.date);
-  // accepted = this run is now the player's entry; rank is the player's (best) rank, null outside the top 10
-  return json({ accepted: changed, rank: rank <= 10 ? rank : null, ...(changed ? {} : { reason: 'not_best' }) }, 200, req, env);
+  return json({ accepted: true, pending: true, provisionalRank: rank <= 10 ? rank : null }, 200, req, env);
+}
+
+// ------------------------------------------------------------------ verifier
+
+async function verifierAuth(req: Request, env: Env): Promise<boolean> {
+  const auth = req.headers.get('Authorization') ?? '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  return !!env.VERIFIER_TOKEN && env.VERIFIER_TOKEN.length >= 32 && (await safeEqual(token, env.VERIFIER_TOKEN));
+}
+
+interface PendingRow {
+  id: number;
+  p_seq: number;
+  date: string;
+  p_score: number;
+  p_duration: number;
+  p_hero: string;
+  p_replay: string;
+  p_tuning: string;
+  p_client: string;
+}
+
+async function verifyPending(req: Request, env: Env): Promise<Response> {
+  const n = Number(new URL(req.url).searchParams.get('limit') ?? '50');
+  const limit = Number.isSafeInteger(n) && n >= 1 ? Math.min(50, n) : 50;
+  const { results } = await env.DB.prepare(
+    'SELECT id, p_seq, date, p_score, p_duration, p_hero, p_replay, p_tuning, p_client FROM entries WHERE p_replay IS NOT NULL ORDER BY p_at ASC, id ASC LIMIT ?1',
+  ).bind(limit).all<PendingRow>();
+  const items = (results ?? []).map((r) => ({
+    // the id carries the submission version: a verdict for an older submission can never promote a newer one
+    id: `${r.id}-${r.p_seq}`,
+    date: r.date,
+    seed: dailySeed(r.date),
+    difficulty: 'hard',
+    durationTicks: r.p_duration,
+    score: r.p_score,
+    hero: r.p_hero,
+    tuningFingerprint: r.p_tuning,
+    clientVersion: r.p_client,
+    replay: r.p_replay,
+  }));
+  return json({ items }, 200, req, env);
+}
+
+const REASONS = new Set(['score_mismatch', 'length_mismatch', 'invalid_input', 'outdated', 'error']);
+
+async function verifyResult(req: Request, env: Env, idPart: string | undefined): Promise<Response> {
+  const m = /^(\d{1,15})-(\d{1,15})$/.exec(idPart ?? '');
+  if (!m) return notFound(req, env);
+  const id = Number(m[1]);
+  const seq = Number(m[2]);
+  const buf = await readCapped(req, 4096);
+  let body: unknown;
+  try {
+    body = buf ? JSON.parse(new TextDecoder().decode(buf)) : null;
+  } catch {
+    body = null;
+  }
+  const o = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+  const row = await env.DB.prepare('SELECT date FROM entries WHERE id = ?1 AND p_seq = ?2 AND p_replay IS NOT NULL').bind(id, seq).first<{ date: string }>();
+  if (!row) return json({ ok: false, error: 'stale' }, 409, req, env); // superseded or already decided
+  if (o.status === 'verified') {
+    // promote ONLY this exact submission (id + version): a newer pending run that arrived meanwhile stays pending
+    const r = await env.DB.prepare(
+      `UPDATE entries SET verified = 1, score = p_score, name = p_name, message = p_message, hero = p_hero,
+         duration_ticks = p_duration, replay = p_replay, achieved_at = p_at, reject_reason = NULL,
+         p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL, p_duration = NULL, p_replay = NULL,
+         p_tuning = NULL, p_client = NULL, p_at = NULL
+       WHERE id = ?1 AND p_seq = ?2 AND p_replay IS NOT NULL AND (verified = 0 OR p_score > score)`,
+    ).bind(id, seq).run();
+    if ((r.meta?.changes ?? 0) === 0) return json({ ok: false, error: 'stale' }, 409, req, env);
+    await purge(row.date);
+    return json({ ok: true }, 200, req, env);
+  }
+  if (o.status === 'rejected') {
+    const reason = typeof o.reason === 'string' && REASONS.has(o.reason) ? o.reason : 'error';
+    await env.DB.prepare(
+      `UPDATE entries SET reject_reason = ?3, p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL,
+         p_duration = NULL, p_replay = NULL, p_tuning = NULL, p_client = NULL, p_at = NULL
+       WHERE id = ?1 AND p_seq = ?2`,
+    ).bind(id, seq, reason).run();
+    return json({ ok: true }, 200, req, env);
+  }
+  return json({ ok: false, error: 'status' }, 400, req, env);
 }
 
 async function admin(req: Request, env: Env, now: number, parts: string[]): Promise<Response> {
@@ -294,6 +382,8 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
   const origin = req.headers.get('Origin');
   // without a salt the stored IP hashes could be reversed: refuse to run rather than store weak hashes
   if (!env.IP_SALT || env.IP_SALT.length < 16) return json({ error: 'server' }, 500, req, env);
+  // the verifier secret is required too (without it nothing could ever reach the board)
+  if (!env.VERIFIER_TOKEN || env.VERIFIER_TOKEN.length < 32) return json({ error: 'server' }, 500, req, env);
   if (req.method === 'OPTIONS') {
     if (!origin || !allowed.includes(origin)) return new Response(null, { status: 403, headers: { Vary: 'Origin' } });
     return new Response(null, {
@@ -307,6 +397,13 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
       // browsers always send Origin on cross-origin POST: refuse foreign sites (non-browser clients send none)
       if (origin && !allowed.includes(origin)) return reject('origin', 403, req, env);
       return await postSubmit(req, env, now);
+    }
+    if (parts[1] === 'api' && parts[2] === 'verify') {
+      // the verifier is exempt from the public rate limits; a bad or missing token is a plain 404
+      if (!(await verifierAuth(req, env))) return notFound(req, env);
+      if (url.pathname === '/api/verify/pending' && req.method === 'GET') return await verifyPending(req, env);
+      if (parts[3] === 'result' && parts.length === 5 && req.method === 'POST') return await verifyResult(req, env, parts[4]);
+      return notFound(req, env);
     }
     if (parts[1] === 'api' && parts[2] === 'admin') return await admin(req, env, now, parts);
     return notFound(req, env);

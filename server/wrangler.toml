@@ -17,5 +17,5 @@ migrations_dir = "migrations"
 [triggers]
 crons = ["17 3 * * *"]
 
-# Secrets (never in git): npx wrangler secret put ADMIN_TOKEN / npx wrangler secret put IP_SALT
+# Secrets (never in git): npx wrangler secret put ADMIN_TOKEN / IP_SALT / VERIFIER_TOKEN
 # Local development: put them in server/.dev.vars (git-ignored), see .dev.vars.example.

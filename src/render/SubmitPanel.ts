@@ -33,6 +33,7 @@ export class SubmitPanel {
   private inputs: HTMLInputElement[] = [];
   private objs: Phaser.GameObjects.GameObject[] = [];
   private status!: Phaser.GameObjects.Text;
+  private note: Phaser.GameObjects.Text | null = null;
   private busy = false;
   private done = false;
   /** Game-px rects of the clickable UI (the game must not treat presses there as "restart"). */
@@ -104,7 +105,8 @@ export class SubmitPanel {
     btn(150, 'SUBMIT', () => void this.submit());
     btn(270, 'SKIP', () => this.close());
     this.status = label(96, y0 + 54, '');
-    this.objs.push(this.status);
+    this.note = label(96, y0 + 64, '', C.gold);
+    this.objs.push(this.status, this.note);
     this.place();
     window.addEventListener('resize', this.onResize);
     this.validate();
@@ -173,7 +175,9 @@ export class SubmitPanel {
     if (!res) this.status.setText('BOARD UNAVAILABLE').setColor(C.ember);
     else if (res.accepted) {
       this.done = true;
-      this.status.setText(res.rank ? `ACCEPTED: RANK ${res.rank}` : 'ACCEPTED').setColor(C.gold);
+      // shown on the board only after the replay is re-simulated by the verifier
+      this.status.setText(res.provisionalRank ? `SUBMITTED (RANK ${res.provisionalRank}). ON THE BOARD AFTER` : 'SUBMITTED. ON THE BOARD AFTER').setColor(C.gold);
+      this.note?.setText('VERIFICATION (USUALLY WITHIN 20 MINUTES)');
       for (const el of this.inputs) el.disabled = true;
     } else this.status.setText(reasonText(res.reason)).setColor(C.ember);
   }
