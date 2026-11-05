@@ -72,7 +72,7 @@ def knight_bash():
             a[front & (d > r) & (d <= r + 1.2)] = C.ci("amber")
         for k in range(7):  # metallic sparks: 2x2 bone / amber chips flying outward
             t = (k - 3) * 0.3
-            rr = r + 3 + i * 2 + (k % 2) * 2
+            rr = min(14, r + 2 + i + (k % 2))  # stays inside the 32 px frame
             x, y = int(16 + math.cos(t) * rr), int(16 + math.sin(t) * rr)
             if i >= 1:
                 col = "bone" if k % 2 else "amber"

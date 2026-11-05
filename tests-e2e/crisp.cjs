@@ -16,7 +16,7 @@ let failed = false;
   await sleep(2500);
   const browser = await chromium.launch();
   try {
-    for (const dpr of [1, 1.25, 1.5, 2])
+    for (const dpr of [1, 1.1, 1.25, 1.5, 2])
       for (const [w, h] of [[1920, 1040], [1366, 700]]) {
         const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: dpr });
         const page = await ctx.newPage();
@@ -28,7 +28,7 @@ let failed = false;
           return { x: b.left, y: b.top, w: b.width, h: b.height, bw: c.width, bh: c.height, dpr: window.devicePixelRatio };
         });
         const z = (r.w * r.dpr) / 480;
-        const exact = Math.abs(z - Math.round(z)) < 1e-6 && Math.abs((r.h * r.dpr) / 270 - z) < 1e-6 && Math.abs(r.x * r.dpr - Math.round(r.x * r.dpr)) < 1e-6;
+        const exact = Math.abs(z - Math.round(z)) < 1e-3 && Math.abs((r.h * r.dpr) / 270 - z) < 1e-3 && Math.abs(r.x * r.dpr - Math.round(r.x * r.dpr)) < 1e-2;
         // title text crop (game px 150..330 x 22..38): every game pixel must be one uniform device block
         const shot = await page.screenshot(); // full page in device pixels; cropped exactly in Python below
         let mixed = 0;
@@ -43,7 +43,10 @@ let failed = false;
           blocks = n;
         }
         const pct = blocks ? (100 * mixed) / blocks : NaN;
-        const ok = exact ? pct < 1 : true;
+        // the canvas must stay centred (never jump to the top-left corner), exact or not
+        const centred = Math.abs(r.x + r.w / 2 - w / 2) <= 12 && Math.abs(r.y + r.h / 2 - h / 2) <= 12;
+        const ok = (exact ? pct < 1 : true) && centred;
+        if (!centred) console.log(`  canvas not centred: x ${r.x} y ${r.y} w ${r.w} h ${r.h}`);
         if (!ok || !exact) failed = failed || !ok;
         console.log(`${ok ? 'ok  ' : 'FAIL'} dpr ${dpr} ${w}x${h}: ${exact ? `${Math.round(z)} device px per game px` : `fractional ${z.toFixed(2)} (fallback)`}, backing ${r.bw}x${r.bh}, mixed blocks in title ${Number.isNaN(pct) ? 'n/a' : pct.toFixed(2) + '%'}`);
         if (dpr === 1.25 && w === 1920) await page.screenshot({ path: path.join(ROOT, 'assets', 'preview', 'crisp_dpr125.png') });

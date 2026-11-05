@@ -289,7 +289,8 @@ export class GameScene extends Phaser.Scene {
     const t = snap(addText(this, VIEW_WIDTH / 2, VIEW_HEIGHT / 2, lines.join('\n'), { color: C.bone, align: 'center', lineSpacing: 5 }).setOrigin(0.5));
     this.hint = this.add.container(0, 0, [bg, t]).setDepth(D_HUD + 20);
     const shownAt = this.time.now;
-    const dismiss = () => {
+    const dismiss = (e?: KeyboardEvent) => {
+      if (e?.repeat) return; // a key held from the title (auto-repeat) must not close the card unread
       if (!this.hint || this.time.now - shownAt < 250) return; // the press that opened it must not also close it
       save().settings.touchHintSeen = true;
       persist();
@@ -300,11 +301,14 @@ export class GameScene extends Phaser.Scene {
       this.driver.resume('hint');
     };
     this.hintDismiss = dismiss;
+    this.hintPadArmed = false;
     bg.setInteractive().on('pointerup', dismiss);
     this.input.keyboard?.on('keydown', dismiss);
   }
 
   private hintDismiss: (() => void) | null = null;
+  /** Gamepad buttons must be released once after the card opens (A held from PLAY must not close it). */
+  private hintPadArmed = false;
   private ctxHints = new ContextHints(false);
   private ctxText: UIText | null = null;
 
@@ -317,10 +321,11 @@ export class GameScene extends Phaser.Scene {
       const t = snap(addText(this, VIEW_WIDTH / 2, y, HINT_TEXT[k], { color: k === 'parry' ? C.violet : '#d12b3a' }).setOrigin(0.5).setDepth(D_HUD));
       this.ctxText = t;
       this.tweens.add({ targets: t, alpha: 0, delay: 1400, duration: 300, onComplete: () => t.destroy() });
-      if (this.ctxHints.done) {
-        save().settings.hintsDone = true;
-        persist();
-      }
+      // each hint is remembered on its own (a player who never meets a blade still sees 'PARRY!' only once)
+      if (k === 'parry') save().settings.hintParrySeen = true;
+      else save().settings.hintDashSeen = true;
+      save().settings.hintsDone = save().settings.hintParrySeen && save().settings.hintDashSeen;
+      persist();
     }
   }
 
@@ -406,6 +411,8 @@ export class GameScene extends Phaser.Scene {
     this.input2.newRun();
     this.panel.setVisible(false);
     this.ctxHints = new ContextHints(!save().settings.hintsDone);
+    if (save().settings.hintParrySeen) this.ctxHints.shown.add('parry');
+    if (save().settings.hintDashSeen) this.ctxHints.shown.add('dash');
     if (!save().settings.touchHintSeen && !this.hint) this.showTouchHint();
     this.hero.setVisible(true).play(`${this.cfg.hero}_idle`);
     this.shadow.setVisible(true);
@@ -416,7 +423,9 @@ export class GameScene extends Phaser.Scene {
     if (this.hint && this.hintDismiss) {
       const gp = this.input.gamepad;
       const pad = gp && gp.total > 0 ? gp.pad1 : null;
-      if (pad && pad.buttons.some((b) => b.pressed)) this.hintDismiss();
+      const any = !!pad && pad.buttons.some((b) => b.pressed);
+      if (!any) this.hintPadArmed = true;
+      else if (this.hintPadArmed) this.hintDismiss();
     }
     if (this.menu.active && this.menu.pollPad(delta) && this.sim.state.alive) this.closePause();
     this.watchPerf(delta);

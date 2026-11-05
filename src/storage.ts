@@ -30,6 +30,8 @@ export interface Settings {
   touchHintSeen: boolean;
   /** Both one-time contextual hints were shown on this device. */
   hintsDone: boolean;
+  hintParrySeen: boolean;
+  hintDashSeen: boolean;
 }
 
 export interface BestEntry {
@@ -78,6 +80,8 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: false,
   touchHintSeen: false,
   hintsDone: false,
+  hintParrySeen: false,
+  hintDashSeen: false,
 };
 
 export function defaultSave(): SaveData {
@@ -131,6 +135,8 @@ export function validateSave(raw: unknown): SaveData {
     haptics: bool(s.haptics, d.haptics),
     touchHintSeen: bool(s.touchHintSeen, d.touchHintSeen),
     hintsDone: bool(s.hintsDone, d.hintsDone),
+    hintParrySeen: bool(s.hintParrySeen, d.hintParrySeen),
+    hintDashSeen: bool(s.hintDashSeen, d.hintDashSeen),
   };
   out.hero = oneOf(raw.hero, HEROES, 'knight');
   out.difficulty = oneOf(raw.difficulty, DIFFICULTIES, 'medium');

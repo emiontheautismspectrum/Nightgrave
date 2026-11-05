@@ -58,12 +58,20 @@ function alignCanvas(game: Phaser.Game): void {
   const dpr = window.devicePixelRatio || 1;
   const { w, h } = available();
   const cs = getComputedStyle(host);
-  const cw = c.getBoundingClientRect().width;
-  const ch = c.getBoundingClientRect().height;
+  // the size from the zoom itself (Phaser may apply the new canvas size only on its next refresh)
+  const z = game.scale.zoom;
+  const cw = VIEW_WIDTH * z;
+  const ch = VIEW_HEIGHT * z;
+  c.style.width = `${cw}px`;
+  c.style.height = `${ch}px`;
   // a whole number of device pixels that is also a multiple of the browser's 1/64 CSS px layout unit
+  // (browser zoom reports float32 ratios such as 1.100000023841858: search only a few device px, then just round)
   const snapDevice = (cssPx: number): number => {
-    for (let k = Math.floor(cssPx * dpr); k >= 0; k--) if (Math.abs((k / dpr) * 64 - Math.round((k / dpr) * 64)) < 1e-6) return k / dpr;
-    return 0;
+    const k0 = Math.round(cssPx * dpr);
+    for (let n = 0; n <= 12; n++)
+      for (const k of [k0 - n, k0 + n])
+        if (k >= 0 && Math.abs((k / dpr) * 64 - Math.round((k / dpr) * 64)) < 1e-3) return k / dpr;
+    return k0 / dpr;
   };
   const left = (parseFloat(cs.paddingLeft) || 0) + snapDevice((w - cw) / 2);
   const top = (parseFloat(cs.paddingTop) || 0) + snapDevice((h - ch) / 2);
@@ -71,6 +79,7 @@ function alignCanvas(game: Phaser.Game): void {
   c.style.left = `${left}px`;
   c.style.top = `${top}px`;
   c.style.margin = '0';
+  game.scale.updateBounds(); // Phaser maps pointers with the canvas bounds: refresh them after moving the canvas
 }
 
 function updateRotateOverlay(): void {

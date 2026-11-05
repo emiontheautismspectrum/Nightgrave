@@ -83,7 +83,7 @@ export function settingsPage(ctx: MenuCtx, back: () => void): MenuPage {
       toggle('HAPTICS', 'haptics'),
     );
   }
-  items.push({ label: () => 'SHOW TIPS AGAIN', onActivate: () => ((s().touchHintSeen = false), (s().hintsDone = false), persist(), ctx.onShowTouchHint?.()) });
+  items.push({ label: () => 'SHOW TIPS AGAIN', onActivate: () => ((s().touchHintSeen = false), (s().hintsDone = false), (s().hintParrySeen = false), (s().hintDashSeen = false), persist(), ctx.onShowTouchHint?.()) });
   return { title: 'SETTINGS', items, onBack: back, top: 52, gap: 13 };
 }
 
