@@ -1,4 +1,5 @@
 import '@fontsource/press-start-2p/400.css';
+import './style.css';
 import Phaser from 'phaser';
 import { TITLE, VIEW_HEIGHT, VIEW_WIDTH } from './config';
 import { dailySeed, utcDateKey } from './daily';

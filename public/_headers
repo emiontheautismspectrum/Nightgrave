@@ -1,0 +1,11 @@
+# Cloudflare Pages headers. __API_ORIGIN__ is replaced at build time with the origin of VITE_API_BASE
+# (vite.config.ts writes dist/_headers); with no API it is removed (connect-src 'self' only).
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' __API_ORIGIN__; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
