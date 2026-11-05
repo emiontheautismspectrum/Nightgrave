@@ -6,7 +6,7 @@ type V = string | number | null;
 
 export function makeD1(): { DB: unknown; raw: DatabaseSync } {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_verification.sql', '0003_replay_hash.sql']) db.exec(readFileSync(new URL(`../migrations/${m}`, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_verification.sql', '0003_replay_hash.sql', '0004_view.sql']) db.exec(readFileSync(new URL(`../migrations/${m}`, import.meta.url), 'utf8'));
   const stmt = (sql: string, params: V[] = []) => ({
     bind: (...p: V[]) => stmt(sql, p),
     first: async <T>() => (db.prepare(sql).get(...params) as T | undefined) ?? null,

@@ -19,6 +19,8 @@ export interface RunResult {
   seed: number;
   score: number;
   hero: 'knight' | 'wisp';
+  /** Metadata only: was the run played with the zoomed phone-portrait camera at any point. */
+  view: 'full' | 'zoomed';
   log: readonly InputFrame[];
 }
 
@@ -165,6 +167,7 @@ export class SubmitPanel {
       score: r.score,
       durationTicks: r.log.length,
       hero: r.hero,
+      view: r.view,
       name: name.ok ? name.value : '',
       ...(this.wantsMessage && msgRaw ? { message: msgRaw } : {}),
       playerId: save().playerId,

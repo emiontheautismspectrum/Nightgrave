@@ -63,7 +63,7 @@ describe('replay verification: honest run end to end', () => {
     expect((await board()).top).toEqual([]); // pending is never public
     expect(await runVerifier()).toEqual(['verified']);
     const b = await board();
-    expect(b.top).toEqual([{ rank: 1, name: 'Honest', score: RUN.score, hero: 'wisp', durationTicks: RUN.log.length }]);
+    expect(b.top).toEqual([{ rank: 1, name: 'Honest', score: RUN.score, hero: 'wisp', durationTicks: RUN.log.length, view: 'full' }]);
     expect(b.champion).toEqual({ name: 'Honest', message: 'verified run' });
     expect(await pending()).toEqual([]);
   });

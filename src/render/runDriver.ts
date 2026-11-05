@@ -1,7 +1,7 @@
 /**
  * Fixed-timestep driver for one run (render side, no Phaser): accumulates frame time, steps the sim at 60 Hz and
  * freezes it while paused. While paused no tick runs and no input is sampled or logged, so pausing can never change
- * the replay or the score. Pause has several independent reasons (menu, hidden tab, focus loss, portrait).
+ * the replay or the score. Pause has several independent reasons (menu, hidden tab, focus loss, rotation, first-run card).
  */
 import { TICK_RATE } from '../data/tuning';
 import type { InputFrame } from '../sim/input';
@@ -12,7 +12,7 @@ export const MAX_STEPS_PER_FRAME = 5;
 /** Restart input is ignored for this long after death (the press held at death must not skip the panel). */
 export const RESTART_GUARD_MS = 250;
 
-export type PauseReason = 'menu' | 'hidden' | 'blur' | 'portrait' | 'hint';
+export type PauseReason = 'menu' | 'hidden' | 'blur' | 'rotate' | 'hint';
 
 export const canRestart = (nowMs: number, deadAtMs: number): boolean => nowMs - deadAtMs >= RESTART_GUARD_MS;
 
@@ -54,5 +54,5 @@ export class RunDriver {
   }
 }
 
-/** Portrait on a touch device pauses the run (and shows the rotate overlay) until landscape returns. */
-export const portraitPause = (w: number, h: number, touch: boolean): boolean => touch && h > w;
+/** A phone in portrait plays with the zoomed camera (landscape keeps the full arena). */
+export const isPortraitView = (w: number, h: number, touch: boolean): boolean => touch && h > w;

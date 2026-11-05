@@ -34,6 +34,8 @@ export interface InputHooks {
   onTouch: () => void;
   /** A menu is open: it handles Esc/B/Start itself (P still toggles the pause). */
   menuOpen: () => boolean;
+  /** Screen game px -> world px for the mouse cursor (the zoomed portrait camera); identity when absent. */
+  toWorld?: (x: number, y: number) => [number, number];
 }
 
 export class InputCollector {
@@ -51,6 +53,10 @@ export class InputCollector {
   private mouse = { x: 0, y: 0 };
   private axisAnchor = { x: 0, y: 0 };
   private dom: [string, (e: PointerEvent) => void][] = [];
+  private world(x: number, y: number): { x: number; y: number } {
+    const [wx, wy] = this.hooks.toWorld ? this.hooks.toWorld(x, y) : [x, y];
+    return { x: wx, y: wy };
+  }
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -89,7 +95,7 @@ export class InputCollector {
       this.use('mouse');
       this.mode = 'cursor';
       this.pointerSeen = true;
-      this.mouse = { x, y };
+      this.mouse = this.world(x, y);
       if (e.button === 2) this.pending |= BTN_DASH;
       else if (e.button === 0) this.pending |= BTN_PARRY;
     });
@@ -100,7 +106,7 @@ export class InputCollector {
         return;
       }
       this.pointerSeen = true;
-      this.mouse = { x, y };
+      this.mouse = this.world(x, y);
       // a deliberate mouse move (not a bump) hands control back to the cursor, never while keys / the stick are held
       const [ax, ay] = this.axis();
       if (ax !== 0 || ay !== 0) {

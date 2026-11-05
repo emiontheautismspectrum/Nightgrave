@@ -67,6 +67,9 @@ describe('POST /api/submit: every rejection path', () => {
     ['float score', { score: 1.5 }, {}, 'invalid'],
     ['unsafe integer', { score: 2 ** 60 }, {}, 'invalid'],
     ['bad hero', { hero: 'mage' }, {}, 'invalid'],
+    ['bad view', { view: 'tiny' }, {}, 'invalid'],
+    ['view of another type', { view: 1 }, {}, 'invalid'],
+    ['view with a payload', { view: "zoomed'; DROP TABLE entries; --" }, {}, 'invalid'],
     ['bad playerId', { playerId: 'not-a-uuid' }, {}, 'invalid'],
     ['uuid v1', { playerId: '00000000-0000-1000-8000-000000000001' }, {}, 'invalid'],
     ['medium', { difficulty: 'medium' }, {}, 'invalid'],
@@ -179,6 +182,28 @@ describe('GET /api/daily', () => {
     const r = await handle(new Request('https://api.test/admin'), env, NOW);
     expect(r.status).toBe(404);
     expect(r.headers.get('Content-Type')).toContain('application/json');
+  });
+});
+
+describe('view metadata (full / zoomed)', () => {
+  it('is stored, defaults to full, returned in GET and never sent to the verifier', async () => {
+    expect((await post(body({ playerId: pid(1), score: 300, view: 'zoomed' }))).status).toBe(200);
+    expect((await post(body({ playerId: pid(2), score: 200 }))).status).toBe(200);
+    expect((await post(body({ playerId: pid(3), score: 100, view: 'full' }))).status).toBe(200);
+    const { items } = (await (await vreq('GET', '/api/verify/pending?limit=50')).json()) as { items: Record<string, unknown>[] };
+    for (const it of items) expect(it).not.toHaveProperty('view');
+    await promoteAll();
+    const b = (await (await get()).json()) as { top: { name: string; view: string }[] };
+    expect(b.top.map((e) => e.view)).toEqual(['zoomed', 'full', 'full']);
+  });
+  it('rows written before the migration read as full', async () => {
+    await post(body({ view: 'zoomed' }));
+    await promoteAll();
+    raw.exec("UPDATE entries SET view = 'full'");
+    expect(((await (await get()).json()) as { top: { view: string }[] }).top[0]?.view).toBe('full');
+    raw.exec("INSERT INTO entries (date, player_id, name, score, hero, duration_ticks, replay, achieved_at, verified) VALUES ('2026-11-05', 'x', 'Old', 50, 'wisp', 600, '', 1, 1)");
+    const top = ((await (await get()).json()) as { top: { name: string; view: string }[] }).top;
+    expect(top.find((e) => e.name === 'Old')?.view).toBe('full');
   });
 });
 

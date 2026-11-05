@@ -12,6 +12,8 @@ import { TitleScene, type TitleConfig } from './render/TitleScene';
 import { save } from './storage';
 import { BoardPanel } from './web/boardPanel';
 import { computeLayout } from './web/layout';
+import { initBoardOverlay } from './web/boardOverlay';
+import { isInRun, onRunChange, setRelayout } from './web/runFlag';
 
 document.title = TITLE;
 
@@ -35,13 +37,19 @@ let board: BoardPanel | null = null;
 
 /**
  * Lay out the page: the framed game (crisp integer device-pixel scaling, Polish 1) with the board panel next to it
- * (desktop), the panel under it on narrow windows, the whole screen on phones (no panel, no footer during play).
+ * (desktop), the panel under it on narrow windows, the whole screen on phones (no side panel, no footer). The game
+ * size is 480x270, or the 9:16 zoomed view while a phone in portrait plays; a phone in portrait outside a run shows
+ * the board under the canvas.
  */
 function applyLayout(game: Phaser.Game): void {
   const dpr = window.devicePixelRatio || 1;
   const phone = isTouch();
   const ins = phone ? safeInsets() : { l: 0, r: 0, t: 0, b: 0 };
-  const L = computeLayout(innerWidth - ins.l - ins.r, innerHeight - ins.t - ins.b, dpr, phone);
+  const vw = innerWidth - ins.l - ins.r;
+  const vh = innerHeight - ins.t - ins.b;
+  const base = { w: game.scale.width || VIEW_WIDTH, h: game.scale.height || VIEW_HEIGHT };
+  const boardBelow = phone && vh > vw && !isInRun() && base.w === VIEW_WIDTH;
+  const L = computeLayout(vw, vh, dpr, phone, base, boardBelow);
   const frame = document.getElementById('frame');
   const footer = document.getElementById('footer');
   const page = document.getElementById('page');
@@ -60,13 +68,14 @@ function applyLayout(game: Phaser.Game): void {
     c.style.width = `${L.game.w}px`;
     c.style.height = `${L.game.h}px`;
   }
-  if (L.panel && !phone) {
+  if (L.panel) {
     board ??= new BoardPanel('bpanel');
     if (!board.root.isConnected) page.append(board.root);
+    board.root.classList.toggle('bp-under', phone);
     const st = board.root.style;
     st.display = '';
-    st.left = `${L.panel.x}px`;
-    st.top = `${L.panel.y}px`;
+    st.left = `${L.panel.x + ins.l}px`;
+    st.top = `${L.panel.y + ins.t}px`;
     st.width = `${L.panel.w}px`;
     st.height = L.panel.h ? `${L.panel.h}px` : '';
     board.start();
@@ -76,11 +85,6 @@ function applyLayout(game: Phaser.Game): void {
     footer.hidden = phone;
   }
   game.scale.updateBounds(); // Phaser maps pointers with the canvas bounds: refresh them after moving the canvas
-}
-
-function updateRotateOverlay(): void {
-  const el = document.getElementById('rotate');
-  if (el) el.hidden = !(isTouch() && innerHeight > innerWidth);
 }
 
 async function boot(): Promise<void> {
@@ -141,19 +145,21 @@ async function boot(): Promise<void> {
   // audio: unlock on the first user input (autoplay policy; iOS needs a touch), mute while hidden
   onAudioEvent((e) => audio.sfx(e));
   const unlock = (e: Event) => {
-    if ((e as PointerEvent).pointerType === 'touch') touchSeen = true;
+    if ((e as PointerEvent).pointerType === 'touch' && !touchSeen) {
+      touchSeen = true;
+      applyLayout(game); // a touch screen without a coarse pointer: switch to the phone layout
+    }
     // the active input device (controls line on the title, first-run card)
     if (e.type === 'keydown') setDevice('desktop');
     else if (e.type === 'pointerdown') setDevice((e as PointerEvent).pointerType === 'touch' ? 'touch' : 'desktop');
     audio.unlock();
-    updateRotateOverlay();
   };
   for (const t of ['pointerdown', 'keydown', 'touchend']) addEventListener(t, unlock, { capture: true, passive: true });
   document.addEventListener('visibilitychange', () => audio.setHidden(document.hidden));
-  const resize = () => {
-    applyLayout(game);
-    updateRotateOverlay();
-  };
+  const resize = () => applyLayout(game);
+  setRelayout(resize);
+  onRunChange(resize);
+  initBoardOverlay();
   addEventListener('resize', resize);
   addEventListener('orientationchange', resize);
   document.addEventListener('fullscreenchange', resize);
@@ -171,7 +177,6 @@ async function boot(): Promise<void> {
   watchDpr();
   game.events.once(Phaser.Core.Events.READY, resize);
   setTimeout(resize, 0);
-  updateRotateOverlay();
   if (isTouch()) setDevice('touch');
   addEventListener('gamepadconnected', () => setDevice('gamepad'));
 }

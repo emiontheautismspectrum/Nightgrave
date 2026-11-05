@@ -80,10 +80,10 @@ async function phone(browser) {
   await sleep(300);
   await page.setViewportSize({ width: 412, height: 915 }); // portrait
   await sleep(500);
-  const rotate = await page.evaluate(() => !document.getElementById('rotate').hidden);
+  const rotate = await page.evaluate(() => !!document.getElementById('rotate'));
   d = await dbg(page);
-  ok(rotate, 'phone: portrait shows the rotate overlay');
-  ok(d && d.paused, 'phone: portrait auto-pauses');
+  ok(!rotate, 'phone: no rotate overlay (portrait plays with the zoomed camera)');
+  ok(d && d.paused && d.menu, 'phone: rotating mid-run auto-pauses');
   ok(errs.length === 0, `phone: no page errors ${errs.join(' | ')}`);
   await ctx.close();
 }

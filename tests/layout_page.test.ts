@@ -35,4 +35,22 @@ describe('page layout', () => {
     expect(L.mode).toBe('phone');
     expect(L.panel).toBeNull();
   });
+  it('phones: the zoomed 9:16 view fills a portrait screen at an integer scale; the title puts the board under the canvas', () => {
+    for (const [w, h, dpr] of [[412, 915, 2.625], [390, 844, 3], [360, 780, 3]] as [number, number, number][]) {
+      const Z = computeLayout(w, h, dpr, true, { w: 216, h: 384 });
+      expect(Z.exact).toBe(true);
+      expect(Z.game.w).toBeLessThanOrEqual(w + 1e-6);
+      expect(Z.game.h).toBeLessThanOrEqual(h + 1e-6);
+      expect(Z.game.w).toBeGreaterThan(w * 0.8);
+      const T = computeLayout(w, h, dpr, true, { w: 480, h: 270 }, true);
+      expect(T.panel).not.toBeNull();
+      expect(T.panel!.y).toBeGreaterThanOrEqual(T.game.y + T.game.h);
+      expect(T.panel!.y + T.panel!.h).toBeLessThanOrEqual(h);
+      expect(T.panel!.x + T.panel!.w).toBeLessThanOrEqual(w);
+    }
+    // landscape phone: the full arena, no panel
+    const L = computeLayout(915, 412, 2.625, true);
+    expect(L.panel).toBeNull();
+    expect(L.game.w).toBeLessThanOrEqual(915);
+  });
 });

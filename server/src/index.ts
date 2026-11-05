@@ -43,9 +43,11 @@ export const LIMITS = {
 
 const FIELDS: Record<string, 'string' | 'number'> = {
   date: 'string', seed: 'number', difficulty: 'string', score: 'number', durationTicks: 'number', hero: 'string',
-  name: 'string', message: 'string', playerId: 'string', tuningFingerprint: 'string', clientVersion: 'string', replay: 'string',
+  name: 'string', message: 'string', playerId: 'string', tuningFingerprint: 'string', clientVersion: 'string', replay: 'string', view: 'string',
 };
-const REQUIRED = Object.keys(FIELDS).filter((k) => k !== 'message');
+/** message and view are optional (view defaults to the full arena). */
+const REQUIRED = Object.keys(FIELDS).filter((k) => k !== 'message' && k !== 'view');
+const VIEWS = ['full', 'zoomed'] as const;
 const UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 // ------------------------------------------------------------------ helpers
@@ -128,13 +130,14 @@ interface Row {
   score: number;
   hero: string;
   duration_ticks: number;
+  view: string;
 }
 
 async function board(env: Env, date: string): Promise<{ top: object[]; champion: { name: string; message: string | null } | null }> {
   const { results } = await env.DB.prepare(
-    'SELECT id, name, message, score, hero, duration_ticks FROM entries WHERE date = ?1 AND verified = 1 ORDER BY score DESC, achieved_at ASC, id ASC LIMIT 10',
+    'SELECT id, name, message, score, hero, duration_ticks, view FROM entries WHERE date = ?1 AND verified = 1 ORDER BY score DESC, achieved_at ASC, id ASC LIMIT 10',
   ).bind(date).all<Row>();
-  const top = (results ?? []).map((r, i) => ({ rank: i + 1, name: r.name, score: r.score, hero: r.hero, durationTicks: r.duration_ticks }));
+  const top = (results ?? []).map((r, i) => ({ rank: i + 1, name: r.name, score: r.score, hero: r.hero, durationTicks: r.duration_ticks, view: r.view === 'zoomed' ? 'zoomed' : 'full' }));
   const first = results?.[0];
   // the message is stored with every entry but only ever shown for rank 1
   return { top, champion: first ? { name: first.name, message: first.message ?? null } : null };
@@ -207,7 +210,7 @@ async function postMe(req: Request, env: Env, now: number): Promise<Response> {
 /** Parse and validate a submission. Returns a reason code or the clean fields. */
 export function checkBody(raw: unknown, now: number):
   | { reason: string; status: number }
-  | { v: { date: string; score: number; durationTicks: number; hero: string; name: string; message: string | null; playerId: string; replay: string } } {
+  | { v: { date: string; score: number; durationTicks: number; hero: string; view: string; name: string; message: string | null; playerId: string; replay: string } } {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { reason: 'invalid', status: 400 };
   const o = raw as Record<string, unknown>;
   for (const k of Object.keys(o)) {
@@ -218,6 +221,7 @@ export function checkBody(raw: unknown, now: number):
   for (const k of REQUIRED) if (!(k in o)) return { reason: 'invalid', status: 400 };
   for (const k of ['seed', 'score', 'durationTicks']) if (!Number.isSafeInteger(o[k])) return { reason: 'invalid', status: 400 };
   if (o.hero !== 'knight' && o.hero !== 'wisp') return { reason: 'invalid', status: 400 };
+  if (o.view !== undefined && !VIEWS.includes(o.view as (typeof VIEWS)[number])) return { reason: 'invalid', status: 400 };
   if (!UUID4.test(o.playerId as string)) return { reason: 'invalid', status: 400 };
   // 2. Hard only; today, or yesterday until 00:15 UTC
   if (o.difficulty !== 'hard') return { reason: 'invalid', status: 400 };
@@ -247,7 +251,7 @@ export function checkBody(raw: unknown, now: number):
     if (!m.ok) return { reason: m.error === 'words' ? 'words' : 'message', status: 400 };
     message = m.value;
   }
-  return { v: { date, score, durationTicks: d, hero: o.hero as string, name: name.value, message, playerId: o.playerId as string, replay } };
+  return { v: { date, score, durationTicks: d, hero: o.hero as string, view: (o.view as string | undefined) ?? 'full', name: name.value, message, playerId: o.playerId as string, replay } };
 }
 
 /** Read at most `max` bytes of the body (a chunked body without Content-Length cannot flood memory). */
@@ -302,15 +306,15 @@ async function postSubmit(req: Request, env: Env, now: number): Promise<Response
   // score (a weaker run never replaces a stronger pending one); the verified part stays on the board meanwhile
   const res = await env.DB.prepare(
     `INSERT INTO entries (date, player_id, name, message, score, hero, duration_ticks, replay, achieved_at, verified,
-                          p_seq, p_score, p_name, p_message, p_hero, p_duration, p_replay, p_tuning, p_client, p_at)
-     VALUES (?1, ?2, ?3, NULL, 0, ?6, 0, '', ?9, 0, 1, ?5, ?3, ?4, ?6, ?7, ?8, ?10, ?11, ?9)
+                          p_seq, p_score, p_name, p_message, p_hero, p_duration, p_replay, p_tuning, p_client, p_at, p_view)
+     VALUES (?1, ?2, ?3, NULL, 0, ?6, 0, '', ?9, 0, 1, ?5, ?3, ?4, ?6, ?7, ?8, ?10, ?11, ?9, ?12)
      ON CONFLICT (date, player_id) DO UPDATE SET
        p_seq = entries.p_seq + 1, p_score = excluded.p_score, p_name = excluded.p_name, p_message = excluded.p_message,
        p_hero = excluded.p_hero, p_duration = excluded.p_duration, p_replay = excluded.p_replay,
-       p_tuning = excluded.p_tuning, p_client = excluded.p_client, p_at = excluded.p_at
+       p_tuning = excluded.p_tuning, p_client = excluded.p_client, p_at = excluded.p_at, p_view = excluded.p_view
      WHERE excluded.p_score > (CASE WHEN entries.verified = 1 THEN entries.score ELSE -1 END)
        AND excluded.p_score > COALESCE(entries.p_score, -1)`,
-  ).bind(v.date, v.playerId, v.name, v.message, v.score, v.hero, v.durationTicks, v.replay, now, tuningFingerprint(), CLIENT_VERSION).run();
+  ).bind(v.date, v.playerId, v.name, v.message, v.score, v.hero, v.durationTicks, v.replay, now, tuningFingerprint(), CLIENT_VERSION, v.view).run();
   if ((res.meta?.changes ?? 0) === 0) return json({ accepted: false, pending: false, provisionalRank: null, reason: 'not_best' }, 200, req, env);
   // provisional rank among the VERIFIED board (it only becomes real after verification)
   const above = await env.DB.prepare('SELECT COUNT(*) AS n FROM entries WHERE date = ?1 AND verified = 1 AND player_id <> ?2 AND score >= ?3')
@@ -385,16 +389,16 @@ async function verifyResult(req: Request, env: Env, idPart: string | undefined):
     const dup = await env.DB.prepare('SELECT 1 AS x FROM entries WHERE date = ?1 AND verified = 1 AND replay_sha = ?2 AND id <> ?3').bind(row.date, sha, id).first();
     if (dup) {
       await env.DB.prepare(
-        `UPDATE entries SET reject_reason = 'duplicate', p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL,
+        `UPDATE entries SET reject_reason = 'duplicate', p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL, p_view = NULL,
            p_duration = NULL, p_replay = NULL, p_tuning = NULL, p_client = NULL, p_at = NULL WHERE id = ?1 AND p_seq = ?2`,
       ).bind(id, seq).run();
       return json({ ok: false, error: 'duplicate' }, 409, req, env);
     }
     // promote ONLY this exact submission (id + version): a newer pending run that arrived meanwhile stays pending
     const r = await env.DB.prepare(
-      `UPDATE entries SET verified = 1, score = p_score, name = p_name, message = p_message, hero = p_hero,
+      `UPDATE entries SET verified = 1, score = p_score, name = p_name, message = p_message, hero = p_hero, view = COALESCE(p_view, 'full'),
          duration_ticks = p_duration, replay = p_replay, achieved_at = p_at, reject_reason = NULL, replay_sha = ?3,
-         p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL, p_duration = NULL, p_replay = NULL,
+         p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL, p_view = NULL, p_duration = NULL, p_replay = NULL,
          p_tuning = NULL, p_client = NULL, p_at = NULL
        WHERE id = ?1 AND p_seq = ?2 AND p_replay IS NOT NULL AND (verified = 0 OR p_score > score)`,
     ).bind(id, seq, sha).run();
@@ -405,7 +409,7 @@ async function verifyResult(req: Request, env: Env, idPart: string | undefined):
   if (o.status === 'rejected') {
     const reason = typeof o.reason === 'string' && REASONS.has(o.reason) ? o.reason : 'error';
     await env.DB.prepare(
-      `UPDATE entries SET reject_reason = ?3, p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL,
+      `UPDATE entries SET reject_reason = ?3, p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL, p_view = NULL,
          p_duration = NULL, p_replay = NULL, p_tuning = NULL, p_client = NULL, p_at = NULL
        WHERE id = ?1 AND p_seq = ?2`,
     ).bind(id, seq, reason).run();
@@ -479,7 +483,7 @@ export async function cleanup(env: Env, now = Date.now()): Promise<void> {
   await env.DB.prepare('DELETE FROM ratelimit WHERE window < ?1').bind(now - 86_400_000).run();
   // pending submissions that never got a verdict (e.g. stuck between versions) expire
   await env.DB.prepare(
-    `UPDATE entries SET reject_reason = 'expired', p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL,
+    `UPDATE entries SET reject_reason = 'expired', p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL, p_view = NULL,
        p_duration = NULL, p_replay = NULL, p_tuning = NULL, p_client = NULL, p_at = NULL
      WHERE p_replay IS NOT NULL AND p_at < ?1`,
   ).bind(now - LIMITS.pendingTtlMs).run();

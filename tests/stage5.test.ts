@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL_SFX, buildManifest, MUSIC, pickMusic, pitchFor, SFX_FILE, SoundDiffer, VoiceLimiter, type MusicTrack,
 } from '../src/render/audioLogic';
-import { canRestart, portraitPause, RESTART_GUARD_MS, RunDriver, STEP_MS } from '../src/render/runDriver';
+import { canRestart, isPortraitView, RESTART_GUARD_MS, RunDriver, STEP_MS } from '../src/render/runDriver';
 import { TAP_MS, TouchModel, touchButtons } from '../src/render/touch';
 import { BTN_DASH, BTN_PARRY, type InputFrame } from '../src/sim/input';
 import { decodeReplay, encodeReplay, playReplay } from '../src/sim/replay';
@@ -178,14 +178,14 @@ describe('pause and restart', () => {
     expect(canRestart(1000 + 250, 1000)).toBe(true);
   });
 
-  it('portrait on a touch device pauses; landscape or desktop does not', () => {
-    expect(portraitPause(390, 844, true)).toBe(true);
-    expect(portraitPause(844, 390, true)).toBe(false);
-    expect(portraitPause(390, 844, false)).toBe(false);
+  it('portrait on a touch device uses the zoomed view; rotating pauses until resumed', () => {
+    expect(isPortraitView(390, 844, true)).toBe(true);
+    expect(isPortraitView(844, 390, true)).toBe(false);
+    expect(isPortraitView(390, 844, false)).toBe(false);
     const d = new RunDriver(new Sim(1, 'easy'));
-    if (portraitPause(390, 844, true)) d.pause('portrait');
+    d.pause('rotate');
     expect(d.paused).toBe(true);
-    d.resume('portrait');
+    d.resume('rotate');
     expect(d.paused).toBe(false);
   });
 });
@@ -195,18 +195,20 @@ describe('replay metadata', () => {
     const sim = new Sim(9, 'hard');
     for (const f of mulberryInputs(3, 1500)) sim.step(f);
     const a = encodeReplay(9, 'hard', sim.log, { hero: 'knight', input: ['mouse'] });
-    const b = encodeReplay(9, 'hard', sim.log, { hero: 'wisp', input: ['touch'] });
+    const b = encodeReplay(9, 'hard', sim.log, { hero: 'wisp', input: ['touch'], view: 'zoomed' });
     expect(a.tuning).toBe(b.tuning);
     expect(a.runs).toEqual(b.runs);
     const ra = playReplay(JSON.parse(JSON.stringify(a)));
     const rb = playReplay(JSON.parse(JSON.stringify(b)));
     expect(JSON.stringify({ ...ra.state, events: [] })).toBe(JSON.stringify({ ...rb.state, events: [] }));
     expect(ra.score).toBe(rb.score);
-    expect(decodeReplay(JSON.parse(JSON.stringify(b))).meta).toEqual({ hero: 'wisp', input: ['touch'] });
+    expect(decodeReplay(JSON.parse(JSON.stringify(b))).meta).toEqual({ hero: 'wisp', input: ['touch'], view: 'zoomed' });
     // untrusted metadata is sanitized, never trusted
     const bad = { ...a, meta: { hero: '<b>x</b>', input: ['touch', 'evil'] } };
     expect(decodeReplay(bad).meta).toBeUndefined();
-    expect(decodeReplay({ ...a, meta: { hero: 'wisp', input: ['evil', 'touch'] } }).meta).toEqual({ hero: 'wisp', input: ['touch'] });
+    expect(decodeReplay({ ...a, meta: { hero: 'wisp', input: ['evil', 'touch'], view: 'huge' } }).meta).toEqual({ hero: 'wisp', input: ['touch'], view: 'full' });
+    // the view (full arena / zoomed phone camera) never changes the simulation
+    expect(playReplay(JSON.parse(JSON.stringify({ ...a, meta: { ...a.meta, view: 'zoomed' } }))).score).toBe(ra.score);
   });
 });
 

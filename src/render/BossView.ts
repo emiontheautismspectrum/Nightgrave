@@ -12,10 +12,10 @@ import type { Boss, SimEvent, SimState } from '../sim/state';
 import { ATLAS, frame, type SpriteName } from './assets';
 import { save } from '../storage';
 
-const BAR_X = 48;
-const BAR_Y = 250;
-const BAR_W = 384;
 const BAR_H = 10;
+/** Full view: the classic bar under the arena; zoomed phone portrait: above the touch buttons, screen width. */
+const BAR_FULL = { x: 48, y: 250, w: 384 };
+const BAR_ZOOMED = { x: 8, y: 324, w: 200 };
 const HIT_TICKS = 8;
 const COL = { bone: 0xd9d2c0, bg0: 0x0b0d12, violet: 0x9b6bff, violetDark: 0x3d2a78, blood: 0xd12b3a, bloodDark: 0x6e1423, teal: 0x4fd1c5, gold: 0xffd86b, ember: 0xff7a2f };
 
@@ -29,6 +29,8 @@ export class BossView {
   private glow: Phaser.GameObjects.Sprite;
   private timers: { icon: Phaser.GameObjects.Sprite; ring: Phaser.GameObjects.Image }[];
   private ember: UIText;
+  private barAt: { x: number; y: number; w: number } = BAR_FULL;
+  private zoomed = false;
 
   constructor(
     private scene: Phaser.Scene,
@@ -39,7 +41,7 @@ export class BossView {
   ) {
     this.body = scene.add.sprite(0, 0, ATLAS, frame('eye_sentinel_idle')).setVisible(false);
     this.gfx = scene.add.graphics().setDepth(depth.fog - 1);
-    this.bar = scene.add.image(BAR_X, BAR_Y, ATLAS, frame('boss_bar' as SpriteName)).setOrigin(0).setDepth(depth.hud).setVisible(false);
+    this.bar = scene.add.image(BAR_FULL.x, BAR_FULL.y, ATLAS, frame('boss_bar' as SpriteName)).setOrigin(0).setDepth(depth.hud).setVisible(false);
     this.barGfx = scene.add.graphics().setDepth(depth.hud);
     this.glow = scene.add.sprite(0, 0, ATLAS, frame('pickup_glow')).setVisible(false);
     this.pickup = scene.add.sprite(0, 0, ATLAS, frame('pickup_slow_time')).setVisible(false);
@@ -49,6 +51,18 @@ export class BossView {
       ring: scene.add.image(268 + i * 22, 13, ATLAS, frame('icon_ring')).setDepth(depth.hud),
     }));
     this.ember = addText(scene, 236, 9, '', { color: '#ff7a2f' }).setDepth(depth.hud);
+  }
+
+  /** Move the HUD parts for the full arena or the zoomed portrait view (screen game px). */
+  setLayout(zoomed: boolean): void {
+    this.zoomed = zoomed;
+    this.barAt = zoomed ? BAR_ZOOMED : BAR_FULL;
+    this.timers.forEach((v, i) => {
+      const [x, y] = zoomed ? [128 + i * 20, 22] : [268 + i * 22, 13];
+      v.icon.setPosition(x, y);
+      v.ring.setPosition(x, y);
+    });
+    this.ember.setPosition(zoomed ? 96 : 236, zoomed ? 17 : 9);
   }
 
   reset(): void {
@@ -95,10 +109,11 @@ export class BossView {
 
   /** A removed segment shatters: four small shards fall and fade. */
   private shatter(b: Boss, remaining: number): void {
-    const seg = (BAR_W - 4) / b.segments;
-    const x = BAR_X + 2 + remaining * seg + seg / 2;
+    const B = this.barAt;
+    const seg = (B.w - 4) / b.segments;
+    const x = B.x + 2 + remaining * seg + seg / 2;
     for (let k = 0; k < 4; k++) {
-      const r = this.scene.add.rectangle(x - 4 + k * 3, BAR_Y + 5, 2, 2, COL.bone).setDepth(this.depth.hud + 1);
+      const r = this.scene.add.rectangle(x - 4 + k * 3, B.y + 5, 2, 2, COL.bone).setDepth(this.depth.hud + 1);
       this.scene.tweens.add({ targets: r, x: r.x + (k - 1.5) * 4, y: r.y + 8 + k, alpha: 0, duration: 300, onComplete: () => r.destroy() });
     }
   }
@@ -109,7 +124,7 @@ export class BossView {
     this.gfx.clear();
     this.barGfx.clear();
     this.body.setVisible(!!b);
-    this.bar.setVisible(!!b);
+    this.bar.setVisible(!!b && !this.zoomed);
     if (b) this.drawBoss(st, p, b);
     // beams: a tiled sprite rotated along the beam direction
     const seen = new Set<number>();
@@ -169,14 +184,20 @@ export class BossView {
     }
 
     // the bar: frame + one cell per segment (remaining = bone, removed = dark)
-    const seg = (BAR_W - 4) / b.segments;
+    const B = this.barAt;
+    if (this.zoomed) {
+      // the bar sprite is arena-wide: the narrow portrait bar gets a plain frame
+      this.barGfx.fillStyle(COL.bg0, 0.8).fillRect(B.x, B.y, B.w, BAR_H);
+      this.barGfx.lineStyle(1, 0x3a4558, 1).strokeRect(B.x + 0.5, B.y + 0.5, B.w - 1, BAR_H - 1);
+    }
+    const seg = (B.w - 4) / b.segments;
     for (let i = 0; i < b.segments; i++) {
-      const x0 = Math.round(BAR_X + 2 + i * seg) + 1;
-      const x1 = Math.round(BAR_X + 2 + (i + 1) * seg) - 1;
+      const x0 = Math.round(B.x + 2 + i * seg) + 1;
+      const x1 = Math.round(B.x + 2 + (i + 1) * seg) - 1;
       const on = i < b.remaining;
       const flash = b.hitTick >= 0 && t - b.hitTick < HIT_TICKS && i === b.remaining; // the cell just removed
       this.barGfx.fillStyle(flash ? COL.violet : on ? COL.bone : COL.violetDark, flash || on ? 1 : 0.6);
-      this.barGfx.fillRect(x0, BAR_Y + 2, x1 - x0, BAR_H - 4);
+      this.barGfx.fillRect(x0, B.y + 2, x1 - x0, BAR_H - 4);
     }
   }
 

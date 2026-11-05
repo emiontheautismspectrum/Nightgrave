@@ -8,6 +8,7 @@
  * of the only finger does nothing; a tap by a second finger parries when that setting is on.
  */
 import { BTN_DASH, BTN_PARRY } from '../sim/input';
+import { PORTRAIT } from '../data/view';
 
 export const TAP_MS = 200;
 export const TAP_PX = 6;
@@ -22,8 +23,20 @@ export interface TouchButton {
   r: number;
 }
 
-/** Buttons in the right margin (left-handed: mirrored to the left margin). PARRY ~36 px across, DASH ~28 px above. */
-export function touchButtons(leftHanded: boolean): TouchButton[] {
+/**
+ * Buttons in the right margin (left-handed: mirrored to the left margin). PARRY ~36 px across, DASH ~28 px above.
+ * Zoomed phone-portrait view: both sit in the bottom strip under the world window (PARRY at the outer edge).
+ */
+export function touchButtons(leftHanded: boolean, view: 'full' | 'zoomed' = 'full'): TouchButton[] {
+  if (view === 'zoomed') {
+    const y = PORTRAIT.h - 26;
+    const px = leftHanded ? 28 : PORTRAIT.w - 28;
+    const dx = leftHanded ? 40 : -40;
+    return [
+      { id: 'parry', x: px, y, r: 18 },
+      { id: 'dash', x: px + dx, y: y + 3, r: 14 },
+    ];
+  }
   const cx = leftHanded ? ARENA.x0 / 2 : VIEW_W - (VIEW_W - ARENA.x1) / 2;
   return [
     { id: 'parry', x: cx, y: 222, r: 18 },
@@ -52,6 +65,8 @@ export class TouchModel {
   /** Virtual cursor in game px, or null until the first drag (then it starts at the hero). */
   cursor: { x: number; y: number } | null = null;
   pending = 0;
+  /** Screen layout of the buttons (game px): the full arena or the zoomed portrait view. */
+  view: 'full' | 'zoomed' = 'full';
   private touches = new Map<number, Touch>();
 
   constructor(public opts: TouchOptions) {}
@@ -64,7 +79,7 @@ export class TouchModel {
   }
 
   buttons(): TouchButton[] {
-    return touchButtons(this.opts.leftHanded);
+    return touchButtons(this.opts.leftHanded, this.view);
   }
 
   /** Which button (if any) is held right now (for the pressed look). */

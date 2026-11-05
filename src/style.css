@@ -67,4 +67,17 @@ body.phone .orn { display: none; }
 #footer a { color: #7f93b8; text-decoration: none; margin: 0 6px; }
 #footer a:hover, #footer a:focus { color: #d9d2c0; text-decoration: underline; }
 
-#rotate { display: none; }
+
+/* phones: the board under the title canvas (portrait) scrolls inside its box */
+.bpanel.bp-under { overflow-y: auto; box-shadow: none; padding: 8px 10px; }
+/* phones: the full-screen board overlay (Board button on the title and the death panel) */
+.bover { position: fixed; inset: 0; z-index: 20; background: #0b0d12; display: flex; flex-direction: column;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  font-family: "Press Start 2P", monospace; font-size: 8px; color: #d9d2c0; }
+.bover[hidden] { display: none; }
+.bover-bar { display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid #262e3d; flex: none; }
+.bover-back { font: inherit; font-size: 8px; color: #d9d2c0; background: #12161d; border: 1px solid #3a4558;
+  padding: 10px 14px; min-height: 36px; cursor: pointer; }
+.bover-back:focus-visible { outline: 1px solid #ffd86b; }
+.bover-scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 10px; }
+.bover-scroll .bpanel { position: static; box-shadow: none; overflow: visible; padding: 4px 6px; max-width: 420px; margin: 0 auto; }

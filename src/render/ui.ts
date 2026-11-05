@@ -8,6 +8,7 @@ import Phaser from 'phaser';
 import { addText, setTextColor, setTextValue, snap, type UIText } from './text';
 import { emitAudioEvent } from './events';
 import { setDevice } from './hints';
+import { boardOverlayOpen, closeBoardOverlay } from '../web/boardOverlay';
 
 export const FONT = '"Press Start 2P", monospace';
 export const C = { bone: '#d9d2c0', gold: '#ffd86b', dim: '#7f93b8', stone: '#3a4558', ember: '#ff7a2f', violet: '#9b6bff', teal: '#4fd1c5' };
@@ -305,6 +306,12 @@ export class MenuView {
     const gp = this.scene.input.gamepad;
     const pad = gp && gp.total > 0 ? gp.pad1 : null;
     if (!pad || !this.active) return false;
+    if (boardOverlayOpen()) {
+      // the phone board overlay is on top: B closes it; every button must be released before the menu reacts again
+      if (pad.isButtonDown(PAD.b)) closeBoardOverlay();
+      this.padPrev = { a: true, b: true, start: true, up: true, down: true, left: true, right: true };
+      return false;
+    }
     const now: Record<string, boolean> = {
       a: pad.isButtonDown(PAD.a),
       b: pad.isButtonDown(PAD.b),

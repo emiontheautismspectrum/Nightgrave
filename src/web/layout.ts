@@ -44,14 +44,24 @@ export function snap(css: number, dpr: number): number {
   return k0 / dpr;
 }
 
-export function computeLayout(vw: number, vh: number, dprIn: number, phone: boolean): Layout {
+/**
+ * `base` is the game size in game px: 480x270 (the full arena), or the 9:16 zoomed phone-portrait view.
+ * `boardBelow` (phone portrait, not in a run): the canvas sits at the top and the board fills the space under it.
+ */
+export function computeLayout(vw: number, vh: number, dprIn: number, phone: boolean, base = { w: VIEW_W, h: VIEW_H }, boardBelow = false): Layout {
   const dpr = Math.max(0.5, dprIn || 1);
   if (phone) {
-    const device = Math.floor(Math.min((vw * dpr) / VIEW_W, (vh * dpr) / VIEW_H));
+    const device = Math.floor(Math.min((vw * dpr) / base.w, (vh * dpr) / base.h));
     const exact = device >= 2;
-    const zoom = exact ? device / dpr : Math.max(0.5, Math.min(vw / VIEW_W, vh / VIEW_H));
-    const w = VIEW_W * zoom;
-    const h = VIEW_H * zoom;
+    const zoom = exact ? device / dpr : Math.max(0.25, Math.min(vw / base.w, vh / base.h));
+    const w = base.w * zoom;
+    const h = base.h * zoom;
+    const room = vh - h - 2 * MARGIN;
+    if (boardBelow && room >= 160) {
+      const top = snap(MARGIN / 2, dpr);
+      const py = top + h + MARGIN;
+      return { mode: 'phone', zoom, device: exact ? device : zoom * dpr, exact, game: { x: snap((vw - w) / 2, dpr), y: top, w, h }, panel: { x: snap(MARGIN / 2, dpr), y: py, w: Math.floor(vw - MARGIN), h: Math.floor(vh - py - MARGIN / 2) }, footerY: vh, gp: zoom, pageH: vh };
+    }
     return { mode: 'phone', zoom, device: exact ? device : zoom * dpr, exact, game: { x: snap((vw - w) / 2, dpr), y: snap((vh - h) / 2, dpr), w, h }, panel: null, footerY: vh, gp: zoom, pageH: vh };
   }
   for (let z = Math.floor(((vh - FOOTER_H - 2 * MARGIN) * dpr) / VIEW_H); z >= 2; z--) {

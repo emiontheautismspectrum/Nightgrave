@@ -5,6 +5,7 @@
 import Phaser from 'phaser';
 import { TITLE, VIEW_HEIGHT, VIEW_WIDTH } from '../config';
 import { fetchBoard, getServerDate, online, type Board } from '../net/api';
+import { openBoardOverlay } from '../web/boardOverlay';
 import { utcDateKey } from '../daily';
 import { addDays } from '../shared/daily';
 import { DIFFICULTIES, persist, save } from '../storage';
@@ -206,7 +207,8 @@ export class TitleScene extends Phaser.Scene {
         { label: () => `HERO ${sv.hero.toUpperCase()}`, onActivate: () => this.menu.show(heroPage(() => this.showMain(3), () => this.showMain(3))) },
         { label: () => 'SETTINGS', onActivate: () => this.menu.show(settingsPage(this.ctx(), () => this.showMain(4))) },
         { label: () => 'BEST SCORES', onActivate: () => this.showBest() },
-        { label: () => "TODAY'S BEST", onActivate: () => this.showBoard() },
+        // phones: the full-screen board overlay (same content as the desktop side panel)
+        { label: () => (this.cfg.isTouch() ? 'BOARD' : "TODAY'S BEST"), onActivate: () => (this.cfg.isTouch() ? openBoardOverlay() : this.showBoard()) },
         { label: () => 'CREDITS', onActivate: () => this.menu.show(creditsPage(() => this.showMain(7))) },
       ],
       // the controls hint for the active device sits below the menu block, above the online-board lines

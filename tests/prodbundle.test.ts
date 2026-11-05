@@ -16,6 +16,7 @@ describe('production bundle', () => {
       const js = readdirSync(join(out, 'assets')).filter((f) => f.endsWith('.js')).map((f) => readFileSync(join(out, 'assets', f), 'utf8')).join('\n');
       expect(js.length).toBeGreaterThan(1000);
       expect(js).not.toContain('__ngDebug');
+      expect(js).not.toContain('__ngManual');
       expect(js).not.toMatch(/get\("play"\)|get\('play'\)/);
       expect(js).not.toMatch(/get\("wave"\)|get\('wave'\)/);
     } finally {

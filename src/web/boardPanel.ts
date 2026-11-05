@@ -136,7 +136,7 @@ export class BoardPanel {
         const icon = el('span', `bp-icon bp-${e.hero}`);
         icon.title = e.hero;
         n.append(icon);
-        if ((e as { view?: string }).view === 'zoomed') n.append(el('span', 'bp-icon bp-phone'));
+        if (e.view === 'zoomed') n.append(el('span', 'bp-icon bp-phone'));
       }
       li.append(n, el('span', 'bp-s', e ? String(e.score) : ''));
       this.rows.append(li);

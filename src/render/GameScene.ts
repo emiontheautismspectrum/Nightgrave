@@ -18,11 +18,15 @@ import { pickMusic, SoundDiffer } from './audioLogic';
 import { BossView } from './BossView';
 import { online } from '../net/api';
 import { SubmitPanel } from './SubmitPanel';
-import { setInRun } from '../web/runFlag';
+import { requestRelayout, setInRun } from '../web/runFlag';
+import { boardOverlayOpen, openBoardOverlay } from '../web/boardOverlay';
+import { PORTRAIT, portraitViewport } from '../data/view';
+import { FollowCam } from './camera';
+import { edgeMarkers } from './edgeMarkers';
 import { emitAudioEvent } from './events';
 import { InputCollector } from './input';
 import { settingsPage, type MenuCtx } from './menus';
-import { canRestart, portraitPause, RunDriver, type PauseReason } from './runDriver';
+import { canRestart, isPortraitView, RunDriver, type PauseReason } from './runDriver';
 import { cardLines, ContextHints, getDevice, HINT_TEXT } from './hints';
 import { TouchModel } from './touch';
 import { C, MenuView, onTap, type MenuPage } from './ui';
@@ -33,6 +37,9 @@ const PERF_WINDOW_MS = 3000;
 /** Top HUD band inside the arena width (x 48..432): score, multiplier, wave, ember, pickup timers, daily label, pause. */
 const PAUSE_BTN = { x: 410, y: 5, w: 20, h: 16 };
 const HUD_X = { score: 52, mult: 124, wave: 172, daily: 304 };
+/** Zoomed phone-portrait HUD (216 px wide band, two rows): pause button top right. */
+const PAUSE_BTN_Z = { x: 194, y: 3, w: 19, h: 14 };
+const HUD_Z = { score: [4, 5], mult: [72, 5], wave: [120, 5], daily: [4, 18] } as const;
 const FADE_MS = 120;
 // draw order (CLAUDE.md "Arena"): ground < ground telegraphs < y-sorted world < fog/vignette/overhang < HUD
 const D_GROUND_TELE = 3;
@@ -117,6 +124,23 @@ export class GameScene extends Phaser.Scene {
   private panelText!: UIText;
   private bossView!: BossView;
   private vigOuter!: Phaser.GameObjects.Image;
+  /** Zoomed phone-portrait view (render-only): on while a phone in portrait plays; menus use the full arena. */
+  private zoomed = false;
+  private portrait = false;
+  /** Any tick of this run played with the zoomed view (replay / board metadata only). */
+  private runZoomed = false;
+  private follow = new FollowCam({
+    viewW: portraitViewport().w / PORTRAIT.zoom, viewH: portraitViewport().h / PORTRAIT.zoom, worldW: VIEW_WIDTH, worldH: VIEW_HEIGHT,
+    deadZone: PORTRAIT.deadZone, lead: PORTRAIT.lead, follow: PORTRAIT.follow, followReduced: PORTRAIT.followReduced,
+  });
+  private camLast = { x: 0, y: 0 };
+  private uiCam: Phaser.Cameras.Scene2D.Camera | null = null;
+  private markGfx!: Phaser.GameObjects.Graphics;
+  private hudBand!: Phaser.GameObjects.Rectangle;
+  private pauseRect: { x: number; y: number; w: number; h: number } = PAUSE_BTN;
+  private boardBtn: UIText | null = null;
+  private markerCount = 0;
+  private reducedMq = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
 
   constructor() {
     super('game');
@@ -148,7 +172,9 @@ export class GameScene extends Phaser.Scene {
     // the thin overhang reaching into the arena (<= 8 px) fades like a prop when an actor comes near the edge
     this.overhang = this.add.image(0, 0, bgKey('forest_overhang')).setOrigin(0).setDepth(D_FOG + 2);
     this.buildTelegraphOverlay();
-    this.reticle = this.add.image(0, 0, ATLAS, frame('cursor_reticle')).setDepth(D_HUD);
+    // the reticle is a world object (the cursor target), above fog and overhang, below the HUD
+    this.reticle = this.add.image(0, 0, ATLAS, frame('cursor_reticle')).setDepth(D_FOG + 5);
+    this.markGfx = this.add.graphics().setDepth(D_FOG + 6);
     this.buildHud();
     this.bossView = new BossView(this, { ysort: D_YSORT, fog: D_FOG, hud: D_HUD }, this.vigOuter, this.banner, al.vignette_outer ?? 1);
     const st = save().settings;
@@ -159,6 +185,11 @@ export class GameScene extends Phaser.Scene {
       onPause: () => this.togglePause(),
       onTouch: () => this.applyTouchLayout(),
       menuOpen: () => this.menu?.active === true,
+      toWorld: (x, y) => {
+        if (!this.zoomed) return [x, y];
+        const w = this.cameras.main.getWorldPoint(x, y);
+        return [w.x, w.y];
+      },
     });
     this.menu = new MenuView(this, D_HUD + 10, 0.7);
     this.buildPauseButton();
@@ -166,14 +197,14 @@ export class GameScene extends Phaser.Scene {
     this.chevron = this.add.graphics();
     this.touchIcons = [this.add.image(0, 0, ATLAS, frame('icon_parry')), this.add.image(0, 0, ATLAS, frame('icon_dash'))];
     for (const i of this.touchIcons) i.setDepth(D_HUD + 1);
-    // auto-pause when the tab loses focus or becomes hidden, or the device turns to portrait
+    // auto-pause when the tab loses focus or becomes hidden, or the device rotates
     const onVis = () => {
       if (document.hidden) this.autoPause('hidden');
       else this.driver?.resume('hidden');
     };
     const onBlur = () => this.autoPause('blur');
     const onFocus = () => this.driver?.resume('blur');
-    const onOrient = () => this.checkPortrait();
+    const onOrient = () => this.onResize();
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('blur', onBlur);
     window.addEventListener('focus', onFocus);
@@ -185,18 +216,29 @@ export class GameScene extends Phaser.Scene {
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('resize', onOrient);
+      if (this.zoomed) {
+        // back to the full 480x270 game for the title screen
+        this.zoomed = false;
+        this.scale.resize(VIEW_WIDTH, VIEW_HEIGHT);
+        requestRelayout();
+      }
     });
     audio.setAmbience(true);
     this.applySettings();
     this.newRun();
-    this.checkPortrait();
+    this.portrait = this.isPortrait();
+    this.syncView();
   }
 
   // ------------------------------------------------------------------ pause, touch, settings
 
   private uiHit(x: number, y: number): boolean {
     if (this.menu?.active || this.hint || this.submit?.hit(x, y)) return true;
-    const b = PAUSE_BTN;
+    if (this.boardBtn && this.boardBtn.visible) {
+      const r = this.boardBtn.getBounds();
+      if (x >= r.x - 4 && x <= r.right + 4 && y >= r.y - 4 && y <= r.bottom + 4) return true;
+    }
+    const b = this.pauseRect;
     return x >= b.x - 4 && x <= b.x + b.w + 4 && y >= b.y - 4 && y <= b.y + b.h + 4;
   }
 
@@ -210,16 +252,112 @@ export class GameScene extends Phaser.Scene {
   }
 
   private isPortrait(): boolean {
-    return portraitPause(window.innerWidth, window.innerHeight, this.cfg.isTouch());
+    return isPortraitView(window.innerWidth, window.innerHeight, this.cfg.isTouch());
   }
 
-  private checkPortrait(): void {
-    if (!this.driver) return;
-    if (this.isPortrait()) this.autoPause('portrait');
-    else this.driver.resume('portrait');
+  /** Rotating mid-run re-lays out and pauses: the player resumes deliberately (RESUME). */
+  private onResize(): void {
+    const p = this.isPortrait();
+    if (p !== this.portrait) {
+      this.portrait = p;
+      if (this.driver && this.sim.state.alive && !this.hint) this.autoPause('rotate');
+    }
+    this.syncView();
   }
 
-  /** Focus loss, hidden tab, portrait: pause and open the pause menu so the player resumes deliberately. */
+  /** The zoomed view is on only while a phone in portrait plays (pause menu, cards, death panel: the full arena). */
+  private syncView(): void {
+    const z = this.portrait && !!this.sim && this.sim.state.alive && !this.menu.active && !this.hint;
+    if (z !== this.zoomed) this.setView(z);
+  }
+
+  private setView(z: boolean): void {
+    this.zoomed = z;
+    const W = z ? PORTRAIT.w : VIEW_WIDTH;
+    const H = z ? PORTRAIT.h : VIEW_HEIGHT;
+    if (this.scale.width !== W || this.scale.height !== H) this.scale.resize(W, H);
+    const cam = this.cameras.main;
+    if (z) {
+      const vp = portraitViewport();
+      cam.setViewport(vp.x, vp.y, vp.w, vp.h).setZoom(PORTRAIT.zoom);
+      if (!this.uiCam) this.uiCam = this.cameras.add(0, 0, W, H, false, 'ui');
+      this.uiCam.setViewport(0, 0, W, H).setScroll(0, 0).setVisible(true);
+      const h = this.sim.state.hero;
+      this.follow.reset(h.x, h.y);
+      this.camLast = { x: h.x, y: h.y };
+      this.placeCamera();
+    } else {
+      cam.setViewport(0, 0, W, H).setZoom(1).setScroll(0, 0);
+      this.uiCam?.setVisible(false);
+      for (const o of this.children.list) o.cameraFilter = 0;
+      this.markGfx.clear();
+    }
+    this.input2.touch.view = z ? 'zoomed' : 'full';
+    this.layoutHud();
+    requestRelayout();
+  }
+
+  /** HUD, pause button, boss bar and banner for the current view (screen game px). */
+  private layoutHud(): void {
+    const z = this.zoomed;
+    if (z) this.hudBand.setPosition(0, 0).setSize(PORTRAIT.w, PORTRAIT.hudH);
+    else this.hudBand.setPosition(48, 4).setSize(384, 18);
+    const pos = (o: UIText, full: [number, number], zz: readonly [number, number]) => o.setPosition(...(z ? zz : full));
+    pos(this.hudScore, [HUD_X.score, 9], HUD_Z.score);
+    pos(this.hudMult, [HUD_X.mult, 9], HUD_Z.mult);
+    pos(this.hudWave, [HUD_X.wave, 9], HUD_Z.wave);
+    pos(this.hudDaily, [HUD_X.daily, 9], HUD_Z.daily);
+    this.banner.setPosition(z ? PORTRAIT.w / 2 : VIEW_WIDTH / 2, z ? 64 : 70);
+    this.pauseRect = z ? PAUSE_BTN_Z : PAUSE_BTN;
+    this.pauseBtn.setPosition(this.pauseRect.x, this.pauseRect.y);
+    this.bossView.setLayout(z);
+  }
+
+  /** Centre the Phaser camera on the follow camera (whole world px: crisp). */
+  private placeCamera(): void {
+    const cam = this.cameras.main;
+    cam.centerOn(this.follow.x, this.follow.y);
+    cam.setScroll(Math.round(cam.scrollX), Math.round(cam.scrollY));
+  }
+
+  /** Render-only camera follow + fairness edge markers + which camera draws what (world vs HUD). */
+  private updateZoomed(delta: number): void {
+    if (!this.zoomed || !this.uiCam) return;
+    const st = this.sim.state;
+    const h = st.hero;
+    const mv = Math.hypot(h.x - this.camLast.x, h.y - this.camLast.y);
+    const dir = mv > 0.3 ? { x: (h.x - this.camLast.x) / mv, y: (h.y - this.camLast.y) / mv } : null;
+    this.camLast = { x: h.x, y: h.y };
+    const reduced = save().settings.reducedFlashes || !!this.reducedMq?.matches;
+    if (!this.driver.paused) this.follow.step(delta, h.x, h.y, dir, reduced);
+    this.placeCamera();
+    const g = this.markGfx;
+    g.clear();
+    this.markerCount = 0;
+    if (st.alive) {
+      for (const m of edgeMarkers(st, this.sim.params, this.follow.rect(), PORTRAIT.horizonTicks)) {
+        this.markerCount++;
+        const col = m.color === 'violet' ? 0x9b6bff : 0xd12b3a;
+        const len = 3 + m.size * 2;
+        const w = 1.5 + m.size;
+        const dx = Math.cos(m.ang);
+        const dy = Math.sin(m.ang);
+        const r = (v: number) => Math.round(v);
+        g.fillStyle(0x0b0d12, 0.85).fillCircle(r(m.x), r(m.y), Math.ceil(len / 2) + 2);
+        g.fillStyle(col, 1).fillTriangle(
+          r(m.x + dx * len * 0.6), r(m.y + dy * len * 0.6),
+          r(m.x - dx * len * 0.4 - dy * w), r(m.y - dy * len * 0.4 + dx * w),
+          r(m.x - dx * len * 0.4 + dy * w), r(m.y - dy * len * 0.4 - dx * w),
+        );
+      }
+    }
+    // HUD objects (depth >= D_HUD) draw only on the fixed UI camera, the world only on the follow camera
+    const mainId = this.cameras.main.id;
+    const uiId = this.uiCam.id;
+    for (const o of this.children.list) o.cameraFilter = (o as unknown as { depth: number }).depth >= D_HUD ? mainId : uiId;
+  }
+
+  /** Focus loss, hidden tab, rotation: pause and open the pause menu so the player resumes deliberately. */
   private autoPause(r: PauseReason): void {
     if (!this.driver || !this.sim.state.alive) return;
     this.driver.pause(r);
@@ -264,7 +402,7 @@ export class GameScene extends Phaser.Scene {
     // a missed focus/visibility event must never leave the run frozen after RESUME
     if (document.hasFocus()) this.driver.resume('blur');
     if (!document.hidden) this.driver.resume('hidden');
-    if (!this.isPortrait()) this.driver.resume('portrait');
+    this.driver.resume('rotate');
     this.driver.resume('menu');
   }
 
@@ -321,8 +459,15 @@ export class GameScene extends Phaser.Scene {
     const k = this.ctxHints.tick(this.sim.state);
     if (k) {
       this.ctxText?.destroy();
-      const y = this.sim.state.hero.y < 135 ? 222 : 36;
-      const t = snap(addText(this, VIEW_WIDTH / 2, y, HINT_TEXT[k], { color: k === 'parry' ? C.violet : '#d12b3a' }).setOrigin(0.5).setDepth(D_HUD));
+      let x = VIEW_WIDTH / 2;
+      let y = this.sim.state.hero.y < 135 ? 222 : 36;
+      if (this.zoomed) {
+        // screen space of the portrait view: the far half of the world window
+        const sy = portraitViewport().y + (this.sim.state.hero.y - this.follow.rect().y0) * PORTRAIT.zoom;
+        x = PORTRAIT.w / 2;
+        y = sy < portraitViewport().y + portraitViewport().h / 2 ? portraitViewport().y + portraitViewport().h - 16 : portraitViewport().y + 16;
+      }
+      const t = snap(addText(this, x, y, HINT_TEXT[k], { color: k === 'parry' ? C.violet : '#d12b3a' }).setOrigin(0.5).setDepth(D_HUD));
       this.ctxText = t;
       this.tweens.add({ targets: t, alpha: 0, delay: 1400, duration: 300, onComplete: () => t.destroy() });
       // each hint is remembered on its own (a player who never meets a blade still sees 'PARRY!' only once)
@@ -370,7 +515,7 @@ export class GameScene extends Phaser.Scene {
 
   private buildHud(): void {
     // top band above the arena (y 4..22) on a subtle dark translucent strip
-    this.add.rectangle(48, 4, 384, 18, 0x0b0d12, 0.55).setOrigin(0).setDepth(D_HUD - 1);
+    this.hudBand = this.add.rectangle(48, 4, 384, 18, 0x0b0d12, 0.55).setOrigin(0).setDepth(D_HUD);
     // one baseline (y 9), fixed gaps
     this.hudScore = addText(this, HUD_X.score, 9, '');
     this.hudMult = addText(this, HUD_X.mult, 9, '', { color: '#ffb347' });
@@ -396,7 +541,9 @@ export class GameScene extends Phaser.Scene {
     this.cfg.hero = save().hero;
     this.sim = new Sim(run.seed, this.cfg.difficulty, this.cfg.startWave ? { startWave: this.cfg.startWave } : {});
     this.driver = new RunDriver(this.sim);
-    if (this.isPortrait()) this.driver.pause('portrait');
+    this.runZoomed = false;
+    this.boardBtn?.destroy();
+    this.boardBtn = null;
     this.sounds.reset();
     this.bossView.reset();
     this.runLabel = run.label;
@@ -428,6 +575,7 @@ export class GameScene extends Phaser.Scene {
 
   override update(_time: number, delta: number): void {
     this.input2.pollPad();
+    this.syncView();
     if (this.hint && this.hintDismiss) {
       const gp = this.input.gamepad;
       const pad = gp && gp.total > 0 ? gp.pad1 : null;
@@ -441,14 +589,14 @@ export class GameScene extends Phaser.Scene {
     if (!st.alive) {
       // Presses during the guard are discarded every frame, so the press held at death cannot skip the panel.
       const confirmed = this.input2.takeConfirm();
-      if (confirmed && canRestart(this.time.now, this.deadAt) && !this.menu.active) this.newRun();
+      if (confirmed && canRestart(this.time.now, this.deadAt) && !this.menu.active && !boardOverlayOpen()) this.newRun();
       this.draw();
+      this.updateZoomed(delta);
       return;
     }
-    this.driver.advance(delta, () => this.input2.sample(), () => {
-      for (const e of this.sim.state.events) this.onEvent(e);
-      for (const ev of this.sounds.tick(this.sim.state, this.sim.state.events, this.time.now)) emitAudioEvent(ev);
-    });
+    // smoke-test builds only: tests can freeze real time and step ticks themselves (window.__ngStep)
+    const manual = (import.meta.env.DEV || import.meta.env.VITE_SMOKE === '1') && (window as unknown as { __ngManual?: boolean }).__ngManual === true;
+    if (!manual) this.driver.advance(delta, () => this.input2.sample(), this.onTick);
     audio.setMusic(pickMusic('run', this.sim.state, audio.current()));
     this.contextHints();
     // slow, small fog drift (a few px back and forth; the fog layer is full-screen and avoids the calm zone)
@@ -456,7 +604,14 @@ export class GameScene extends Phaser.Scene {
     const dx = this.sim.state.hero.x - this.sim.params.cx;
     for (const l of this.parallax) l.sprite.tilePositionX = Math.round(dx * l.k);
     this.draw();
+    this.updateZoomed(delta);
   }
+
+  private onTick = (): void => {
+    if (this.zoomed) this.runZoomed = true;
+    for (const e of this.sim.state.events) this.onEvent(e);
+    for (const ev of this.sounds.tick(this.sim.state, this.sim.state.events, this.time.now)) emitAudioEvent(ev);
+  };
 
   /** Frame time over 20 ms for 3 s: lower particles and fog for the rest of the session (render only, never back). */
   private watchPerf(delta: number): void {
@@ -547,7 +702,8 @@ export class GameScene extends Phaser.Scene {
     this.deadAt = this.time.now;
     this.menu.hide();
     const hero = this.cfg.hero;
-    const meta = { hero, input: [...this.input2.sources] };
+    const view = this.runZoomed ? ('zoomed' as const) : ('full' as const);
+    const meta = { hero, input: [...this.input2.sources], view };
     // a dev start-wave run is not a real run: no replay (startWave is not recorded) and never saved
     this.lastReplay = this.cfg.startWave ? null : encodeReplay(st.seed, st.difficulty, this.sim.log, meta);
     this.hero.play(`${hero}_death`);
@@ -577,12 +733,19 @@ export class GameScene extends Phaser.Scene {
     );
     snap(setTextColor(this.panelText, isNew ? C.gold : C.bone));
     this.panel.setVisible(true);
+    // phones: a Board button above the death panel opens the full-screen board overlay
+    if (this.cfg.isTouch() && online()) {
+      const b = snap(addText(this, VIEW_WIDTH / 2, VIEW_HEIGHT / 2 - 62, '[ BOARD ]', { color: C.gold }).setOrigin(0.5).setDepth(D_HUD + 6));
+      b.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-6, -6, b.width + 12, b.height + 12), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
+      onTap(b, () => openBoardOverlay());
+      this.boardBtn = b;
+    }
     this.input2.takeConfirm(); // ignore the press that was in flight when we died
     // Hard only, online, never a dev run: offer the board if the score would enter today's top 10
     if (d === 'hard' && online() && shouldSaveRun('death', this.cfg.startWave)) {
       const sim = this.sim;
       this.submit = new SubmitPanel(this, D_HUD + 6);
-      void this.submit.offer({ date: this.runDate, seed: this.runSeed, score, hero, log: sim.log }, () => this.sim === sim);
+      void this.submit.offer({ date: this.runDate, seed: this.runSeed, score, hero, view, log: sim.log }, () => this.sim === sim);
     }
   }
 
@@ -663,7 +826,12 @@ export class GameScene extends Phaser.Scene {
     // dev / smoke-test builds only (VITE_SMOKE=1): never in a production bundle, it would make bots trivial
     if (import.meta.env.DEV || import.meta.env.VITE_SMOKE === '1') (window as unknown as { __ngDebug?: object }).__ngDebug = {
       x: st.hero.x, y: st.hero.y, tick: st.tick, alive: st.alive, parryStart: st.hero.parryStart, paused: this.driver.paused,
-      menu: this.menu.active, hint: !!this.hint,
+      menu: this.menu.active, hint: !!this.hint, dashStart: st.hero.dashStart, zoomed: this.zoomed, runZoomed: this.runZoomed,
+      game: [this.scale.width, this.scale.height], cam: this.zoomed ? Object.values(this.follow.rect()) : null, markers: this.markerCount,
+      step: (n: number) => {
+        for (let i = 0; i < n; i++) this.driver.advance(1000 / TICK_RATE, () => this.input2.sample(), this.onTick);
+      },
+      replay: () => JSON.stringify(this.sim.log),
     };
   }
 

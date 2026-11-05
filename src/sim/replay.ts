@@ -36,6 +36,8 @@ export interface Replay {
 export interface ReplayMeta {
   hero: 'knight' | 'wisp';
   input: ('mouse' | 'keyboard' | 'gamepad' | 'touch')[];
+  /** The camera: the full arena, or the zoomed phone-portrait view (never affects the simulation). */
+  view?: 'full' | 'zoomed';
 }
 
 const INPUTS = ['mouse', 'keyboard', 'gamepad', 'touch'] as const;
@@ -45,7 +47,7 @@ export function sanitizeMeta(m: unknown): ReplayMeta | undefined {
   const hero = o.hero === 'wisp' ? 'wisp' : o.hero === 'knight' ? 'knight' : null;
   if (!hero) return undefined;
   const input = Array.isArray(o.input) ? INPUTS.filter((k) => (o.input as unknown[]).includes(k)) : [];
-  return { hero, input };
+  return { hero, input, view: o.view === 'zoomed' ? 'zoomed' : 'full' };
 }
 
 export function encodeReplay(seed: number, difficulty: Difficulty, frames: readonly InputFrame[], meta?: ReplayMeta): Replay {

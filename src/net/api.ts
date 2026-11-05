@@ -14,6 +14,8 @@ export interface BoardEntry {
   score: number;
   hero: 'knight' | 'wisp';
   durationTicks: number;
+  /** How the run was seen: the whole arena, or the zoomed phone-portrait camera (metadata only). */
+  view: 'full' | 'zoomed';
 }
 export interface Board {
   date: string;
@@ -61,7 +63,7 @@ export function parseBoard(raw: unknown): Board | null {
     const rank = int(r.rank);
     const dur = int(r.durationTicks);
     if (!name || score === null || rank === null || dur === null || (r.hero !== 'knight' && r.hero !== 'wisp')) continue;
-    top.push({ rank, name, score, hero: r.hero, durationTicks: dur });
+    top.push({ rank, name, score, hero: r.hero, durationTicks: dur, view: r.view === 'zoomed' ? 'zoomed' : 'full' });
   }
   let champion: Board['champion'] = null;
   const c = o.champion as Record<string, unknown> | null;
