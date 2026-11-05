@@ -25,14 +25,15 @@ PORTAL_ALTAR = (120, 78)  # dais centre
 PORTAL_CLEAR_RADIUS = 20
 
 # Landmarks: base centres (px)
-GIANT_TREE = (378, 125)  # trunk base centre
+GIANT_TREE = (380, 118)  # trunk base centre (v3: colossal tree with ground roots)
+GIANT_TREE_ROOTS = 7  # main roots (S-curved, branching, 60-110 px, tips at x >= ROOT_MIN_X)
+ROOT_MIN_X = 320
+GLOW_MUSHROOMS = 6  # pale glowing mushroom clusters in root crevices
 RUNE_SWORD = (378, 140)  # sword stuck in a small stone base at the foot of the trunk
 GALLOWS = (138, 150)
 WELL = (362, 172)
 WELL_LAMP = (386, 162)  # small bent gas lamp post next to the well (short variant: clears the sword's base)
-RIBCAGE = (372, 242)  # beast ribcage, bottom-right (kept off the right-side hollows)
 WAGON = (270, 44)  # top edge, half behind the forest
-WAGON_HORSE = (318, 46)  # horse skeleton beside the wagon
 CABIN = (54, 242)  # lower-left, half hidden by the forest (unchanged from the previous arena)
 WORKSHOP = [("workbench_0", 46, 26), ("weapon_rack_0", 70, 22), ("crate_0", 36, 28), ("crate_1", 84, 28), ("gas_lamp_0", 96, 28)]
 FALLEN_WEAPONS = [("weapon_sword_1", 404, 152), ("weapon_spear_1", 352, 140), ("helmet_0", 396, 160)]
@@ -56,15 +57,21 @@ MAX_TREES = 6
 
 # Graves: 8-12 in 2-3 loose clusters (2-4 each) plus singles. Cluster centres (base points) and sizes.
 # ((centre), count, (spread x, spread y)) - spreads follow the free space left by the landmarks
-GRAVE_CLUSTERS = [((204, 58), 4, (10, 13)), ((246, 230), 4, (14, 10)), ((60, 103), 2, (2, 5))]
+GRAVE_CLUSTERS = [((206, 60), 4, (13, 14)), ((248, 231), 3, (18, 9)), ((60, 103), 2, (2, 5))]
 GRAVE_SINGLES = [(84, 152), (120, 195)]
+SMALL_GRAVES = ["grave_sunk_0", "grave_broken_1", "grave_slab_0", "grave_sunk_1"]  # bottom group: smaller variants
+BONES = [("skull_0", 102, 104), ("bone_pile_1", 140, 104), ("skull_1", 196, 76), ("bone_pile_3", 76, 116)]  # <= 4
+EXTRA_TREES = [(404, 226)]  # one small tree to fill the bottom-right (after removing the ribcage)
 GRAVE_LANDMARK_CLEAR = 24
 GRAVE_ALTAR_CLEAR = 20
 FENCE_FRAGMENTS = 3  # short broken fence fragments placed next to graves
 
 # Small decor budget (<= 25) in loose clusters; Poisson-disc min spacing within a cluster
-SMALL_DECOR_CLUSTERS = [((64, 60), 4), ((150, 222), 4), ((300, 70), 3), ((236, 40), 3), ((420, 120), 3), ((110, 112), 3),
-                        ((330, 240), 3)]
+SMALL_DECOR_CLUSTERS = [((64, 60), 4), ((150, 222), 4), ((300, 70), 3), ((236, 40), 3), ((420, 120), 3),
+                        ((400, 200), 4), ((330, 240), 3)]
+# Worn loam paths (polylines of base points): altar -> left of the centre -> cabin, and a short one toward the well
+PATHS = [[(122, 100), (150, 132), (160, 168), (138, 200), (98, 226)], [(300, 238), (322, 214), (344, 192), (356, 180)]]
+PATH_WIDTH = (14, 20)
 SMALL_DECOR_MAX = 25
 SMALL_DECOR_SPACING = 7
 FREE_AREA_MIN = 0.45

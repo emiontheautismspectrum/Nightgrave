@@ -130,6 +130,7 @@ ANIMS = ["shade_rise", "shade_idle", "shade_cast", "shade_dissolve", "portal_ign
          "rune_sword", "gallows_cage", "crow", "hunter_wagon", "well_wisp", "cabin_smoke", "cabin_window",
          "altar_flame", "altar_flame_tele", "altar_chain"] + [f"rune_glow_{g}" for g in range(2)]
 # static landmarks shown for context in the strips (giant tree is the new main landmark)
+ANIMS += ["giant_tree_crack", "glow_mushrooms"]
 ANIM_CONTEXT = ["giant_tree", "rune_sword_base"]
 
 

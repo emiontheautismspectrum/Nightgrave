@@ -76,7 +76,7 @@
     "parallax": 0.0
    }
   ],
-  "graves": 8,
+  "graves": 10,
   "heroSpawn": [
    240,
    135
@@ -135,10 +135,10 @@
    },
    {
     "box": [
-     314,
-     -2,
-     442,
-     126
+     332,
+     -1,
+     428,
+     119
     ],
     "sprite": "giant_tree"
    },
@@ -189,30 +189,12 @@
    },
    {
     "box": [
-     344,
-     202,
-     400,
-     242
-    ],
-    "sprite": "beast_ribcage"
-   },
-   {
-    "box": [
-     246,
-     12,
-     294,
+     242,
+     4,
+     298,
      44
     ],
     "sprite": "hunter_wagon"
-   },
-   {
-    "box": [
-     302,
-     32,
-     334,
-     46
-    ],
-    "sprite": "horse_skeleton"
    },
    {
     "box": [
@@ -359,12 +341,6 @@
    "group": "telegraph",
    "h": 8,
    "w": 6
-  },
-  "beast_ribcage": {
-   "frames": 1,
-   "group": "arena",
-   "h": 40,
-   "w": 56
   },
   "blade": {
    "frames": 4,
@@ -555,8 +531,20 @@
   "giant_tree": {
    "frames": 1,
    "group": "arena",
-   "h": 128,
-   "w": 128
+   "h": 120,
+   "w": 96
+  },
+  "giant_tree_crack": {
+   "frames": 4,
+   "group": "arena",
+   "h": 30,
+   "w": 4
+  },
+  "glow_mushrooms": {
+   "frames": 3,
+   "group": "arena",
+   "h": 5,
+   "w": 7
   },
   "grass_0": {
    "frames": 2,
@@ -690,12 +678,6 @@
    "h": 16,
    "w": 16
   },
-  "horse_skeleton": {
-   "frames": 1,
-   "group": "arena",
-   "h": 14,
-   "w": 32
-  },
   "hunter_cabin": {
    "frames": 1,
    "group": "arena",
@@ -705,8 +687,8 @@
   "hunter_wagon": {
    "frames": 3,
    "group": "arena",
-   "h": 32,
-   "w": 48
+   "h": 40,
+   "w": 56
   },
   "icon_dash": {
    "frames": 2,
@@ -1005,38 +987,32 @@
   "tree_0": {
    "frames": 2,
    "group": "arena",
-   "h": 32,
-   "w": 26
+   "h": 40,
+   "w": 30
   },
   "tree_1": {
    "frames": 2,
    "group": "arena",
-   "h": 36,
-   "w": 30
+   "h": 44,
+   "w": 34
   },
   "tree_2": {
    "frames": 2,
    "group": "arena",
-   "h": 40,
-   "w": 34
+   "h": 34,
+   "w": 26
   },
   "tree_3": {
    "frames": 2,
    "group": "arena",
-   "h": 34,
-   "w": 28
+   "h": 40,
+   "w": 32
   },
-  "tree_large_0": {
+  "tree_4": {
    "frames": 2,
    "group": "arena",
-   "h": 64,
-   "w": 56
-  },
-  "tree_large_1": {
-   "frames": 2,
-   "group": "arena",
-   "h": 64,
-   "w": 56
+   "h": 28,
+   "w": 34
   },
   "weapon_halberd_0": {
    "frames": 2,

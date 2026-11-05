@@ -31,6 +31,8 @@ import arena_layout as L  # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STAGE0_COMMIT = "7454e7f"  # "Stage 0: deterministic pixel-art pipeline, palette validator, style board"
 PREV_COMMIT = "ff5f5a3"  # Part C: the last arena before the v2 softening pass
+V2_COMMIT = "72c0155"  # the arena v2 ground (flatness baseline)
+MIN_DEPTH_VS_V2 = 1.8
 BUSY_RANGE = 8.0  # L* units
 PROP_DITHER_MAX = 4  # "a few pixels of texture" per prop sprite
 MAX_VS_STAGE0 = 1.3
@@ -123,7 +125,8 @@ def compose_floor(assets):
     for n in ("vignette", "vignette_outer"):
         blend(img, os.path.join(bgd, f"{n}.png"), al.get(n, 1.0))
     over(img, os.path.join(bgd, "forest_near.png"))
-    over(img, os.path.join(bgd, "forest_overhang.png"))
+    if os.path.exists(os.path.join(bgd, "forest_overhang.png")):
+        over(img, os.path.join(bgd, "forest_overhang.png"))
     return img
 
 
@@ -214,6 +217,39 @@ def fine_dither(path, frame_w=None):
 fine_checkers = fine_dither
 
 
+def depth(img):
+    """Large-scale depth: std of block-mean L* over 32x32 blocks fully inside the arena outside the calm zone."""
+    l = lstar(img)
+    m = region_mask()
+    means = [l[y:y + 32, x:x + 32].mean() for y in range(0, l.shape[0] - 31, 32) for x in range(0, l.shape[1] - 31, 32)
+             if m[y:y + 32, x:x + 32].all()]
+    return float(np.std(means))
+
+
+def write_v3_compare(v2_img, v3_img, floor_img):
+    """assets/preview/arena_v3_compare.png (V2 | V3 at 2x) and ground_closeup.png (2x crop of the bare ground)."""
+    out = np.zeros((v2_img.shape[0], v2_img.shape[1] * 2 + 8, 3), dtype=np.uint8)
+    out[:] = (11, 13, 18)
+    out[:, :v2_img.shape[1]] = v2_img
+    out[:, v2_img.shape[1] + 8:] = v3_img
+    pv = os.path.join(ROOT, "assets", "preview")
+    Image.fromarray(np.repeat(np.repeat(out, 2, 0), 2, 1)).save(os.path.join(pv, "arena_v3_compare.png"), optimize=False)
+    x0, y0, x1, y1 = L.ARENA
+    crop = floor_img[y0:y1, x0:x1]
+    Image.fromarray(np.repeat(np.repeat(crop, 2, 0), 2, 1)).save(os.path.join(pv, "ground_closeup.png"), optimize=False)
+
+
+def write_wagon_closeup(old_path, new_path):
+    """assets/preview/wagon_closeup.png: previous (v2) wagon and the new one side by side at 8x (first frames)."""
+    old = Image.open(old_path).convert("RGBA").crop((0, 0, 48, 32))
+    new = Image.open(new_path).convert("RGBA").crop((0, 0, 56, 40))
+    canvas = Image.new("RGBA", (48 + 56 + 8, 40), (18, 22, 29, 255))
+    canvas.paste(old, (0, 40 - 32), old)
+    canvas.paste(new, (56, 0), new)
+    canvas.convert("RGB").resize((canvas.width * 8, canvas.height * 8), Image.NEAREST).save(
+        os.path.join(ROOT, "assets", "preview", "wagon_closeup.png"), optimize=False)
+
+
 def write_compare(panels):
     """assets/preview/noise_compare.png: the three composites side by side at 2x, numbers written under each."""
     from nglib import canvas as C
@@ -261,6 +297,14 @@ def main():
             failed |= not ok
             print(f"  {label:6s} {name:42s} {ratio:5.2f} (<= {limit})  {'OK' if ok else 'FAIL'}")
     write_compare([("STAGE 0 FLOOR", s0_img, s0), ("PREVIOUS ARENA", prev_img, prev), ("NEW ARENA", cur_img, cur)])
+    v2_dir = build_commit(V2_COMMIT)
+    d_v2, d_new = depth(compose_floor(v2_dir)), depth(compose_floor(here))
+    ok = d_new >= MIN_DEPTH_VS_V2 * d_v2
+    failed |= not ok
+    print(f"ground depth (std of 32x32 block-mean L*, floor without props): v2 {d_v2:.2f}, new {d_new:.2f} "
+          f"= {d_new / d_v2:.2f}x (>= {MIN_DEPTH_VS_V2}x)  {'OK' if ok else 'FAIL'}")
+    write_v3_compare(compose_current(v2_dir), cur_img, compose_floor(here))
+    write_wagon_closeup(os.path.join(v2_dir, "sprites", "hunter_wagon.png"), os.path.join(here, "sprites", "hunter_wagon.png"))
     bad = {}
     for n in LAYERS:
         c = fine_checkers(os.path.join(ROOT, "assets", "backgrounds", f"{n}.png"))

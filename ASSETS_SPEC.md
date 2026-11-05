@@ -15,8 +15,8 @@ Output: `assets/sprites/*.png`, one atlas `assets/atlas/nightgrave.png` + `night
 bg0 #0b0d12, bg1 #12161d, fog #1c2330, stone_dark #262e3d, stone #3a4558, moss #2b3a2e, forest #0f1a15, bone #d9d2c0,
 amber #ffb347, ember #ff7a2f, gold #ffd86b, blood #d12b3a, blood_dark #6e1423, violet #9b6bff, violet_dark #3d2a78, teal #4fd1c5.
 Decor-only: moon #7f93b8 (rim light, reflections), earth #2b221d (dirt, roots), dry #5e4b34 (dead grass, bone shadow, bark).
-Ground-only (v3): fern #1d3229 (teal-green floor), loam #2f241c (worn paths, desaturated), mist #1d2b38 (soft moonlit
-floor). Darker than first suggested (#2f4a3a / #243447) so a blade keeps >= 2.5 contrast on every ground tone. Allowed in
+Ground-only (v3): fern #17281f (teal-green floor), loam #2f241c (worn paths, desaturated), mist #1e2d3c (soft moonlit
+floor). Darker than first suggested (#2f4a3a / #243447): an L* ladder bg0 3.6, forest 8.0, fern 14.4, mist 17.6, and a blade keeps >= 2.5 contrast on every ground tone. Allowed in
 ground tiles/decals, roots, shadows, ferns, grass, leaves, and as small moss/fern accents (<= 10% of pixels) on props;
 never in hero, threat, pickup, caster or UI sprites.
 

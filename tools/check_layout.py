@@ -64,6 +64,16 @@ def main():
         errs.append(f"{len(trees)} non-landmark trees (> 6)")
     if not 8 <= len(graves) <= 12:
         errs.append(f"{len(graves)} graves (need 8-12)")
+    bones = [p for p in real if p["sprite"].startswith(("bone_pile", "skull", "beast_ribcage", "horse_skeleton"))]
+    info.append(f"bones/skulls {len(bones)} (<= 4, none in the lower-right quadrant)")
+    if len(bones) > 4:
+        errs.append(f"{len(bones)} bone/skull props (> 4)")
+    for p in bones:
+        if p["sprite"] in ("beast_ribcage", "horse_skeleton") or (p["x"] + p["w"] / 2 > 300 and p["baseY"] > 150):
+            errs.append(f"bones {p['sprite']} at ({p['x']},{p['y']}) in the lower-right / removed set")
+    frags = sum(p["sprite"].startswith("fence_frag") for p in real)
+    if not 2 <= frags <= 3:
+        errs.append(f"{frags} fence fragments (need 2-3)")
     occ = np.zeros((y1 - y0, x1 - x0), dtype=bool)
     for p in real:
         bx0, by0, bx1, by1 = box(p)

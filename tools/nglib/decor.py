@@ -206,13 +206,72 @@ def _dead_tree(w, h, seed, spread, trunk=3, depth=4, twist=0.0):
     return a
 
 
+def _sturdy_tree(w, h, seed, lean=0.0, fork=False, broken=False, vines=False, twist=0.0, height=0.62):
+    """v3 small dead tree: thick tapered trunk in 3 flat tones (bg1 shade / earth mid / dry lit edge), 3-6 sturdy
+    branches (2-3 px) ending in clustered twig masses, knotted base with root flares, optional moss/vines."""
+    rng = np.random.default_rng(seed)
+    a = C.new(w, h)
+    cx, base = w / 2, h - 2
+    top = base - h * height
+    spine = []
+    for k in range(40):
+        t = k / 39
+        y = base + (top - base) * t
+        x = cx + lean * (base - y) + np.sin(t * math.pi * 1.5) * twist
+        spine.append((x, y, t))
+    for x, y, t in spine:  # tapered trunk
+        half = 3.6 - 2.0 * t
+        for xx in range(int(round(x - half)), int(round(x + half)) + 1):
+            col = "bg1" if xx > x + half * 0.3 else ("dry" if xx <= x - half + 0.6 else "earth")
+            C.put(a, xx, int(round(y)), col)
+    for k in range(2, 6):  # bark grooves
+        x, y, _t = spine[k * 6]
+        C.put(a, int(round(x)), int(round(y)), "bg1")
+        C.put(a, int(round(x)), int(round(y)) - 1, "bg1")
+
+    def blob(x, y):  # clustered twig mass: a small solid cluster, never 1 px scribbles
+        for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, -1), (1, -1), (-1, 1), (2, -1), (0, 1)):
+            if rng.random() < 0.85:
+                C.put(a, int(round(x + dx)), int(round(y + dy)), "earth" if dy < 0 else "bg1")
+
+    tx, ty, _t = spine[-1]
+    starts = [spine[int(f * 39)] for f in ((0.55, 0.7, 0.85, 1.0) if not broken else (0.5, 0.65, 0.8))]
+    angs = [-2.3, -0.8, -1.9, -1.2, -2.7, -0.5]
+    for i, (sx, sy, _t) in enumerate(starts + ([spine[-1]] if fork else [])):
+        ang = angs[i % len(angs)] + rng.uniform(-0.2, 0.2) + lean
+        ln = rng.uniform(6, 10) * (1.3 if fork and i >= len(starts) - 1 else 1)
+        ex, ey = sx + math.cos(ang) * ln, sy + math.sin(ang) * ln
+        for k in range(2):
+            C.line(a, sx + k * 0.6, sy, ex + k * 0.6, ey, "earth" if k == 0 else "bg1")
+        blob(ex, ey)
+        if vines:
+            for yy in range(int(ey) + 1, int(ey) + int(rng.integers(4, 9))):
+                C.put(a, int(round(ex)), yy, "moss")
+    if broken:  # jagged broken top
+        C.put(a, int(round(tx)) - 1, int(round(ty)) - 1, "earth")
+        C.put(a, int(round(tx)) + 1, int(round(ty)) - 2, "dry")
+    for dx in (-5, -4, 4, 5, 6):  # knotted base with root flares
+        C.put(a, int(cx + dx), base, "earth")
+    C.line(a, cx - 3, base - 1, cx - 7, base, "earth")
+    C.line(a, cx + 3, base - 1, cx + 8, base, "bg1")
+    for k in range(3):  # small moss patch on the shaded side of the base
+        C.put(a, int(cx + 1 + k), base - 1 - (k % 2), "moss")
+    return a
+
+
 def trees():
+    """v3: five sturdy variants (28-44 px): A leaning, B forked, C broken top, D hanging vines, E low and twisted."""
     out = {}
-    specs = [(26, 32, 7, 0.55), (30, 36, 21, 0.5), (34, 40, 33, 0.6), (28, 34, 47, 0.52)]
-    for i, (w, h, seed, sp) in enumerate(specs):
-        out[f"tree_{i}"] = prop(_dead_tree(w, h, seed, sp), {"dry": "earth", "earth": "bg0"})
-    for i, (seed, tw) in enumerate([(91, 0.12), (93, -0.15)]):
-        out[f"tree_large_{i}"] = prop(_dead_tree(56, 64, seed, 0.5, trunk=4, depth=5, twist=tw), {"dry": "earth", "earth": "bg0"})
+    specs = [
+        dict(w=30, h=40, seed=7, lean=0.22),
+        dict(w=34, h=44, seed=21, fork=True),
+        dict(w=26, h=34, seed=33, broken=True, height=0.55),
+        dict(w=32, h=40, seed=47, vines=True),
+        dict(w=34, h=28, seed=59, twist=4.0, height=0.5),
+    ]
+    for i, kw in enumerate(specs):
+        w, h = kw.pop("w"), kw.pop("h")
+        out[f"tree_{i}"] = prop(_sturdy_tree(w, h, **kw), {"dry": "earth", "earth": "bg1", "bg1": "bg0", "moss": "forest"})
     return out
 
 
@@ -520,45 +579,44 @@ def ground_pieces():
 
 
 def decals():
+    """v3 ground details at LOW contrast (neighbouring tones only), baked into arena_ground in clusters."""
     rng = np.random.default_rng(606)
     out = {}
-    for i in range(6):  # cracks: thin bg0 polylines with branches
-        a = C.new(16, 10)
-        x, y = 1.0, float(rng.integers(2, 8))
-        for _ in range(6):
-            nx, ny = x + rng.uniform(1.5, 3.5), float(np.clip(y + rng.uniform(-2, 2), 0, 9))
-            C.line(a, x, y, nx, ny, "bg0")
-            if rng.random() < 0.4:
-                C.line(a, nx, ny, nx + rng.uniform(-2, 2), ny + rng.uniform(-3, 3), "bg0")
-            x, y = nx, ny
-        out[f"crack_{i}"] = [a]
-    for i in range(4):  # moss patches: flat core + dithered edge
-        a = C.new(16, 10)
-        xx, yy = C.grid(16, 10)
-        e = ((xx - 8) / rng.uniform(5, 7.5)) ** 2 + ((yy - 5) / rng.uniform(3, 4.5)) ** 2
-        a[(e <= 1.0) & C.bayer_mask(16, 10, 0.5)] = C.ci("moss")
-        a[e <= 0.55] = C.ci("moss")
-        a[(e <= 0.25)] = C.ci("forest")
-        out[f"moss_{i}"] = [a]
-    for i in range(2):  # puddles: dark water with a cold moon reflection streak
-        a = C.new(16, 8)
-        xx, yy = C.grid(16, 8)
-        e = ((xx - 8) / 7) ** 2 + ((yy - 4) / 3) ** 2
-        a[e <= 1.0] = C.ci("bg0")
-        for x in range(4 + i, 10 + i):  # mostly stone, two cold moon glints (moon is as bright as violet)
-            C.put(a, x, 3, "stone_dark" if x in (6 + i, 8 + i) else "fog")
-        C.put(a, 6, 5, "stone_dark")
-        out[f"puddle_{i}"] = [a]
-    for i in range(3):  # dark soil stains
-        a = C.new(14, 10)
-        xx, yy = C.grid(14, 10)
-        e = ((xx - 7) / rng.uniform(4, 6.5)) ** 2 + ((yy - 5) / rng.uniform(2.5, 4.5)) ** 2
-        a[(e <= 1.0) & C.bayer_mask(14, 10, 0.5)] = C.ci("earth")
-        a[e <= 0.5] = C.ci("earth")
-        out[f"stain_{i}"] = [a]
-    for i in range(2):  # bone dust: sparse dull specks (no bright bone on the ground: keeps threats readable)
-        a = C.new(10, 6)
-        for _ in range(6):
-            C.put(a, int(rng.integers(0, 10)), int(rng.integers(0, 6)), "dry" if rng.random() < 0.4 else "stone_dark")
-        out[f"bonedust_{i}"] = [a]
+    ferns = [["..#.#..", ".#.#.#.", "#.###.#", ".#.#.#.", "...#..."],
+             [".#...#.", "..#.#..", "#.###.#", "..###..", "...#..."],
+             ["...#...", ".#.#.#.", "..###..", ".#.#.#.", "...#..."]]
+    for i, r in enumerate(ferns):
+        out[f"fern_{i}"] = [C.from_ascii(r, {"#": "fern"})]
+    grass = [[".#..#.", ".#.##.", "##.##.", "######"], ["..#...", ".##.#.", ".####.", "######"],
+             ["#...#.", "#.#.#.", "##.##.", "######"]]
+    for i, r in enumerate(grass):
+        out[f"grass_clump_{i}"] = [C.from_ascii(r, {"#": "fern"})]
+    for i in range(3):  # fallen leaf clusters
+        a = C.new(9, 6)
+        for _ in range(4):
+            x, y = int(rng.integers(0, 7)), int(rng.integers(0, 5))
+            a[y, x:x + 2] = C.ci("loam")
+            C.put(a, x, y + 1, "earth")
+        out[f"leaf_cluster_{i}"] = [a]
+    for i in range(3):  # mossy rocks (flat, low contrast)
+        a = C.new(9, 6)
+        xx, yy = C.grid(9, 6)
+        a[((xx - 4.5) / (3.5 + i * 0.3)) ** 2 + ((yy - 3.2) / 2.4) ** 2 <= 1] = C.ci("stone_dark")
+        a[(yy < 2.6) & (a != C.T)] = C.ci("fern")
+        out[f"moss_rock_{i}"] = [a]
+    for i in range(4):  # root tendrils (2 px, earth with a loam top)
+        a = C.new(18, 8)
+        y = 3.0 + (i % 2)
+        for x in range(1, 17):
+            y = float(np.clip(y + rng.uniform(-0.8, 0.8), 1, 6))
+            C.put(a, x, int(y), "loam")
+            C.put(a, x, int(y) + 1, "earth")
+        out[f"root_tendril_{i}"] = [a]
+    for i in range(2):  # small pale mushroom clusters (low contrast: stone caps)
+        a = C.new(6, 4)
+        for x, y in ((0, 1), (3, 0), (4, 2)):
+            C.put(a, x, y, "stone_dark")
+            C.put(a, x + 1, y, "stone_dark" if i else "fog")
+            C.put(a, x, y + 1, "earth")
+        out[f"pale_mushroom_{i}"] = [a]
     return out

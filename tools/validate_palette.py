@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import gen_arena  # noqa: E402
 from nglib import spec  # noqa: E402
-from nglib.palette import NAMES, RESERVED, RGB  # noqa: E402
+from nglib.palette import GROUND_ONLY, NAMES, RESERVED, RGB  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
@@ -25,9 +25,21 @@ errors = []
 # These composites reproduce the game's render-side alphas (fog, mist, vignette steps, translucency, blur), so they
 # contain blended colours by design. All sprites and backgrounds stay strictly palette-pure.
 PALETTE_EXEMPT = {"translucency_demo.png", "arena_board.png", "style_board.png", "stress_board.png", "squint_test.png",
-                  "noise_compare.png"}
+                  "noise_compare.png", "arena_v3_compare.png", "ground_closeup.png", "wagon_closeup.png"}
+# Glow overlays are accents OF a landmark: their bright pixels (x placed copies) count against the parent's 2%.
+ACCENT_PARENT = {"giant_tree_crack": "giant_tree", "glow_mushrooms": "giant_tree"}
 # v2 value hierarchy: share of bone/moon-bright pixels allowed per arena sprite (decor: none; landmarks: accents)
 BRIGHT = {"bone", "moon"}
+GROUND_ONLY_PROP_MAX = 0.10
+
+
+def color_share(px, names):
+    op = px[..., 3] == 255
+    m = np.zeros(op.shape, dtype=bool)
+    for c in names:
+        r_, g_, b_ = RGB[NAMES.index(c)]
+        m |= op & (px[..., 0] == r_) & (px[..., 1] == g_) & (px[..., 2] == b_)
+    return m.sum() / max(1, op.sum())
 LANDMARK_BRIGHT_MAX = 0.02
 # Reserved-color policy, independent of the generator's own group labels:
 #   gameplay sprites (tools/nglib/spec.py) may use any palette color;
@@ -82,8 +94,8 @@ def check_board(images, bp, scale=3):
 
 
 def main():
-    if len(NAMES) != 19:
-        err(f"palette has {len(NAMES)} colors, expected 19")
+    if len(NAMES) != 22:
+        err(f"palette has {len(NAMES)} colors, expected 22")
     pngs = sorted(glob.glob(os.path.join(ASSETS, "**", "*.png"), recursive=True))
     if not pngs:
         err("no PNGs under assets/ - run tools/gen_assets.py first")
@@ -105,6 +117,10 @@ def main():
         used = {tuple(c) for c in np.unique(rgb.reshape(-1, 3), axis=0)} if len(rgb) else set()
         return {NAMES[RGB.index(c)] for c in used if c in RGB} & RESERVED
 
+    for n in sorted(spec.SPRITES):  # hero, threats, effects, UI: never ground-only colors
+        p = os.path.join(ASSETS, "sprites", f"{n}.png")
+        if p in images and color_share(images[p], GROUND_ONLY) > 0:
+            err(f"sprites/{n}.png (gameplay) uses ground-only colors")
     for n in sorted(expected):
         if n in spec.SPRITES:
             continue
@@ -115,6 +131,11 @@ def main():
         bad = reserved_used(images[p]) - allowed
         if bad:
             err(f"sprites/{n}.png ({groups.get(n, '?')}) uses reserved gameplay colors {sorted(bad)}")
+        gshare = color_share(images[p], GROUND_ONLY)
+        if groups.get(n) != "arena" and gshare > 0:
+            err(f"sprites/{n}.png ({groups.get(n, '?')}) uses ground-only colors")
+        elif gshare > GROUND_ONLY_PROP_MAX:
+            err(f"sprites/{n}.png has {gshare * 100:.1f}% ground-only colors (max {GROUND_ONLY_PROP_MAX * 100:.0f}% on props)")
         if groups.get(n) == "arena":
             px = images[p]
             op = px[..., 3] == 255
@@ -124,6 +145,12 @@ def main():
                 bright |= op & (px[..., 0] == r_) & (px[..., 1] == g_) & (px[..., 2] == b_)
             share = bright.sum() / max(1, op.sum())
             limit = LANDMARK_BRIGHT_MAX if n in gen_arena.LANDMARK_STATIC + gen_arena.LANDMARK_ANIM else 0.0
+            if n in ACCENT_PARENT:
+                fw = expected[n][0]
+                per_frame = max(bright[:, i * fw:(i + 1) * fw].sum() for i in range(expected[n][2]))
+                copies = sum(q["sprite"] == n for q in json.load(open(os.path.join(ASSETS, "data", "arena_props.json")))["props"])
+                parent = images[os.path.join(ASSETS, "sprites", f"{ACCENT_PARENT[n]}.png")][..., 3] == 255
+                share = per_frame * copies / max(1, parent.sum())
             if share > limit:
                 err(f"sprites/{n}.png has {share * 100:.1f}% bone/moon-bright pixels (max {limit * 100:.0f}%)")
     for n in spec.BACKGROUNDS:  # every arena background is decor

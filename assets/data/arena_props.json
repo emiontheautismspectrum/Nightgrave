@@ -38,7 +38,7 @@
     "parallax": 0.0
    }
   ],
-  "graves": 8,
+  "graves": 10,
   "heroSpawn": [
    240,
    135
@@ -97,10 +97,10 @@
    },
    {
     "box": [
-     314,
-     -2,
-     442,
-     126
+     332,
+     -1,
+     428,
+     119
     ],
     "sprite": "giant_tree"
    },
@@ -151,30 +151,12 @@
    },
    {
     "box": [
-     344,
-     202,
-     400,
-     242
-    ],
-    "sprite": "beast_ribcage"
-   },
-   {
-    "box": [
-     246,
-     12,
-     294,
+     242,
+     4,
+     298,
      44
     ],
     "sprite": "hunter_wagon"
-   },
-   {
-    "box": [
-     302,
-     32,
-     334,
-     46
-    ],
-    "sprite": "horse_skeleton"
    },
    {
     "box": [
@@ -305,65 +287,53 @@
  },
  "props": [
   {
-   "baseY": 36,
-   "flip": true,
+   "baseY": 35,
+   "flip": false,
+   "frame": 0,
+   "h": 6,
+   "kind": "small",
+   "shade": 0,
+   "sprite": "mushroom_1",
+   "w": 7,
+   "x": 223,
+   "y": 29
+  },
+  {
+   "baseY": 35,
+   "flip": false,
    "frame": 1,
    "h": 6,
    "kind": "small",
    "shade": 1,
    "sprite": "mushroom_1",
    "w": 7,
-   "x": 225,
-   "y": 30
+   "x": 233,
+   "y": 29
   },
   {
    "anim": "hunter_wagon",
    "baseY": 44,
    "flip": false,
    "frame": 0,
-   "h": 32,
+   "h": 40,
    "kind": "landmark",
    "shade": 0,
    "sprite": "hunter_wagon",
-   "w": 48,
-   "x": 246,
-   "y": 12
+   "w": 56,
+   "x": 242,
+   "y": 4
   },
   {
-   "baseY": 45,
-   "flip": true,
-   "frame": 1,
-   "h": 14,
-   "kind": "grave",
-   "shade": 1,
-   "sprite": "grave_broken_0",
-   "w": 12,
-   "x": 207,
-   "y": 31
-  },
-  {
-   "baseY": 46,
-   "flip": true,
-   "frame": 1,
-   "h": 6,
-   "kind": "small",
-   "shade": 1,
-   "sprite": "grass_2",
-   "w": 8,
-   "x": 226,
-   "y": 40
-  },
-  {
-   "baseY": 46,
-   "flip": true,
+   "baseY": 48,
+   "flip": false,
    "frame": 0,
-   "h": 14,
-   "kind": "landmark",
+   "h": 18,
+   "kind": "grave",
    "shade": 0,
-   "sprite": "horse_skeleton",
-   "w": 32,
-   "x": 302,
-   "y": 32
+   "sprite": "grave_cross_2",
+   "w": 12,
+   "x": 193,
+   "y": 30
   },
   {
    "baseY": 49,
@@ -372,10 +342,22 @@
    "h": 6,
    "kind": "small",
    "shade": 1,
-   "sprite": "leaves_0",
+   "sprite": "leaves_1",
    "w": 8,
-   "x": 235,
+   "x": 233,
    "y": 43
+  },
+  {
+   "baseY": 51,
+   "flip": true,
+   "frame": 0,
+   "h": 34,
+   "kind": "tree",
+   "shade": 0,
+   "sprite": "tree_2",
+   "w": 26,
+   "x": 303,
+   "y": 17
   },
   {
    "baseY": 52,
@@ -390,19 +372,55 @@
    "y": 48
   },
   {
+   "baseY": 52,
+   "flip": true,
+   "frame": 0,
+   "h": 14,
+   "kind": "decor_attached",
+   "shade": 0,
+   "sprite": "fence_frag_1",
+   "w": 10,
+   "x": 220,
+   "y": 38
+  },
+  {
+   "baseY": 53,
+   "flip": false,
+   "frame": 0,
+   "h": 22,
+   "kind": "grave",
+   "shade": 0,
+   "sprite": "grave_intact_3",
+   "w": 10,
+   "x": 207,
+   "y": 31
+  },
+  {
    "baseY": 65,
    "flip": false,
    "frame": 0,
-   "h": 6,
+   "h": 8,
    "kind": "small",
    "shade": 0,
-   "sprite": "grass_1",
-   "w": 8,
-   "x": 294,
-   "y": 59
+   "sprite": "bramble_1",
+   "w": 14,
+   "x": 291,
+   "y": 57
   },
   {
-   "baseY": 67,
+   "baseY": 69,
+   "flip": false,
+   "frame": 0,
+   "h": 14,
+   "kind": "grave",
+   "shade": 0,
+   "sprite": "grave_broken_0",
+   "w": 12,
+   "x": 208,
+   "y": 55
+  },
+  {
+   "baseY": 70,
    "flip": true,
    "frame": 0,
    "h": 20,
@@ -411,22 +429,22 @@
    "sprite": "grave_intact_0",
    "w": 14,
    "x": 191,
-   "y": 47
+   "y": 50
   },
   {
-   "baseY": 68,
-   "flip": true,
+   "baseY": 70,
+   "flip": false,
    "frame": 1,
-   "h": 20,
-   "kind": "grave",
+   "h": 3,
+   "kind": "small",
    "shade": 1,
-   "sprite": "grave_cross_1",
-   "w": 14,
-   "x": 207,
-   "y": 48
+   "sprite": "stone_3",
+   "w": 4,
+   "x": 308,
+   "y": 67
   },
   {
-   "baseY": 69,
+   "baseY": 72,
    "flip": false,
    "frame": 0,
    "h": 14,
@@ -435,31 +453,19 @@
    "sprite": "fence_frag_0",
    "w": 13,
    "x": 177,
-   "y": 55
-  },
-  {
-   "baseY": 70,
-   "flip": false,
-   "frame": 0,
-   "h": 6,
-   "kind": "small",
-   "shade": 0,
-   "sprite": "skull_1",
-   "w": 7,
-   "x": 303,
-   "y": 64
+   "y": 58
   },
   {
    "baseY": 75,
    "flip": false,
    "frame": 0,
-   "h": 6,
+   "h": 8,
    "kind": "small",
    "shade": 0,
-   "sprite": "grass_1",
-   "w": 8,
-   "x": 294,
-   "y": 69
+   "sprite": "bramble_1",
+   "w": 14,
+   "x": 291,
+   "y": 67
   },
   {
    "baseY": 87,
@@ -570,16 +576,66 @@
    "y": 72
   },
   {
-   "baseY": 99,
+   "baseY": 104,
    "flip": false,
    "frame": 1,
-   "h": 20,
+   "h": 18,
    "kind": "grave",
    "shade": 1,
-   "sprite": "grave_intact_0",
-   "w": 14,
-   "x": 55,
-   "y": 79
+   "sprite": "grave_cross_2",
+   "w": 12,
+   "x": 53,
+   "y": 86
+  },
+  {
+   "baseY": 104,
+   "flip": false,
+   "frame": 0,
+   "h": 6,
+   "kind": "small",
+   "shade": 0,
+   "sprite": "skull_0",
+   "w": 7,
+   "x": 98,
+   "y": 98
+  },
+  {
+   "baseY": 116,
+   "flip": false,
+   "frame": 0,
+   "h": 5,
+   "kind": "small",
+   "shade": 0,
+   "sprite": "bone_pile_3",
+   "w": 10,
+   "x": 71,
+   "y": 111
+  },
+  {
+   "baseY": 119,
+   "flip": false,
+   "frame": 0,
+   "h": 120,
+   "kind": "landmark",
+   "shade": 0,
+   "sprite": "giant_tree",
+   "w": 96,
+   "x": 332,
+   "y": -1
+  },
+  {
+   "anim": "giant_tree_crack",
+   "baseY": 120,
+   "flip": false,
+   "frame": 0,
+   "h": 30,
+   "kind": "landmark",
+   "overlayOf": "giant_tree",
+   "shade": 0,
+   "sprite": "giant_tree_crack",
+   "w": 4,
+   "x": 384,
+   "y": 45
   },
   {
    "baseY": 123,
@@ -606,16 +662,66 @@
    "y": 120
   },
   {
-   "baseY": 126,
+   "baseY": 125,
    "flip": false,
    "frame": 0,
-   "h": 128,
-   "kind": "landmark",
+   "h": 5,
+   "kind": "small",
    "shade": 0,
-   "sprite": "giant_tree",
-   "w": 128,
-   "x": 314,
-   "y": -2
+   "sprite": "stone_1",
+   "w": 7,
+   "x": 410,
+   "y": 120
+  },
+  {
+   "baseY": 127,
+   "flip": true,
+   "frame": 0,
+   "h": 4,
+   "kind": "small",
+   "shade": 0,
+   "sprite": "stone_0",
+   "w": 6,
+   "x": 419,
+   "y": 123
+  },
+  {
+   "anim": "glow_mushrooms",
+   "baseY": 128,
+   "flip": false,
+   "frame": 0,
+   "h": 5,
+   "kind": "glow",
+   "shade": 0,
+   "sprite": "glow_mushrooms",
+   "w": 7,
+   "x": 347,
+   "y": 123
+  },
+  {
+   "baseY": 129,
+   "flip": true,
+   "frame": 1,
+   "h": 6,
+   "kind": "small",
+   "shade": 1,
+   "sprite": "mushroom_0",
+   "w": 6,
+   "x": 402,
+   "y": 123
+  },
+  {
+   "anim": "glow_mushrooms",
+   "baseY": 133,
+   "flip": false,
+   "frame": 0,
+   "h": 5,
+   "kind": "glow",
+   "shade": 0,
+   "sprite": "glow_mushrooms",
+   "w": 7,
+   "x": 376,
+   "y": 128
   },
   {
    "baseY": 140,
@@ -641,6 +747,58 @@
    "w": 24,
    "x": 366,
    "y": 82
+  },
+  {
+   "anim": "glow_mushrooms",
+   "baseY": 140,
+   "flip": false,
+   "frame": 1,
+   "h": 5,
+   "kind": "glow",
+   "shade": 0,
+   "sprite": "glow_mushrooms",
+   "w": 7,
+   "x": 393,
+   "y": 135
+  },
+  {
+   "anim": "glow_mushrooms",
+   "baseY": 141,
+   "flip": false,
+   "frame": 2,
+   "h": 5,
+   "kind": "glow",
+   "shade": 0,
+   "sprite": "glow_mushrooms",
+   "w": 7,
+   "x": 400,
+   "y": 136
+  },
+  {
+   "anim": "glow_mushrooms",
+   "baseY": 143,
+   "flip": false,
+   "frame": 1,
+   "h": 5,
+   "kind": "glow",
+   "shade": 0,
+   "sprite": "glow_mushrooms",
+   "w": 7,
+   "x": 348,
+   "y": 138
+  },
+  {
+   "anim": "glow_mushrooms",
+   "baseY": 143,
+   "flip": false,
+   "frame": 2,
+   "h": 5,
+   "kind": "glow",
+   "shade": 0,
+   "sprite": "glow_mushrooms",
+   "w": 7,
+   "x": 354,
+   "y": 138
   },
   {
    "baseY": 143,
@@ -710,15 +868,15 @@
   },
   {
    "baseY": 152,
-   "flip": false,
+   "flip": true,
    "frame": 0,
-   "h": 14,
+   "h": 16,
    "kind": "grave",
    "shade": 0,
-   "sprite": "grave_broken_0",
+   "sprite": "grave_sunk_1",
    "w": 12,
    "x": 78,
-   "y": 138
+   "y": 136
   },
   {
    "baseY": 152,
@@ -731,18 +889,6 @@
    "w": 4,
    "x": 402,
    "y": 143
-  },
-  {
-   "baseY": 154,
-   "flip": false,
-   "frame": 0,
-   "h": 14,
-   "kind": "decor_attached",
-   "shade": 0,
-   "sprite": "fence_frag_2",
-   "w": 7,
-   "x": 94,
-   "y": 140
   },
   {
    "baseY": 160,
@@ -821,38 +967,26 @@
   {
    "baseY": 195,
    "flip": false,
-   "frame": 1,
+   "frame": 0,
    "h": 18,
    "kind": "grave",
-   "shade": 1,
-   "sprite": "grave_sunk_0",
-   "w": 14,
-   "x": 113,
+   "shade": 0,
+   "sprite": "grave_broken_2",
+   "w": 12,
+   "x": 114,
    "y": 177
   },
   {
-   "baseY": 200,
-   "flip": false,
-   "frame": 0,
-   "h": 32,
-   "kind": "tree",
-   "shade": 0,
-   "sprite": "tree_0",
-   "w": 26,
-   "x": 376,
-   "y": 168
-  },
-  {
    "baseY": 205,
-   "flip": false,
+   "flip": true,
    "frame": 0,
-   "h": 32,
+   "h": 44,
    "kind": "tree",
    "shade": 0,
-   "sprite": "tree_0",
-   "w": 26,
+   "sprite": "tree_1",
+   "w": 34,
    "x": 129,
-   "y": 173
+   "y": 161
   },
   {
    "baseY": 213,
@@ -861,8 +995,8 @@
    "h": 6,
    "kind": "small",
    "shade": 1,
-   "sprite": "mushroom_0",
-   "w": 6,
+   "sprite": "mushroom_1",
+   "w": 7,
    "x": 155,
    "y": 207
   },
@@ -873,82 +1007,70 @@
    "h": 6,
    "kind": "small",
    "shade": 0,
-   "sprite": "leaves_1",
-   "w": 8,
-   "x": 132,
+   "sprite": "mushroom_0",
+   "w": 6,
+   "x": 133,
    "y": 212
   },
   {
    "baseY": 222,
    "flip": false,
    "frame": 0,
-   "h": 6,
+   "h": 4,
    "kind": "small",
    "shade": 0,
-   "sprite": "grass_3",
-   "w": 8,
-   "x": 158,
-   "y": 216
+   "sprite": "stone_0",
+   "w": 6,
+   "x": 159,
+   "y": 218
+  },
+  {
+   "baseY": 226,
+   "flip": false,
+   "frame": 0,
+   "h": 40,
+   "kind": "tree",
+   "shade": 0,
+   "sprite": "tree_0",
+   "w": 30,
+   "x": 371,
+   "y": 186
   },
   {
    "baseY": 229,
    "flip": true,
    "frame": 0,
-   "h": 5,
+   "h": 3,
    "kind": "small",
    "shade": 0,
-   "sprite": "stone_1",
-   "w": 7,
-   "x": 136,
-   "y": 224
+   "sprite": "stone_3",
+   "w": 4,
+   "x": 137,
+   "y": 226
   },
   {
-   "baseY": 230,
-   "flip": true,
-   "frame": 0,
+   "baseY": 231,
+   "flip": false,
+   "frame": 1,
    "h": 18,
    "kind": "grave",
-   "shade": 0,
+   "shade": 1,
    "sprite": "grave_sunk_0",
    "w": 14,
-   "x": 241,
-   "y": 212
-  },
-  {
-   "baseY": 232,
-   "flip": true,
-   "frame": 0,
-   "h": 14,
-   "kind": "decor_attached",
-   "shade": 0,
-   "sprite": "fence_frag_1",
-   "w": 10,
-   "x": 257,
-   "y": 218
-  },
-  {
-   "baseY": 235,
-   "flip": true,
-   "frame": 0,
-   "h": 22,
-   "kind": "grave",
-   "shade": 0,
-   "sprite": "grave_intact_3",
-   "w": 10,
-   "x": 229,
+   "x": 224,
    "y": 213
   },
   {
-   "baseY": 235,
-   "flip": true,
+   "baseY": 234,
+   "flip": false,
    "frame": 0,
-   "h": 5,
-   "kind": "small",
+   "h": 16,
+   "kind": "grave",
    "shade": 0,
-   "sprite": "bone_pile_1",
-   "w": 10,
-   "x": 331,
-   "y": 230
+   "sprite": "grave_sunk_1",
+   "w": 12,
+   "x": 259,
+   "y": 218
   },
   {
    "baseY": 236,
@@ -961,6 +1083,30 @@
    "w": 16,
    "x": 116,
    "y": 224
+  },
+  {
+   "baseY": 236,
+   "flip": true,
+   "frame": 0,
+   "h": 40,
+   "kind": "tree",
+   "shade": 0,
+   "sprite": "tree_0",
+   "w": 30,
+   "x": 330,
+   "y": 196
+  },
+  {
+   "baseY": 237,
+   "flip": false,
+   "frame": 0,
+   "h": 12,
+   "kind": "grave",
+   "shade": 0,
+   "sprite": "grave_broken_1",
+   "w": 14,
+   "x": 243,
+   "y": 225
   },
   {
    "baseY": 240,
@@ -987,6 +1133,18 @@
    "w": 12,
    "x": 65,
    "y": 168
+  },
+  {
+   "baseY": 241,
+   "flip": false,
+   "frame": 1,
+   "h": 4,
+   "kind": "small",
+   "shade": 1,
+   "sprite": "stone_0",
+   "w": 6,
+   "x": 336,
+   "y": 237
   },
   {
    "baseY": 242,
@@ -1035,30 +1193,6 @@
    "w": 12,
    "x": 144,
    "y": 214
-  },
-  {
-   "baseY": 242,
-   "flip": true,
-   "frame": 0,
-   "h": 5,
-   "kind": "small",
-   "shade": 0,
-   "sprite": "bone_pile_0",
-   "w": 10,
-   "x": 331,
-   "y": 237
-  },
-  {
-   "baseY": 242,
-   "flip": false,
-   "frame": 0,
-   "h": 40,
-   "kind": "landmark",
-   "shade": 0,
-   "sprite": "beast_ribcage",
-   "w": 56,
-   "x": 344,
-   "y": 202
   },
   {
    "anim": "cabin_window",

@@ -17,56 +17,68 @@ def _finish(a):
 
 # ---------------------------------------------------------------- giant tree + ornate rune sword
 
-GIANT_TREE_BASE = (64, 127)  # trunk base centre inside the 128x128 giant_tree sprite
+GIANT_TREE_BASE = (48, 119)  # trunk base centre inside the 96x120 giant_tree sprite (v3)
+GIANT_TREE_CRACK_AT = (52, 46)  # top-left of the glowing crack overlay inside the sprite
 
 
 def giant_tree():
-    """Enormous ancient dead tree: a 60 px gnarled trunk with root flare, bark in 3 flat tones (bg1 / earth / dry),
-    massive limbs going up and out of the arena; only thin limbs dip into the arena (see-through)."""
-    w, h = 128, 128
+    """Colossal ancient trunk (v3): ~72 px at the base, rising out of the top of the frame, bark in 3 flat tones
+    (bg1 shade / earth mid / dry lit, one tone darker than v2) with deep vertical grooves and a few knots.
+    The roots are ground relief (baked into arena_ground); the crown lives in the forest layers."""
+    w, h = 96, 120
     a = C.new(w, h)
-    rng = np.random.default_rng(4040)
     cx, base = GIANT_TREE_BASE
     xx, yy = C.grid(w, h)
-    # trunk silhouette: wide flared base tapering upward, slightly twisting
-    t = (base - yy) / 70.0  # 0 at the base, 1 at the fork
-    twist = np.sin(t * 2.4) * 4
-    half = 30 - 13 * np.clip(t, 0, 1) + np.where(t < 0.12, (0.12 - t) * 45, 0)
-    trunk = (np.abs(xx - cx - twist) <= half) & (yy <= base) & (t <= 1.05)
+    t = (base - yy) / base  # 0 at the base, 1 at the top of the frame
+    sway = np.sin(t * 3.0) * 3
+    half = 26 - 6 * t + np.clip(0.12 - t, 0, None) * 85  # flare to ~36 px half-width at the base
+    trunk = (np.abs(xx - cx - sway) <= half) & (yy <= base)
     a[trunk] = C.ci("earth")
-    # bark: 3 flat tones -> lit left flank (dry), shadowed right flank (bg1), twisting grooves (bg1) on earth
-    rel = (xx - cx - twist) / np.maximum(half, 1)
-    a[trunk & (rel < -0.55)] = C.ci("dry")
-    a[trunk & (rel > 0.45)] = C.ci("bg1")
-    for g in (-0.25, 0.05, 0.3):
-        groove = trunk & (np.abs(rel - g - 0.08 * np.sin(yy / 7.0 + g * 9)) < 0.045)
-        a[groove] = C.ci("bg1")
-    # a hollow knot and a scar
-    C.disc(a, cx - 6, base - 46, 3.2, "bg0")
-    C.line(a, cx + 8, base - 30, cx + 12, base - 16, "bg1")
-
-    # main limbs: thick, upward and outward, mostly above the arena (sprite top = screen top)
-    def limb(x0, y0, ang, length, thick, depth):
-        x1, y1 = x0 + math.cos(ang) * length, y0 + math.sin(ang) * length
-        for k in range(thick):
-            off = k - thick // 2
-            C.line(a, x0 + off, y0, x1 + off, y1, "dry" if k == 0 and thick > 2 else ("bg1" if k == thick - 1 and thick > 2 else "earth"))
-        if depth > 0:
-            for s_ in (-1, 1):
-                limb(x1, y1, ang + s_ * rng.uniform(0.35, 0.7), length * rng.uniform(0.55, 0.72), max(1, thick - 2), depth - 1)
-
-    fork_y = base - 70
-    for ang, ln, th in ((-2.35, 30, 9), (-1.95, 34, 9), (-1.45, 36, 10), (-0.95, 32, 9), (-0.55, 28, 7)):
-        limb(cx + math.cos(ang) * 6, fork_y + 4, ang, ln, th, 3)
-    # two thin low limbs reaching into the arena (thin, see-through)
-    limb(cx - 22, base - 52, -2.75, 26, 2, 1)
-    limb(cx + 24, base - 48, -0.3, 22, 2, 1)
-    # root flare above ground (the long roots are flat ground decals, baked into arena_ground)
-    for side in (-1, 1):  # short flare toward the arena centre (left), longer outward
-        reach = (27, 29, 30) if side < 0 else (34, 38, 42)
-        for k in range(3):
-            C.line(a, cx + side * (24 + k * 2), base - 4 + k, cx + side * reach[k], base, "earth")
+    rel = (xx - cx - sway) / np.maximum(half, 1)
+    a[trunk & (rel > 0.25)] = C.ci("bg1")  # shaded right side
+    a[trunk & (rel < -0.62) & (rel > -0.9)] = C.ci("dry")  # narrow lit band toward the moon
+    for g, ph in ((-0.45, 0.0), (-0.12, 1.3), (0.12, 2.1), (0.42, 0.7), (0.7, 1.7)):  # deep vertical grooves
+        groove = trunk & (np.abs(rel - g - 0.06 * np.sin(yy / 9.0 + ph)) < 0.05)
+        a[groove] = C.ci("bg0")
+    for kx, ky, kr in ((-12, 70, 3.2), (14, 40, 2.6), (-4, 22, 2.2)):  # knots
+        C.ring(a, cx + kx, ky, kr - 1.2, kr, "bg1")
+        C.disc(a, cx + kx, ky, kr - 1.3, "bg0")
+    # root flare above ground: short knuckles (the long roots are ground decals)
+    for k, (dx, ln) in enumerate(((-30, 10), (-20, 8), (22, 9), (32, 11))):
+        for tt in range(3):
+            C.line(a, cx + dx, base - 6 + tt, cx + dx + (ln if dx > 0 else -ln) // 2, base + 0, "earth" if tt else "bg1")
     return [_finish(a)]
+
+
+def giant_tree_crack():
+    """Thin vertical glowing crack in the trunk: slow 4f pulse, low amplitude (pale moon accents only)."""
+    frames = []
+    for i in range(4):
+        a = C.new(4, 30)
+        for y in range(1, 29):
+            x = 1 + (1 if (y // 6) % 2 else 0)
+            C.put(a, x, y, "bg0")
+        lit = (0, 2, 4, 2)[i]
+        for y in range(10 - lit, 18 + lit):
+            x = 1 + (1 if (y // 6) % 2 else 0)
+            C.put(a, x, y, "moon" if abs(y - 14) <= lit // 2 else "stone")
+        frames.append(a)
+    return frames
+
+
+def glow_mushrooms():
+    """Tiny cluster of pale glowing mushrooms for root crevices: subtle 3f pulse (moon/bone caps, stone stems)."""
+    frames = []
+    for i in range(3):
+        a = C.new(7, 5)
+        caps = ((1, 1), (4, 0), (5, 2))
+        for k, (x, y) in enumerate(caps):
+            col = "bone" if (k + i) % 3 == 0 else "moon"
+            C.put(a, x, y, col)
+            C.put(a, x + 1, y, "moon" if i != 1 else "stone")
+            C.put(a, x, y + 1, "stone_dark")
+        frames.append(a)
+    return frames
 
 
 RUNE_ROWS = (24, 29, 34, 39, 44)
@@ -194,44 +206,69 @@ def crow():
 # ---------------------------------------------------------------- hunter's wagon + horse skeleton
 
 def hunter_wagon():
-    """Wrecked black funeral carriage. 3f: the lantern's pale light flickers."""
+    """Gothic hunter's wagon (v3), 56x40 in 3/4 top-down view: arched dark-wood box with a spiked roof rail, two tall
+    leaf-shaped windows, iron-banded planks, two large spoked wheels (the rear one broken and tilted), shafts lying on
+    the ground, a hanging lantern (3f low flicker) and a torn cloth edge. 3 flat wood tones + iron, darker outline."""
     frames = []
-    for i, lamp in enumerate(("stone", "fog", "stone")):
-        w, h = 48, 32
+    for i, lamp in enumerate(("moon", "stone", "fog")):
+        w, h = 56, 40
         a = C.new(w, h)
-        a[8:24, 6:40] = C.ci("bg0")  # body
-        a[8:24, 6] = C.ci("stone_dark")
-        a[8, 6:40] = C.ci("stone_dark")
-        a[6:8, 5:41] = C.ci("stone_dark")  # roof
-        for x in range(6, 41, 3):  # spiked roof rail
-            C.put(a, x, 5, "stone_dark")
-            C.put(a, x, 4, "stone")
-        for wx in (10, 20, 30):  # gothic leaf-shaped windows
-            for y in range(11, 19):
-                half = 2 if y > 12 else (1 if y == 12 else 0)
-                for x in range(wx - half, wx + half + 1):
-                    C.put(a, x + 2, y, "fog")
-            C.put(a, wx + 1, 12, "stone")
-        a[24, 6:40] = C.ci("stone_dark")
-        # wheels: rear intact, front broken (tilted, missing spokes)
-        for cx, cy, r, broken in ((12, 26, 5.5, False), (34, 27, 5.0, True)):
-            for k in range(28):
-                ang = k / 28 * 2 * math.pi
-                if broken and 0.6 < ang < 1.8:
+        x0, x1 = 10, 46  # box side face
+        # roof seen from above (lighter): arched top, then the side face below it
+        for y in range(4, 12):
+            arch = int(round(2.5 - 2.5 * math.cos((y - 4) / 7 * math.pi / 2)))
+            a[y, x0 - 1 + arch:x1 + 1 - arch] = C.ci("earth")
+        a[4, x0 + 2:x1 - 2] = C.ci("dry")  # lit roof ridge (moon side)
+        for x in range(x0 + 1, x1, 3):  # spiked roof rail
+            C.put(a, x, 3, "stone_dark")
+            C.put(a, x, 2, "stone")
+        a[11, x0:x1] = C.ci("bg0")  # eave shadow
+        # side face: vertical dark planks with iron bands
+        a[12:28, x0:x1] = C.ci("bg1")
+        for x in range(x0 + 2, x1 - 3, 4):  # planks (the last one kept off the outline: no 1-px stripes)
+            a[12:28, x] = C.ci("bg0")
+        for y in (14, 25):
+            a[y, x0:x1] = C.ci("stone_dark")
+            for x in range(x0 + 1, x1, 6):
+                C.put(a, x, y, "stone")  # rivets
+        a[12:28, x0] = C.ci("earth")  # lit front edge
+        # two tall gothic leaf-shaped windows
+        for wx in (19, 33):
+            for y in range(14, 25):  # carved frame (lighter wood) around the leaf-shaped opening
+                half = 1 if y == 14 else (2 if y < 18 else 3 if y < 22 else 2)
+                a[y, wx - half:wx + half + 1] = C.ci("earth")
+            for y in range(15, 24):
+                half = 0 if y == 15 else (1 if y < 18 else 2 if y < 22 else 1)
+                a[y, wx - half:wx + half + 1] = C.ci("bg0")
+            C.put(a, wx - 1, 18, "earth")
+            C.put(a, wx, 17, "moon" if i == 0 else "stone")  # tiny glint
+        # torn cloth hanging from the roof edge at the back
+        for k, ln in enumerate((8, 8, 6, 5, 3)):  # one ragged edge (no alternating strands)
+            for y in range(12, 12 + ln):
+                C.put(a, x1 - 1 - k, y, "stone_dark")
+        # undercarriage + wheels: front wheel intact, rear wheel broken and tilted
+        a[28:30, x0 + 2:x1 - 2] = C.ci("bg0")
+        for cx_, cy_, r, broken in ((17, 31, 7.0, False), (40, 32, 6.5, True)):
+            sq = 0.7 if broken else 1.0
+            for k in range(40):
+                ang = k / 40 * 2 * math.pi
+                if broken and 0.4 < ang < 1.5:
                     continue
-                C.put(a, int(cx + math.cos(ang) * r), int(cy + math.sin(ang) * r * (0.8 if broken else 1)), "earth")
-            for k in range(0, 6 if not broken else 3):
-                ang = k / 6 * math.pi * 2
-                C.line(a, cx, cy, cx + math.cos(ang) * r, cy + math.sin(ang) * r * (0.8 if broken else 1), "dry")
-        # lantern on its bracket at the front
-        C.line(a, 40, 10, 44, 10, "stone_dark")
-        a[11:15, 43:46] = C.ci("stone_dark")
-        a[12:14, 44] = C.ci(lamp)
-        C.line(a, 0, 21, 6, 21, "earth")  # broken shaft
-        a = _finish(a)
-        if i == 0:
-            C.put(a, 44, 12, "moon")  # landmark accent: one pale pixel in the lantern
-        frames.append(a)
+                C.put(a, int(round(cx_ + math.cos(ang) * r)), int(round(cy_ + math.sin(ang) * r * sq)), "earth")
+                C.put(a, int(round(cx_ + math.cos(ang) * (r - 1))), int(round(cy_ + math.sin(ang) * (r - 1) * sq)), "bg1")
+            for k in range(8 if not broken else 4):
+                ang = k / 8 * 2 * math.pi + (0.3 if broken else 0)
+                C.line(a, cx_, cy_, cx_ + math.cos(ang) * (r - 1), cy_ + math.sin(ang) * (r - 1) * sq, "dry" if k % 2 else "earth")
+            a[cy_ - 1:cy_ + 1, cx_ - 1:cx_ + 1] = C.ci("stone_dark")
+        # shafts lying on the ground in front (left)
+        for k in range(2):
+            C.line(a, x0 - 1, 27 + k * 3, 1, 33 + k * 4, "earth")
+            C.line(a, x0 - 1, 28 + k * 3, 1, 34 + k * 4, "bg1")
+        # hanging lantern (unlit-pale flicker) from the front roof corner
+        C.line(a, x0 - 2, 6, x0 - 4, 8, "stone_dark")
+        a[9:13, x0 - 6:x0 - 3] = C.ci("stone_dark")
+        a[10:12, x0 - 5] = C.ci(lamp)
+        frames.append(_finish(a))
     return frames
 
 

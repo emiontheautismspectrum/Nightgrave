@@ -98,7 +98,8 @@ def sweep(lum, fog_mask, fog_rgb, alpha, frames, hue):
 
 
 GOAL_OVER_PROPS = {"violet": 0.10, "blood": 0.25}
-OVERHANG_FADE = 0.35  # the game fades the overhang when an actor is near the arena edge (GameScene)
+OVERHANG_FADE = 0.35
+HERO_MIN = 4.0  # hero body vs the ground under it  # the game fades the overhang when an actor is near the arena edge (GameScene)
 
 
 def main():
@@ -159,6 +160,34 @@ def main():
         print(f"  {name:11s} ({hue:6s}) ground: min {r.min():.2f} p1 {np.percentile(r, 1):.2f} median {np.median(r):.2f}"
               f" (>= {TARGET[hue]}) {'OK' if ok else 'FAIL'} | over props: {below * 100:.1f}% below target"
               f" (goal < {GOAL_OVER_PROPS[hue] * 100:.0f}%) {'OK' if goal_ok else 'MISSED'}")
+    # hero: body (all opaque pixels except its dark outline) vs the ground under it, everywhere in the arena
+    for name in ("knight_idle", "wisp_idle"):
+        sheet = load_idx(os.path.join(ASSETS, "sprites", f"{name}.png"))
+        f = sheet[:, :sheet.shape[0]]
+        body = (f != -1) & (f != IDX["bg0"])
+        cols = np.array([RGB[i] for i in f[body]], dtype=np.float64)
+        l_body = float(lum_rgb(cols).mean())
+        l_body_fog = float(lum_rgb(cols * (1 - fa) + fog_rgb * fa).mean())
+        x0, y0, x1, y1 = L.ARENA
+        fh, fw = f.shape
+        sil = f != -1
+        pad = 3
+        silp = np.zeros((fh + 2 * pad, fw + 2 * pad), dtype=bool)
+        silp[pad:pad + fh, pad:pad + fw] = sil
+        ring = np.zeros_like(silp)
+        for dy in range(-pad, pad + 1):
+            for dx in range(-pad, pad + 1):
+                ring |= np.roll(np.roll(silp, dy, 0), dx, 1)
+        ring &= ~silp
+        ys, xs = np.arange(y0, y1 - fh), np.arange(x0, x1 - fw)
+        fogged = shifted_sum(fog_mask.astype(float), body, ys, xs) / body.sum()
+        bl = fogged * l_body_fog + (1 - fogged) * l_body
+        rl = shifted_sum(lum_g, ring, ys - pad, xs - pad) / ring.sum()
+        hr = (np.maximum(bl, rl) + 0.05) / (np.minimum(bl, rl) + 0.05)
+        ok = hr.min() >= HERO_MIN
+        failed |= not ok
+        print(f"  hero {name:11s} body vs ground: min {hr.min():.2f} median {np.median(hr):.2f} (>= {HERO_MIN}) "
+              f"{'OK' if ok else 'FAIL'}")
     g = load_idx(os.path.join(bgd, "arena_ground.png"))
     cx0, cy0, cx1, cy1 = L.CALM_ZONE
     z = LUM[g[cy0:cy1, cx0:cx1]]

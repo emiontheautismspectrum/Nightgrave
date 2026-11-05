@@ -19,10 +19,9 @@ from nglib.arena import rune_glow  # noqa: E402
 #   telegraph - ground telegraphs (rune glow, violet portal flames) and forest eyes: violet allowed
 #   caster    - casters and their spawn/vanish effects: violet allowed
 #   ui        - HUD pieces
-LANDMARK_STATIC = ["giant_tree", "rune_sword_base", "gallows_tree", "horse_skeleton", "cursed_well", "beast_ribcage",
-                   "hunter_cabin", "portal_altar"]
+LANDMARK_STATIC = ["giant_tree", "rune_sword_base", "gallows_tree", "cursed_well", "hunter_cabin", "portal_altar"]
 LANDMARK_ANIM = ["rune_sword", "gallows_cage", "crow", "hunter_wagon", "well_wisp", "cabin_window", "cabin_smoke",
-                 "altar_flame", "altar_chain"]
+                 "altar_flame", "altar_chain", "giant_tree_crack", "glow_mushrooms"]
 CASTER = ["shade_idle", "shade_rise", "shade_cast", "shade_dissolve", "stalker_idle", "stalker_emerge", "stalker_cast",
           "stalker_vanish", "portal_smoke", "forest_leaf_ash"]
 TELEGRAPH = ["altar_flame_tele", "portal_ignite", "forest_eyes"] + [f"rune_glow_{g}" for g in range(8)]

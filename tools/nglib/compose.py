@@ -147,7 +147,8 @@ def place_all(sprites):
     # 2. landmarks (base centres)
     tree_spr = sprites["giant_tree"][0]
     tx = L.GIANT_TREE[0] - LM.GIANT_TREE_BASE[0] + tree_spr.shape[1] / 2
-    lm("giant_tree", (tx, L.GIANT_TREE[1] + (tree_spr.shape[0] - 1 - LM.GIANT_TREE_BASE[1]) + 1))
+    gt = lm("giant_tree", (tx, L.GIANT_TREE[1] + (tree_spr.shape[0] - 1 - LM.GIANT_TREE_BASE[1]) + 1))
+    P.overlay(gt, "giant_tree_crack", LM.GIANT_TREE_CRACK_AT[0], LM.GIANT_TREE_CRACK_AT[1], "giant_tree_crack")
     lm("rune_sword", L.RUNE_SWORD, anim="rune_sword")
     lm("rune_sword_base", (L.RUNE_SWORD[0], L.RUNE_SWORD[1] + 3))
     gal = lm("gallows_tree", L.GALLOWS)
@@ -157,9 +158,7 @@ def place_all(sprites):
     well = lm("cursed_well", L.WELL)
     P.overlay(well, "well_wisp", 6, -9, "well_wisp")
     lm("gas_lamp_short", L.WELL_LAMP)
-    lm("beast_ribcage", L.RIBCAGE)
     lm("hunter_wagon", L.WAGON, anim="hunter_wagon")
-    lm("horse_skeleton", L.WAGON_HORSE, flip=True)
     cab = lm("hunter_cabin", L.CABIN)
     P.overlay(cab, "cabin_window", LM.CABIN_WINDOW_AT[0], LM.CABIN_WINDOW_AT[1], "cabin_window")
     P.overlay(cab, "cabin_smoke", LM.CABIN_SMOKE_AT[0], LM.CABIN_SMOKE_AT[1], "cabin_smoke", base_bias=-1)
@@ -167,6 +166,8 @@ def place_all(sprites):
         lm(name, (L.CABIN[0] + dx, L.CABIN[1] - 28 + dy))
     for name, x, y in L.FALLEN_WEAPONS:
         lm(name, (x, y))
+    for k, (mx, my) in enumerate(root_mushroom_spots()):  # pale glowing mushrooms in root crevices (ground level)
+        P.add("glow_mushrooms", mx, my, kind="glow", anim="glow_mushrooms", force=True, frame=k % 3)
     for name, box in landmarks:  # landmarks never touch the calm zone (pixel-accurate)
         p = next(q for q in P.props if q["sprite"] == name and box_of(sprites, q) == box)
         if opaque_in_calm(sprites, p):
@@ -197,10 +198,10 @@ def place_all(sprites):
             v = kinds[(ki + attempt) % len(kinds)]
             b = P.box_for(v, x, y)
             grave_boxes = [box_of(sprites, q) for q in P.props if q["kind"] == "grave"]
+            if any(q["sprite"] == v and box_dist(b, box_of(sprites, q)) < 16 for q in P.props if q["kind"] == "grave"):
+                continue  # never the same variant side by side (same metric as check_layout)
             others_free = all(not boxes_overlap(b, ob, 2) for ob in P.boxes if ob not in grave_boxes)
             graves_free = all(not boxes_overlap(b, gb, 2) for gb in grave_boxes)  # loose clusters: graves never touch
-            if graves and graves[-1][2] == v:
-                continue  # never the same variant twice in a row
             ok = (not in_calm(b) and others_free and graves_free and hollow_ok(b)
                   and box_dist(b, altar_box) >= L.GRAVE_ALTAR_CLEAR
                   and all(box_dist(b, lb) >= L.GRAVE_LANDMARK_CLEAR for n_, lb in landmarks if n_ != "portal_altar")
@@ -214,11 +215,16 @@ def place_all(sprites):
 
     for ci, ((cx_, cy_), n, (sx, sy)) in enumerate(L.GRAVE_CLUSTERS):  # loose clusters of 2-4
         got = 0
+        if ci == 1:  # the bottom-centre group uses the smaller variants
+            kinds_saved, kinds[:] = list(kinds), list(L.SMALL_GRAVES)
+            ki = 0
         for _ in range(60):
             if got >= n:
                 break
             if try_grave(cx_ + r.uniform(-sx, sx), cy_ + r.uniform(-sy, sy), f"cluster{ci}"):
                 got += 1
+        if ci == 1:
+            kinds[:] = kinds_saved
     for x, y in L.GRAVE_SINGLES:
         try_grave(x, y, "single")
     if not 8 <= len(graves) <= 12:
@@ -226,7 +232,8 @@ def place_all(sprites):
     # 5. short broken fence fragments next to graves
     for i in range(L.FENCE_FRAGMENTS):
         gx, gy, _v, _t = graves[(i * 3) % len(graves)]
-        for dx, dy in ((14, 2), (-14, 2), (12, -8), (-12, -8), (18, 6), (-18, 6)):
+        for dx, dy in ((14, 2), (-14, 2), (12, -8), (-12, -8), (18, 6), (-18, 6), (22, 0), (-22, 0), (0, 12), (8, 14),
+                       (-8, 14), (26, 4), (-26, 4)):
             b = P.box_for(f"fence_frag_{i}", gx + dx, gy + dy)
             if not in_calm(b) and P.free(b, pad=1) and hollow_ok(b) and box_dist(b, altar_box) >= L.GRAVE_ALTAR_CLEAR:
                 must(P.add(f"fence_frag_{i}", gx + dx, gy + dy, flip=bool(i % 2), kind="decor_attached"), "fence fragment")
@@ -235,12 +242,12 @@ def place_all(sprites):
             notes.append(f"fence fragment {i} found no spot next to a grave")
     # 3. author dead trees: keep at most MAX_TREES; nudge minimally out of the calm zone / landmarks / hollows
     trees = 0
-    for k, a in enumerate(L.DEAD_TREES_PCT):
+    tree_pts = [(x_, y_, "extra") for x_, y_ in L.EXTRA_TREES] + [(*L.pct(a_), "author") for a_ in L.DEAD_TREES_PCT]
+    for k, (x, y, origin) in enumerate(tree_pts):
         if trees >= L.MAX_TREES:
-            notes.append(f"author tree {k} at {L.pct(a)} dropped (budget of {L.MAX_TREES} trees reached)")
+            notes.append(f"{origin} tree at ({x},{y}) dropped (budget of {L.MAX_TREES} trees reached)")
             continue
-        x, y = L.pct(a)
-        v = f"tree_{k % 4}"
+        v = f"tree_{k % 5}"
         best = None
         for d in range(0, 66, 2):
             ring = [(dx, dy) for dx in range(-d, d + 1, 2) for dy in range(-d, d + 1, 2) if max(abs(dx), abs(dy)) == d]
@@ -253,16 +260,20 @@ def place_all(sprites):
             if best:
                 break
         if best is None:
-            notes.append(f"author tree {k} at ({x},{y}) dropped (no free spot within 64 px)")
+            notes.append(f"{origin} tree at ({x},{y}) dropped (no free spot within 64 px)")
             continue
         if best != (0, 0):
-            notes.append(f"author tree {k} at ({x},{y}) nudged by ({best[0]:+d},{best[1]:+d})")
-        must(P.add(v, x + best[0], y + best[1], flip=bool(k % 2), shade=k % 2, kind="tree"), f"tree {k}")
+            notes.append(f"{origin} tree at ({x},{y}) nudged by ({best[0]:+d},{best[1]:+d})")
+        must(P.add(v, x + best[0], y + best[1], flip=bool(k % 2), shade=0, kind="tree"), f"tree {k}")
         trees += 1
 
     # 6. small decor (<= 25) in loose clusters, Poisson-disc spacing inside each cluster
     r = rng(3)
-    small = (["bone_pile_%d" % i for i in range(4)] + ["skull_0", "skull_1"] + ["grass_%d" % i for i in range(4)] +
+    for name, x, y in L.BONES:  # bones and skulls only near the altar and the graves (<= 4)
+        b = P.box_for(name, x, y)
+        if not in_calm(b) and P.free(b, pad=1) and hollow_ok(b) and box_dist(b, altar_box) >= 2:
+            P.add(name, x, y, kind="small")
+    small = (["grass_%d" % i for i in range(4)] +
              ["bramble_%d" % i for i in range(3)] + ["stone_%d" % i for i in range(4)] + ["leaves_%d" % i for i in range(3)] +
              ["mushroom_0", "mushroom_1", "root_0", "root_1"])
     placed_small = []
@@ -327,137 +338,202 @@ def tone_field(seed, cell, cuts, tones, octave=0.35):
     return majority(out, 2, 2)
 
 
-DARKER_TONE = {"fog": "bg1", "earth": "bg1", "forest": "bg0", "bg1": "bg0", "moss": "forest", "stone_dark": "bg1",
-               "stone": "stone_dark", "bg0": "bg0"}
+DARKER_TONE = {"mist": "fern", "fern": "forest", "fog": "bg1", "earth": "bg1", "loam": "earth", "forest": "bg0",
+               "bg1": "bg0", "moss": "forest", "stone_dark": "bg1", "stone": "stone_dark", "bg0": "bg0"}
+LADDER = ["bg0", "forest", "fern", "mist"]  # ground value ladder, dark -> light (L* 3.6 / 8.0 / 14.4 / 17.6)
+
+
+def giant_roots():
+    """Main roots of the giant tree as polylines [(x, y, thickness)]: S-curved, branching, 60-110 px, tips x >= 320."""
+    r = rng(70)
+    gx, gy = L.GIANT_TREE
+    roots = []
+    angles = [math.radians(a_) for a_ in (172, 150, 128, 104, 76, 48, 18, -8)][:L.GIANT_TREE_ROOTS]
+    for i, ang in enumerate(angles):
+        length = r.uniform(60, 110)
+        bend = r.uniform(0.35, 0.6) * (1 if i % 2 else -1)
+        pts = []
+        for k in range(26):
+            t = k / 25
+            a_ = ang + bend * math.sin(t * math.pi * 1.4)  # S-curve
+            if not pts:
+                x, y = gx + math.cos(ang) * 30, gy + math.sin(ang) * 6
+            else:
+                x, y = pts[-1][0] + math.cos(a_) * length / 25, pts[-1][1] + math.sin(a_) * length / 25 * 0.6
+            x = max(x, L.ROOT_MIN_X + 1)
+            y = min(max(y, AY0 + 4), AY1 - 3)
+            pts.append((x, y, 9.5 - 7.5 * t))
+        roots.append(pts)
+        if i % 2 == 0:  # one branch per alternate root
+            k0 = int(r.integers(9, 14))
+            bx, by, bt = pts[k0]
+            bang = ang + (0.7 if i % 4 == 0 else -0.7)
+            br = [(bx, by, bt * 0.7)]
+            for k in range(12):
+                br.append((max(br[-1][0] + math.cos(bang) * 2.6, L.ROOT_MIN_X + 1),
+                           min(max(br[-1][1] + math.sin(bang) * 1.6, AY0 + 4), AY1 - 3), bt * 0.7 * (1 - k / 13) + 1.5))
+            roots.append(br)
+    return roots
+
+
+def root_mushroom_spots():
+    """Crevices between neighbouring main roots near the trunk, for the glowing mushroom clusters."""
+    roots = giant_roots()
+    spots = []
+    mains = roots[:L.GIANT_TREE_ROOTS + (L.GIANT_TREE_ROOTS + 1) // 2]
+    for i in range(len(mains) - 1):
+        for k in (5, 8, 3):
+            a_, b_ = mains[i][k], mains[i + 1][k]
+            x, y = (a_[0] + b_[0]) / 2, (a_[1] + b_[1]) / 2 + 2
+            if x >= CZ[2] + 6 or not CZ[1] - 6 <= y <= CZ[3] + 6:  # never in the calm zone
+                spots.append((x, y))
+                break
+    return spots[:L.GLOW_MUSHROOMS]
 
 
 def ground(sprites, decals_, props, ritual):
+    """v3 forest floor: one colour story (teal-green floor, loam paths, cool moonlit patches), depth from large flat
+    organic shapes only (value zones, diagonal moonbeams, top-left -> bottom-right falloff, cast shadows)."""
     r = rng(5)
     g = C.new(W, H)
     xx, yy = C.grid(W, H)
-    # forest floor: flat low-frequency patches (bg1 / forest / earth), no flagstones, no dithering
-    base = tone_field(51, 40, [0.4, 0.78], ["bg1", "forest", "earth"])
-    # moon pool: a flat lighter clearing at the centre (fog), patches around it
-    cx, cy = L.HERO_SPAWN
-    e = ((xx - cx) / 150) ** 2 + ((yy - cy) / 96) ** 2
-    pool_noise = C.value_noise(W, H, 28, rng(52))
-    edge_only = np.clip((e - 0.35) / 0.3, 0, 1)  # irregular rim, smooth flat inside (no holes)
-    pool = e + (pool_noise - 0.5) * 0.35 * edge_only < 0.62
-    base[pool] = C.ci("fog")
-    rim = (~pool) & (e < 0.95) & (base == C.ci("bg1"))
-    base[rim] = C.ci("forest")
-    base = majority(base, 2, 1)
-    # the region the ground covers: arena + an irregular soft band outside it
+    n1 = C.value_noise(W, H, 56, rng(51))
+    n2 = C.value_noise(W, H, 28, rng(52))
+    v = 0.48 + (n1 - 0.5) * 0.55 + (n2 - 0.5) * 0.18
+    # (c) slow value falloff: lighter top-left, darker bottom-right, in wide flat bands after quantisation
+    v += 0.22 - 0.44 * (((xx - AX0) / (AX1 - AX0)) * 0.55 + ((yy - AY0) / (AY1 - AY0)) * 0.45)
+    # (b) wide diagonal moonbeam patches from the top-left (away from the hero spawn area)
+    for bx, by, ln, wd in ((92, 60, 80, 16), (300, 52, 70, 13), (72, 168, 60, 12), (238, 220, 64, 12)):
+        u = ((xx - bx) + (yy - by)) / math.sqrt(2)
+        w_ = ((xx - bx) - (yy - by)) / math.sqrt(2)
+        beam = (u / ln) ** 2 + (w_ / wd) ** 2
+        v += 0.18 * np.clip(1.2 - beam, 0, 1)
+    # (a) shade near the forest edge and under the giant tree
+    din = np.minimum.reduce([xx - AX0, AX1 - xx, yy - AY0, AY1 - yy])
+    v -= 0.22 * np.clip(1 - din / 26, 0, 1)
+    gx, gy = L.GIANT_TREE
+    v -= 0.3 * np.clip(1 - (((xx - gx) / 70) ** 2 + ((yy - gy + 10) / 46) ** 2), 0, 1)
+    # the centre: same floor, one tone calmer and slightly darker so the hero pops
+    cx0, cy0, cx1, cy1 = CZ
+    calm = np.clip(1 - np.maximum(np.maximum(cx0 - xx, xx - cx1), np.maximum(cy0 - yy, yy - cy1)) / 14, 0, 1)
+    v = v * (1 - calm) + 0.4 * calm
+    idx = np.digitize(v, [0.22, 0.44, 0.74])  # mist (cool moonlight) only in the brightest beam cores
+    base = np.array([C.ci(t) for t in LADDER], dtype=np.int16)[idx]
+    base = majority(base, 3, 2)  # flat organic patches >= 6x6
+    # the region the ground covers: arena + an irregular soft band outside it (darker, so the clamp reads)
     edge_noise = (C.value_noise(W, H, 12, rng(53)) - 0.5) * 6
     dx = np.maximum(0, np.maximum(AX0 - xx, xx - AX1))
     dy = np.maximum(0, np.maximum(AY0 - yy, yy - AY1))
-    din = np.minimum.reduce([xx - AX0, AX1 - xx, yy - AY0, AY1 - yy])  # > 0 inside the rectangle
-    sd = np.where(din > 0, -din, np.maximum(dx, dy))  # signed distance to the rectangle edge
+    sd = np.where(din > 0, -din, np.maximum(dx, dy))
     cover = sd + edge_noise < L.EDGE_BAND
     g[cover] = base[cover]
-    # just outside the rectangle the ground is darker (so the clamp reads): flat bg0/bg1 patches, irregular rim
     band = cover & (sd + edge_noise * 0.5 > 0.5)
-    dark = tone_field(54, 16, [0.5], ["bg0", "bg1"])
-    g[band] = dark[band]
-    # sparse tiny low-contrast details outside the calm zone: leaves, ferns, needles, thin roots
-    for _ in range(70):
-        x, y = int(r.uniform(AX0 + 2, AX1 - 4)), int(r.uniform(AY0 + 2, AY1 - 4))
-        if CZ[0] - 4 <= x <= CZ[2] + 4 and CZ[1] - 4 <= y <= CZ[3] + 4:
-            continue
-        t = g[y, x]
-        k = int(r.integers(0, 3))
-        col = "earth" if t in (C.ci("forest"), C.ci("bg1")) else "stone_dark"
-        if k == 0:  # leaf (3 px)
-            for ddx, ddy in ((0, 0), (1, 0), (1, 1)):
-                C.put(g, x + ddx, y + ddy, col)
-        elif k == 1:  # tiny fern
-            for ddx, ddy in ((0, 0), (-1, -1), (1, -1), (0, -1)):
-                C.put(g, x + ddx, y + ddy, "forest" if t != C.ci("forest") else "moss")
-        else:  # needle speck pair
-            C.put(g, x, y, col)
-            C.put(g, x + 2, y + 1, col)
-    # ritual inlay at the centre: carved rings + rune slots in a tone of nearly equal lightness (calm)
+    g[band] = C.ci("bg0")
+    # (e) worn loam paths with irregular edges (low contrast)
+    pn = C.value_noise(W, H, 10, rng(55))
+    for path in L.PATHS:
+        for (x0_, y0_), (x1_, y1_) in zip(path, path[1:]):
+            vx, vy = x1_ - x0_, y1_ - y0_
+            l2 = vx * vx + vy * vy
+            t = np.clip(((xx - x0_) * vx + (yy - y0_) * vy) / l2, 0, 1)
+            d = np.sqrt((xx - x0_ - t * vx) ** 2 + (yy - y0_ - t * vy) ** 2)
+            half = (L.PATH_WIDTH[0] + (L.PATH_WIDTH[1] - L.PATH_WIDTH[0]) * pn) / 2
+            m = cover & (d <= half) & ~band
+            g[m & ~((xx >= cx0) & (xx < cx1) & (yy >= cy0) & (yy < cy1))] = C.ci("loam")
+    g = np.where(cover, majority(np.where(cover, g, C.ci("bg0")), 2, 1), g)
+    # rune circle: faint carved ring + rune slots, one step from the calm centre tone
     d = np.sqrt((xx - L.RITUAL_CENTER[0]) ** 2 + (yy - L.RITUAL_CENTER[1]) ** 2)
-    for rr in (L.RITUAL_RADIUS, L.RITUAL_RADIUS - 24):
-        g[(np.abs(d - rr) < 0.55) & pool] = C.ci("earth")
+    ring = np.abs(d - L.RITUAL_RADIUS) < 0.55
+    g[ring & (g == C.ci("forest"))] = C.ci("bg1")
     for (rx, ry) in ritual:
-        g[np.sqrt((xx - rx) ** 2 + (yy - ry) ** 2) <= 5.2] = C.ci("earth")
-    # giant tree roots: flat ground decals spreading from the trunk (<= 36 px toward the centre, <= 48 elsewhere)
-    gx_, gy_ = L.GIANT_TREE
-    for ang, ln, w_ in ((3.0, 34, 3), (2.45, 36, 3), (1.9, 30, 2), (1.25, 44, 3), (0.75, 46, 3), (0.2, 40, 2), (-0.3, 30, 2)):
-        x1, y1 = gx_ + math.cos(ang) * ln, gy_ + math.sin(ang) * ln * 0.55
-        if x1 < CZ[2] + 1:
-            x1 = CZ[2] + 1
-        for k in range(w_):
-            C.line(g, gx_ + math.cos(ang) * 22, gy_ + k - 1, x1, y1 + k - 1, "earth" if k < w_ - 1 else "bg1")
-    # soft edge inside the rectangle: a few flat moss pads, thin roots and half-buried broken ring stones
-    for _ in range(14):
-        side = int(r.integers(0, 4))
-        t = r.uniform(0.05, 0.95)
-        x = int(AX0 + t * (AX1 - AX0)) if side < 2 else (AX0 + 3 if side == 2 else AX1 - 8)
-        y = int(AY0 + 2 if side == 0 else AY1 - 6) if side < 2 else int(AY0 + t * (AY1 - AY0))
-        if any(math.dist((x, y), L.hollow_point(s_, p_)) < 22 for s_, p_ in L.HOLLOWS):
-            continue
-        g[y:y + 4, x:x + 6] = C.ci("forest")
-    for _ in range(10):
-        side = int(r.integers(0, 4))
-        t = r.uniform(0.08, 0.92)
-        x = int(AX0 + t * (AX1 - AX0)) if side < 2 else (AX0 + 2 if side == 2 else AX1 - 7)
-        y = int(AY0 + 2 if side == 0 else AY1 - 4) if side < 2 else int(AY0 + t * (AY1 - AY0))
-        if any(math.dist((x, y), L.hollow_point(s_, p_)) < 22 for s_, p_ in L.HOLLOWS):
-            continue
-        g[y:y + 3, x:x + 6] = C.ci("stone_dark")  # half-buried ring stone
-        g[y, x + 1:x + 4] = C.ci("stone")
+        g[(np.sqrt((xx - rx) ** 2 + (yy - ry) ** 2) <= 5.2) & cover] = C.ci("bg1")
+    # giant tree roots: ground relief (lit top-left edge, dark underside), under the y-sorted layer
+    rm = np.zeros((H, W), dtype=bool)
+    for pts in giant_roots():
+        for x, y, th in pts:
+            rm |= (xx - x) ** 2 + (yy - y) ** 2 <= (th / 2) ** 2
+    up = np.roll(rm, 1, 0) & np.roll(rm, 1, 1)
+    low = np.roll(rm, -1, 0)
+    shadow = np.roll(rm, -1, 0) | np.roll(np.roll(rm, -1, 0), -1, 1)
+    g[shadow & ~rm & cover] = C.ci("bg0")  # arching roots cast a thin dark underside
+    g[rm] = C.ci("earth")
+    g[rm & ~up] = C.ci("loam")  # lit top-left edge
+    g[rm & ~low] = C.ci("bg1")
+    # (f) low-contrast ground details in clusters (never in the calm zone or on the roots)
+    groups = [("fern", 3), ("grass_clump", 3), ("leaf_cluster", 2), ("moss_rock", 2), ("root_tendril", 1), ("pale_mushroom", 1)]
+    centres = [(80, 60), (310, 64), (64, 180), (190, 228), (410, 210), (300, 236), (420, 70), (140, 46), (110, 236),
+               (420, 150), (60, 130), (240, 44)]
+    for k, (cx_, cy_) in enumerate(centres):
+        for j in range(4):
+            name, _w = groups[(k + j) % len(groups)]
+            variants = [n for n in decals_ if n.startswith(name + "_")]
+            dsp = decals_[variants[int(r.integers(0, len(variants)))]][0]
+            x = int(cx_ + r.uniform(-14, 14))
+            y = int(cy_ + r.uniform(-8, 8))
+            bb = (x, y, x + dsp.shape[1], y + dsp.shape[0])
+            if boxes_overlap(bb, CZ) or rm[max(0, y):y + dsp.shape[0], max(0, x):x + dsp.shape[1]].any():
+                continue
+            C.paste(g, dsp if r.random() < 0.5 else dsp[:, ::-1], x, y)
     # hollows: dark gaps leading into the trees
     for s_, p_ in L.HOLLOWS:
         hx, hy = L.hollow_point(s_, p_)
-        m = ((xx - hx) ** 2 + (yy - hy) ** 2 <= 11 ** 2) & cover
-        g[m] = C.ci("bg0")
-    # flat contact shadows to the lower-right: a small ellipse under each prop's footprint, one tone darker
-    sh = np.zeros((H, W), dtype=bool)
+        g[((xx - hx) ** 2 + (yy - hy) ** 2 <= 11 ** 2) & cover] = C.ci("bg0")
+    # (d) flat cast shadows under every prop: lower-right, 40-60% of its width, `forest` or darker
     for p in props:
-        if p["kind"] == "eyes" or p.get("overlayOf"):
+        if p["kind"] in ("eyes", "glow") or p.get("overlayOf"):
             continue
         spr = sprites[p["sprite"]][p["frame"]]
         foot = np.nonzero((spr[-4:] != C.T).any(axis=0))[0]
         if not len(foot):
             continue
         fx0, fx1 = (p["w"] - 1 - foot.max(), p["w"] - 1 - foot.min()) if p["flip"] else (foot.min(), foot.max())
-        cxs = p["x"] + (fx0 + fx1) / 2 + 3
-        rx = max(2.5, (fx1 - fx0 + 1) / 2 + 1)
-        ry = max(1.5, min(5.0, rx / 3))
-        sh |= ((xx - cxs) / rx) ** 2 + ((yy - p["baseY"] - 0.5) / ry) ** 2 <= 1
-    sh &= g != C.T
-    for src, dst in DARKER_TONE.items():
-        g[sh & (g == C.ci(src))] = C.ci(dst)
+        fw = fx1 - fx0 + 1
+        rx = max(2.0, fw * 0.25 + (p["w"] * 0.05))
+        rx = min(rx, p["w"] * 0.3)
+        ry = max(1.5, min(5.0, rx / 2.5))
+        cxs = p["x"] + (fx0 + fx1) / 2 + rx * 0.6
+        m = (((xx - cxs) / rx) ** 2 + ((yy - p["baseY"] - 1) / ry) ** 2 <= 1) & cover
+        dark = np.isin(g, [C.ci("bg0"), C.ci("forest"), C.ci("bg1")])
+        g[m & dark] = C.ci("bg0")
+        g[m & ~dark] = C.ci("forest")
     return g
 
 
 # ---------------------------------------------------------------- forest ring (flat silhouettes)
 
-def _forest(seed, trunk_col, count, wmin, wmax, crowns=True, keep_outside=None):
-    """Tileable band of solid tree silhouettes in ONE flat tone: wide trunks, a few heavy limbs, rounded crowns."""
+def _forest(seed, trunk_col, count, wmin, wmax, crowns=False, keep_outside=None, hmin=40, hmax=95):
+    """Tileable band of REAL tree silhouettes in one flat tone (v3): each tree stands at a random base point, with a
+    tapered trunk 40-95 px tall and sturdy forking branches; varied widths and heights, no rectangles, no round blobs."""
     r = rng(seed)
     pad = 64
     big = C.new(W + 2 * pad, H)
+
+    def limb(x0, y0, ang, ln, th, depth):
+        x1, y1 = x0 + math.cos(ang) * ln, y0 + math.sin(ang) * ln
+        for k in range(max(1, int(th))):
+            C.line(big, x0 + k - th / 2, y0, x1 + k - th / 2, y1, trunk_col)
+        if depth > 0:
+            for sgn in (-1, 1):
+                limb(x1, y1, ang + sgn * r.uniform(0.3, 0.6), ln * r.uniform(0.55, 0.75), max(2, th - 1.5), depth - 1)
+
     for _ in range(count):
         x = r.uniform(pad, W + pad)
-        w = int(r.integers(wmin, wmax + 1))
-        lean = r.uniform(-0.05, 0.05)
-        for y in range(H):
-            xx_ = int(x + (H - y) * lean)
-            big[y, xx_ - w // 2:xx_ + (w + 1) // 2] = C.ci(trunk_col)
-        for _k in range(int(r.integers(1, 3))):
-            y0 = r.uniform(10, H - 30)
+        base_y = r.uniform(30, H + 20)
+        hgt = r.uniform(hmin, hmax)
+        w0 = r.uniform(wmin, wmax)
+        lean = r.uniform(-0.08, 0.08)
+        for k in range(int(hgt)):  # tapered trunk
+            y = base_y - k
+            half = w0 / 2 * (1 - 0.55 * k / hgt)
+            xc = x + lean * k
+            big[int(max(0, min(H - 1, y))), int(xc - half):int(xc + half) + 1] = C.ci(trunk_col) if 0 <= y < H else C.T
+        tx, ty = x + lean * hgt, base_y - hgt
+        for ang in (-2.2, -1.57, -0.95):
+            limb(tx, ty + 4, ang + r.uniform(-0.2, 0.2), r.uniform(10, 18), max(2.5, w0 / 3), 2)
+        for _k in range(int(r.integers(1, 3))):  # a low side branch
+            yb = base_y - hgt * r.uniform(0.35, 0.65)
             side = r.choice([-1, 1])
-            ln = r.uniform(12, 26)
-            bx = x + (H - y0) * lean + side * w / 2
-            for t in range(3):
-                C.line(big, bx, y0 + t, bx + side * ln, y0 + t - ln * 0.6, trunk_col)
-        if crowns:
-            for _k in range(3):
-                cy_ = r.uniform(-10, 40)
-                C.disc(big, x + r.uniform(-14, 14), cy_, r.uniform(10, 18), trunk_col)
+            limb(x + lean * (base_y - yb), yb, -1.57 + side * r.uniform(0.7, 1.1), r.uniform(8, 14), 2.5, 1)
     out = C.new(W, H)
     for x in range(W + 2 * pad):
         col = big[:, x]
@@ -479,13 +555,13 @@ def _gap_hollows(a, radius):
 
 def forest_far():
     a = np.full((H, W), C.ci("bg0"), dtype=np.int16)
-    sil = _gap_hollows(_forest(11, "stone_dark", 30, 8, 16), 16)  # hollows stay dark gaps in every layer
+    sil = _gap_hollows(_forest(11, "stone_dark", 46, 6, 12, hmin=30, hmax=70), 16)  # hollows stay dark in every layer
     a[sil != C.T] = sil[sil != C.T]
     return a
 
 
 def forest_mid():
-    return _gap_hollows(_forest(12, "bg1", 22, 10, 18), 14)
+    return _gap_hollows(_forest(12, "bg1", 34, 8, 15, hmin=40, hmax=85), 14)
 
 
 def forest_mist():
@@ -506,7 +582,21 @@ def forest_mist():
 def forest_near():
     """Overhang ring: black trunks only outside the arena edge, thin branches reaching <= OVERHANG_MAX px into it."""
     r = rng(13)
-    a = _forest(14, "bg0", 18, 10, 16, crowns=False)
+    a = _forest(14, "bg0", 26, 10, 18, hmin=50, hmax=110)
+    # crown of the giant tree: thick limbs leaving the arena through the top edge (drawn in the near forest)
+    rr = rng(17)
+    gx = L.GIANT_TREE[0]
+
+    def climb(x0, y0, ang, ln, th, depth):
+        x1, y1 = x0 + math.cos(ang) * ln, y0 + math.sin(ang) * ln
+        for k in range(max(1, int(th))):
+            C.line(a, x0 + k - th / 2, y0, x1 + k - th / 2, y1, "bg0")
+        if depth > 0:
+            for sgn in (-1, 1):
+                climb(x1, y1, ang + sgn * rr.uniform(0.35, 0.6), ln * 0.7, max(2, th - 2), depth - 1)
+
+    for ang in (-2.3, -1.9, -1.4, -1.0, -0.6):
+        climb(gx + math.cos(ang) * 10, AY0 - 2, ang, rr.uniform(16, 26), 7, 3)
     keep = np.ones((H, W), dtype=bool)
     eb = L.EDGE_BAND - 4
     keep[AY0 - eb:AY1 + eb, AX0 - eb:AX1 + eb] = False
