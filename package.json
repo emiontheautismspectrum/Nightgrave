@@ -2,6 +2,12 @@
   "name": "nightgrave",
   "private": true,
   "version": "0.1.0",
+  "description": "Dark-fantasy dodge-and-parry survival game for the browser: one hit and the night wins.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emiontheautismspectrum/nightgrave.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

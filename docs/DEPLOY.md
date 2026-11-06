@@ -40,7 +40,7 @@ Answer `y` when asked. This applies every file in `server/migrations/` (includin
 `0004_view.sql`, which adds the `view` column: existing rows become `full`); after pulling a new version, run it again
 before `npx wrangler deploy`.
 
-## 5. Create two secrets
+## 5. Create three secrets
 
 Generate a random value (works on Windows, macOS and Linux):
 
@@ -63,7 +63,7 @@ npx wrangler secret put VERIFIER_TOKEN
 ```
 
 Run the generator three times. Each command asks you to paste a value. `ADMIN_TOKEN` is your moderation password;
-`IP_SALT` makes the stored IP hashes useless to anyone else; `VERIFIER_TOKEN` lets the replay verifier (step 13) post
+`IP_SALT` makes the stored IP hashes useless to anyone else; `VERIFIER_TOKEN` lets the replay verifier (step 14) post
 its verdicts. The Worker refuses to run without all of them (at least 32 characters each, 16 for the salt).
 Secrets are never stored in git.
 

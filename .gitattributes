@@ -1,0 +1,6 @@
+# Text files are stored with LF line endings; binary assets are never diffed or converted.
+* text=auto eol=lf
+*.png binary
+*.woff binary
+*.woff2 binary
+*.mp3 binary
