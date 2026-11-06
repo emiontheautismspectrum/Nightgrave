@@ -21,8 +21,8 @@ beforeEach(() => {
 });
 
 /** An honest Hard run on today's seed: the bot plays until it dies (cursor kept on screen like a real client). */
-function honestRun(maxTicks = 60 * 120): { log: InputFrame[]; score: number } {
-  const sim = new Sim(dailySeed(DATE), 'hard');
+function honestRun(maxTicks = 60 * 120, hero: 'knight' | 'wisp' = 'wisp'): { log: InputFrame[]; score: number } {
+  const sim = new Sim(dailySeed(DATE), 'hard', { hero });
   while (sim.state.alive && sim.state.tick < maxTicks) sim.step(botInputClamped(sim));
   while (sim.state.alive) sim.step({ cursor: false, mx: 0, my: 0, buttons: 0 });
   return { log: sim.log, score: sim.score };
@@ -34,7 +34,7 @@ function submit(log: readonly InputFrame[], score: number, over: Record<string, 
   const b = {
     date: DATE, seed: dailySeed(DATE), difficulty: 'hard', score, durationTicks: log.length, hero: 'wisp', name: 'Honest',
     message: 'verified run', playerId: pid(1), tuningFingerprint: tuningFingerprint(), clientVersion: CLIENT_VERSION,
-    replay: encodeInputLog(log), ...over,
+    replay: encodeInputLog(log, (over.hero as 'knight' | 'wisp' | undefined) ?? 'wisp'), ...over,
   };
   return handle(new Request('https://api.test/api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': `10.1.0.${++ip % 250}` }, body: JSON.stringify(b) }), env, at);
 }
@@ -85,7 +85,7 @@ describe('forged or broken runs are rejected and never shown', () => {
       expect((await board()).top).toEqual([]);
     });
   it('a different seed or an outdated client is rejected by the verifier itself', () => {
-    const base: PendingItem = { id: '1-1', date: DATE, seed: dailySeed(DATE), difficulty: 'hard', durationTicks: RUN.log.length, score: RUN.score, hero: 'knight', tuningFingerprint: tuningFingerprint(), clientVersion: CLIENT_VERSION, replay: encodeInputLog(RUN.log) };
+    const base: PendingItem = { id: '1-1', date: DATE, seed: dailySeed(DATE), difficulty: 'hard', durationTicks: RUN.log.length, score: RUN.score, hero: 'wisp', tuningFingerprint: tuningFingerprint(), clientVersion: CLIENT_VERSION, replay: encodeInputLog(RUN.log, 'wisp') };
     expect(verifyItem(base)).toEqual({ status: 'verified' });
     expect(verifyItem({ ...base, seed: base.seed + 1 })).toEqual({ status: 'rejected', reason: 'invalid_input' });
     expect(verifyItem({ ...base, clientVersion: '0.0.0' })).toEqual({ status: 'rejected', reason: 'outdated' });
@@ -163,7 +163,7 @@ describe('verifier endpoints', () => {
 
 describe('verification speed', () => {
   it('a 10-minute run (36,000 ticks) verifies well under 1 s', () => {
-    const it0: PendingItem = { id: '1-1', date: DATE, seed: dailySeed(DATE), difficulty: 'hard', durationTicks: RUN.log.length, score: RUN.score, hero: 'knight', tuningFingerprint: tuningFingerprint(), clientVersion: CLIENT_VERSION, replay: encodeInputLog(RUN.log) };
+    const it0: PendingItem = { id: '1-1', date: DATE, seed: dailySeed(DATE), difficulty: 'hard', durationTicks: RUN.log.length, score: RUN.score, hero: 'wisp', tuningFingerprint: tuningFingerprint(), clientVersion: CLIENT_VERSION, replay: encodeInputLog(RUN.log, 'wisp') };
     verifyItem(it0); // warm-up (JIT)
     const t0 = performance.now();
     for (let k = 0; k < 3; k++) expect(verifyItem(it0)).toEqual({ status: 'verified' });

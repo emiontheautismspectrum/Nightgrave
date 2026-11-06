@@ -19,6 +19,7 @@ import { BossView } from './BossView';
 import { online } from '../net/api';
 import { SubmitPanel } from './SubmitPanel';
 import { requestRelayout, setInRun } from '../web/runFlag';
+import type { HeroId } from '../data/heroes';
 import { boardOverlayOpen, openBoardOverlay } from '../web/boardOverlay';
 import { PORTRAIT } from '../data/view';
 import { portraitLayout, type PortraitLayout } from './portraitLayout';
@@ -60,7 +61,7 @@ const OVERHANG_DEPTH = 8; // forest overhang reaches at most 8 px into the arena
 const ALTAR_BASE = ARENA_PROPS.props.find((p) => p.sprite === 'portal_altar')?.baseY ?? 0;
 const FONT = '"Press Start 2P", monospace';
 
-export type HeroKind = 'knight' | 'wisp';
+export type HeroKind = HeroId;
 
 export interface RunConfig {
   difficulty: Difficulty;
@@ -632,7 +633,8 @@ export class GameScene extends Phaser.Scene {
   private newRun(): void {
     const run = this.cfg.makeRun();
     this.cfg.hero = save().hero;
-    this.sim = new Sim(run.seed, this.cfg.difficulty, this.cfg.startWave ? { startWave: this.cfg.startWave } : {});
+    // the hero is part of the run definition (it changes the rules); an instant restart keeps the selected hero
+    this.sim = new Sim(run.seed, this.cfg.difficulty, { hero: this.cfg.hero, ...(this.cfg.startWave ? { startWave: this.cfg.startWave } : {}) });
     this.driver = new RunDriver(this.sim);
     this.runZoomed = false;
     for (const o of this.fx) {
@@ -870,9 +872,9 @@ export class GameScene extends Phaser.Scene {
     const hero = this.cfg.hero;
     this.syncView(); // the death panel is drawn on the full arena right away
     const view = this.runZoomed ? ('zoomed' as const) : ('full' as const);
-    const meta = { hero, input: [...this.input2.sources], view };
+    const meta = { input: [...this.input2.sources], view };
     // a dev start-wave run is not a real run: no replay (startWave is not recorded) and never saved
-    this.lastReplay = this.cfg.startWave ? null : encodeReplay(st.seed, st.difficulty, this.sim.log, meta);
+    this.lastReplay = this.cfg.startWave ? null : encodeReplay(st.seed, st.difficulty, hero, this.sim.log, meta);
     this.hero.play(`${hero}_death`);
     this.shadow.setVisible(false);
     this.burst('death_burst', st.hero.x, st.hero.y);

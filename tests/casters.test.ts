@@ -112,14 +112,14 @@ describe('casters', () => {
 
   for (const d of ['easy', 'medium', 'hard'] as Difficulty[]) {
     it(`${d}: runs with casters replay exactly`, () => {
-      const sim = new Sim(4242, d);
+      const sim = new Sim(4242, d, { hero: 'wisp' });
       let saw = 0;
       for (let t = 0; t < 60 * 120 && sim.state.alive; t++) {
         sim.step(botInput(sim));
         saw += sim.state.events.filter((e) => e.type === 'caster').length;
       }
       expect(saw).toBeGreaterThan(0);
-      const replayed = playReplay(JSON.parse(JSON.stringify(encodeReplay(4242, d, sim.log))));
+      const replayed = playReplay(JSON.parse(JSON.stringify(encodeReplay(4242, d, 'wisp', sim.log))));
       const strip = (st: object) => JSON.stringify({ ...st, events: undefined });
       expect(strip(replayed.state)).toBe(strip(sim.state));
     });

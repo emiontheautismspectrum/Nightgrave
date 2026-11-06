@@ -4,6 +4,7 @@
  * Enter submits, Esc leaves the field; while a field is focused, keys only type. Everything else (Space, a click or
  * tap outside the fields) still restarts instantly. Text is set with .value / Phaser text only (never innerHTML).
  */
+import type { HeroId } from '../data/heroes';
 import Phaser from 'phaser';
 import { addText, setTextColor, setTextValue, type UIText } from './text';
 import { reasonText, submitRun, wouldRank, fetchBoard } from '../net/api';
@@ -18,7 +19,7 @@ export interface RunResult {
   date: string;
   seed: number;
   score: number;
-  hero: 'knight' | 'wisp';
+  hero: HeroId;
   /** Metadata only: was the run played with the zoomed phone-portrait camera at any point. */
   view: 'full' | 'zoomed';
   log: readonly InputFrame[];
@@ -218,7 +219,7 @@ export class SubmitPanel {
       playerId: save().playerId,
       tuningFingerprint: tuningFingerprint(),
       clientVersion: CLIENT_VERSION,
-      replay: encodeInputLog(r.log),
+      replay: encodeInputLog(r.log, r.hero),
     });
     this.busy = false;
     if (!this.objs.length) return; // closed meanwhile

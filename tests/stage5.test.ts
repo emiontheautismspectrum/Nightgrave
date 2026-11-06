@@ -160,7 +160,7 @@ describe('pause and restart', () => {
       expect(JSON.stringify({ ...paused.state, events: [] })).toBe(JSON.stringify({ ...plain.state, events: [] }));
       expect(paused.score).toBe(plain.score);
     }
-    expect(JSON.stringify(encodeReplay(77, 'medium', paused.log))).toBe(JSON.stringify(encodeReplay(77, 'medium', plain.log.slice(0, paused.log.length))));
+    expect(JSON.stringify(encodeReplay(77, 'medium', 'knight', paused.log))).toBe(JSON.stringify(encodeReplay(77, 'medium', 'knight', plain.log.slice(0, paused.log.length))));
   });
 
   it('a paused driver does not catch up the paused time', () => {
@@ -191,22 +191,21 @@ describe('pause and restart', () => {
 });
 
 describe('replay metadata', () => {
-  it('hero and input source are metadata only: same frames => same state and score', () => {
-    const sim = new Sim(9, 'hard');
+  it('input sources and the view are metadata only; the hero is in the core and never comes from meta', () => {
+    const sim = new Sim(9, 'hard', { hero: 'knight' });
     for (const f of mulberryInputs(3, 1500)) sim.step(f);
-    const a = encodeReplay(9, 'hard', sim.log, { hero: 'knight', input: ['mouse'] });
-    const b = encodeReplay(9, 'hard', sim.log, { hero: 'wisp', input: ['touch'], view: 'zoomed' });
+    const a = encodeReplay(9, 'hard', 'knight', sim.log, { input: ['mouse'] });
+    const b = encodeReplay(9, 'hard', 'knight', sim.log, { input: ['touch'], view: 'zoomed' });
     expect(a.tuning).toBe(b.tuning);
     expect(a.runs).toEqual(b.runs);
+    expect(a.hero).toBe('knight');
     const ra = playReplay(JSON.parse(JSON.stringify(a)));
     const rb = playReplay(JSON.parse(JSON.stringify(b)));
     expect(JSON.stringify({ ...ra.state, events: [] })).toBe(JSON.stringify({ ...rb.state, events: [] }));
-    expect(ra.score).toBe(rb.score);
-    expect(decodeReplay(JSON.parse(JSON.stringify(b))).meta).toEqual({ hero: 'wisp', input: ['touch'], view: 'zoomed' });
-    // untrusted metadata is sanitized, never trusted
-    const bad = { ...a, meta: { hero: '<b>x</b>', input: ['touch', 'evil'] } };
-    expect(decodeReplay(bad).meta).toBeUndefined();
-    expect(decodeReplay({ ...a, meta: { hero: 'wisp', input: ['evil', 'touch'], view: 'huge' } }).meta).toEqual({ hero: 'wisp', input: ['touch'], view: 'full' });
+    expect(ra.score).toBe(sim.score);
+    expect(decodeReplay(JSON.parse(JSON.stringify(b))).meta).toEqual({ input: ['touch'], view: 'zoomed' });
+    // untrusted metadata is sanitized; a hero written into meta is ignored (the core hero rules)
+    expect(decodeReplay({ ...a, meta: { hero: 'wisp', input: ['evil', 'touch'], view: 'huge' } })).toMatchObject({ hero: 'knight', meta: { input: ['touch'], view: 'full' } });
     // the view (full arena / zoomed phone camera) never changes the simulation
     expect(playReplay(JSON.parse(JSON.stringify({ ...a, meta: { ...a.meta, view: 'zoomed' } }))).score).toBe(ra.score);
   });
@@ -302,7 +301,7 @@ describe('touch controls', () => {
       touchSim.step(frame);
       mouseSim.step({ ...frame }); // the mouse at the same game position with the same clicks
     }
-    expect(JSON.stringify(encodeReplay(31, 'medium', touchSim.log))).toBe(JSON.stringify(encodeReplay(31, 'medium', mouseSim.log)));
+    expect(JSON.stringify(encodeReplay(31, 'medium', 'wisp', touchSim.log))).toBe(JSON.stringify(encodeReplay(31, 'medium', 'wisp', mouseSim.log)));
     expect(touchSim.score).toBe(mouseSim.score);
   });
 });

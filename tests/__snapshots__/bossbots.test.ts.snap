@@ -1,5 +1,23 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`golden replays > easy knight: golden bot run 1`] = `
+{
+  "alive": true,
+  "bosses": 1,
+  "score": 3042,
+  "tick": 7200,
+}
+`;
+
+exports[`golden replays > easy wisp: golden bot run 1`] = `
+{
+  "alive": true,
+  "bosses": 1,
+  "score": 3622,
+  "tick": 7200,
+}
+`;
+
 exports[`golden replays > easy: golden bot run 1`] = `
 {
   "alive": true,
@@ -9,12 +27,48 @@ exports[`golden replays > easy: golden bot run 1`] = `
 }
 `;
 
+exports[`golden replays > hard knight: golden bot run 1`] = `
+{
+  "alive": true,
+  "bosses": 1,
+  "score": 6023,
+  "tick": 7200,
+}
+`;
+
+exports[`golden replays > hard wisp: golden bot run 1`] = `
+{
+  "alive": false,
+  "bosses": 0,
+  "score": 356,
+  "tick": 787,
+}
+`;
+
 exports[`golden replays > hard: golden bot run 1`] = `
 {
   "alive": false,
   "bosses": 0,
   "score": 349,
   "tick": 787,
+}
+`;
+
+exports[`golden replays > medium knight: golden bot run 1`] = `
+{
+  "alive": true,
+  "bosses": 1,
+  "score": 3872,
+  "tick": 7200,
+}
+`;
+
+exports[`golden replays > medium wisp: golden bot run 1`] = `
+{
+  "alive": true,
+  "bosses": 1,
+  "score": 4121,
+  "tick": 7200,
 }
 `;
 

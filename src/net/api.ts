@@ -2,6 +2,7 @@
  * Client for the Hard daily board. Online features are off when VITE_API_BASE is empty (the game is fully offline).
  * Every response is untrusted: it is re-validated here and only ever rendered with text-only APIs.
  */
+import { isHeroId, type HeroId } from '../data/heroes';
 import { DATE_RE } from '../shared/daily';
 
 export const API_BASE: string = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, '') ?? '';
@@ -12,7 +13,7 @@ export interface BoardEntry {
   rank: number;
   name: string;
   score: number;
-  hero: 'knight' | 'wisp';
+  hero: HeroId;
   durationTicks: number;
   /** How the run was seen: the whole arena, or the zoomed phone-portrait camera (metadata only). */
   view: 'full' | 'zoomed';
@@ -62,7 +63,7 @@ export function parseBoard(raw: unknown): Board | null {
     const score = int(r.score);
     const rank = int(r.rank);
     const dur = int(r.durationTicks);
-    if (!name || score === null || rank === null || dur === null || (r.hero !== 'knight' && r.hero !== 'wisp')) continue;
+    if (!name || score === null || rank === null || dur === null || !isHeroId(r.hero)) continue;
     top.push({ rank, name, score, hero: r.hero, durationTicks: dur, view: r.view === 'zoomed' ? 'zoomed' : 'full' });
   }
   let champion: Board['champion'] = null;

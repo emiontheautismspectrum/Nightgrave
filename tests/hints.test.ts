@@ -16,7 +16,7 @@ describe('controls explanation', () => {
   });
   it('contextual hints: once each (violet then red), only for an approaching projectile, never touching the sim', () => {
     const p = makeParams('medium');
-    const s = createState(1, 'medium', p);
+    const s = createState(1, 'medium', p.hero, p);
     const h = new ContextHints(true);
     spawnProjectile(s, p, 'orb_small', s.hero.x + 50, s.hero.y, 1, 0); // moving away: no hint
     expect(h.tick(s)).toBeNull();

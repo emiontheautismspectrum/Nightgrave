@@ -88,11 +88,11 @@ describe('determinism with every threat type', () => {
 
   for (const d of DIFFS) {
     it(`${d}: a long bot run replays exactly (encode -> JSON -> decode -> play)`, () => {
-      const sim = new Sim(777, d);
+      const sim = new Sim(777, d, { hero: 'knight' });
       const kinds = new Set<ProjectileKind>();
       for (const e of collect(sim, (s) => botInput(s), 60 * 60 * 4)) if (e.type === 'spawn') kinds.add(e.kind);
       expect(kinds.size).toBeGreaterThanOrEqual(5); // a real (non test-option) run that reached blades and wraiths
-      const replayed = playReplay(JSON.parse(JSON.stringify(encodeReplay(777, d, sim.log))));
+      const replayed = playReplay(JSON.parse(JSON.stringify(encodeReplay(777, d, 'knight', sim.log))));
       const strip = (st: object) => JSON.stringify({ ...st, events: undefined });
       expect(strip(replayed.state)).toBe(strip(sim.state));
       expect(replayed.score).toBe(sim.score);

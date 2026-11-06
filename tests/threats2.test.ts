@@ -11,7 +11,7 @@ const parry = { ...idle, buttons: BTN_PARRY };
 describe('armored orb', () => {
   it('needs two parries: the first cracks it and pushes it 6 px away (no points), the second destroys it', () => {
     const p = makeParams('medium');
-    const s = createState(1, 'medium', p);
+    const s = createState(1, 'medium', p.hero, p);
     const pr = spawnProjectile(s, p, 'orb_armored', s.hero.x + 8, s.hero.y, 0, 0);
     step(s, parry, p, { spawner: false });
     expect(s.projectiles.find((q) => q.id === pr.id)?.armor).toBe(0);
@@ -26,7 +26,7 @@ describe('armored orb', () => {
   });
   it('a cracked orb counts toward the 3-per-pulse cap', () => {
     const p = makeParams('medium');
-    const s = createState(1, 'medium', p);
+    const s = createState(1, 'medium', p.hero, p);
     spawnProjectile(s, p, 'orb_armored', s.hero.x + 5, s.hero.y, 0, 0);
     for (let k = 0; k < 4; k++) spawnProjectile(s, p, 'orb_small', s.hero.x + 10 + k, s.hero.y, 0, 0);
     step(s, parry, p, { spawner: false });
@@ -38,7 +38,7 @@ describe('splitting orb', () => {
   it('bursts into 3 small orbs flying outward, never spawning inside or moving toward the hero', () => {
     for (const ang of [0, 1, 2, 3, 4, 5]) {
       const p = makeParams('hard');
-      const s = createState(1, 'hard', p);
+      const s = createState(1, 'hard', p.hero, p);
       const d = 4 + ang * 2;
       spawnProjectile(s, p, 'orb_split', s.hero.x + Math.cos(ang) * d, s.hero.y + Math.sin(ang) * d, 0, 0);
       step(s, parry, p, { spawner: false });
@@ -120,7 +120,7 @@ describe('blood sigil', () => {
   });
   it('lethal only while filled; dash i-frames pass through it; unparryable', () => {
     const p = makeParams('medium');
-    const s = createState(1, 'medium', p);
+    const s = createState(1, 'medium', p.hero, p);
     s.sigils.push({ id: 99, x: s.hero.x, y: s.hero.y, r: 14, start: 0, fill: 20, end: 110, gone: 128 });
     for (let i = 0; i < 19; i++) step(s, i === 0 ? parry : idle, p, { spawner: false });
     expect(s.alive).toBe(true); // telegraph: harmless
@@ -140,7 +140,7 @@ describe('review fixes', () => {
   it('a hero running forward through a just-burst split orb is not killed by the pieces', () => {
     for (const d of ['easy', 'medium', 'hard'] as const) {
       const p = makeParams(d);
-      const s = createState(1, d, p);
+      const s = createState(1, d, p.hero, p);
       spawnProjectile(s, p, 'orb_split', s.hero.x + 20, s.hero.y, 0, 0);
       step(s, { cursor: true, mx: 420, my: Math.round(s.hero.y), buttons: BTN_PARRY }, p, { spawner: false });
       for (let i = 0; i < 40; i++) step(s, { cursor: true, mx: 420, my: Math.round(s.hero.y), buttons: 0 }, p, { spawner: false });
@@ -149,7 +149,7 @@ describe('review fixes', () => {
   });
   it('armored orb on Hard at the wave speed cap: the second parry is reachable', () => {
     const p = makeParams('hard');
-    const s = createState(1, 'hard', p);
+    const s = createState(1, 'hard', p.hero, p);
     const v = (p.newThreats.armored.speed * p.diffSpeed * p.speedCap) / 60;
     const pr = spawnProjectile(s, p, 'orb_armored', s.hero.x + 20, s.hero.y, -v, 0);
     step(s, parry, p, { spawner: false }); // crack
@@ -164,7 +164,7 @@ describe('review fixes', () => {
   });
   it('crack + kill in one pulse: the kill still scores as the first (full points, counts as a parry)', () => {
     const p = makeParams('medium');
-    const s = createState(1, 'medium', p);
+    const s = createState(1, 'medium', p.hero, p);
     spawnProjectile(s, p, 'orb_armored', s.hero.x + 4, s.hero.y, 0, 0);
     spawnProjectile(s, p, 'orb_small', s.hero.x + 9, s.hero.y, 0, 0);
     const before = s.lastParryTick;
@@ -175,7 +175,7 @@ describe('review fixes', () => {
   });
   it('a crack alone does not refresh the multiplier reset timer', () => {
     const p = makeParams('medium');
-    const s = createState(1, 'medium', p);
+    const s = createState(1, 'medium', p.hero, p);
     spawnProjectile(s, p, 'orb_armored', s.hero.x + 4, s.hero.y, 0, 0);
     const before = s.lastParryTick;
     step(s, parry, p, { spawner: false });

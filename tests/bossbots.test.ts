@@ -34,10 +34,11 @@ describe('boss bots (simple, deterministic)', () => {
 describe('golden replays', () => {
   // bot runs through the first boss on every difficulty: recorded score/tick/bosses must never drift silently
   for (const d of ['easy', 'medium', 'hard'] as Difficulty[])
-    it(`${d}: golden bot run`, () => {
-      const sim = new Sim(7, d);
+    for (const hero of ['knight', 'wisp'] as const)
+    it(`${d} ${hero}: golden bot run`, () => {
+      const sim = new Sim(7, d, { hero });
       while (sim.state.alive && sim.state.tick < 60 * 120) sim.step(botInput(sim));
-      const rep = playReplay(JSON.parse(JSON.stringify(encodeReplay(7, d, sim.log))));
+      const rep = playReplay(JSON.parse(JSON.stringify(encodeReplay(7, d, hero, sim.log))));
       expect(rep.score).toBe(sim.score);
       expect({ score: sim.score, tick: sim.state.tick, bosses: sim.state.bossesDefeated, alive: sim.state.alive }).toMatchSnapshot();
     });
