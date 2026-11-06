@@ -28,7 +28,7 @@
     "e2e:phone-menus": "node tests-e2e/phone_menus.cjs"
   },
   "dependencies": {
-    "@fontsource/press-start-2p": "5.2.7",
+    "@fontsource/press-start-2p": "5.3.0",
     "phaser": "3.90.0"
   },
   "devDependencies": {
