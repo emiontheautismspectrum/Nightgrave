@@ -12,7 +12,10 @@ const VITE_BIN = path.join(__dirname, '..', 'node_modules', 'vite', 'bin', 'vite
 const ROOT = path.join(__dirname, '..');
 require('node:fs').mkdirSync(path.join(ROOT, 'assets', 'preview'), { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`timed out: ${what}`)), ms))]);
+const withTimeout = (p, ms, what) => {
+  let timer;
+  return Promise.race([p, new Promise((_, rej) => (timer = setTimeout(() => rej(new Error(`timed out: ${what}`)), ms)))]).finally(() => clearTimeout(timer));
+};
 
 (async () => {
   execSync('npx vite build', { cwd: ROOT, stdio: 'ignore', env: { ...process.env, VITE_SMOKE: '1' } });

@@ -33,8 +33,9 @@ export const TUNING = {
   /**
    * A successful parry = one pulse that destroyed something. The first projectile of a pulse scores
    * parryBase x multiplier; every extra one in the same pulse scores extraKillPoints x multiplier.
-   * Points use the multiplier before the pulse's step. The multiplier steps once per successful pulse (a 16-shard
-   * ring is not 16 parries), plus once more if the pulse had a PERFECT kill.
+   * The first kill of a pulse scores at the multiplier before the pulse's step; later kills of the same pulse score at
+   * the current (already stepped) one. The multiplier steps once per successful pulse (a 16-shard ring is not 16
+   * parries), plus once more if the pulse had a PERFECT kill.
    */
   score: { survivalPerSecond: 10, parryBase: 25, extraKillPoints: 5 },
   // Polish 2: base projectile speeds +30% (orbs, shards, blades, wraiths, the eye's ring; caster and other boss shots use

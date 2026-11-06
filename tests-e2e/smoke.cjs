@@ -40,6 +40,11 @@ async function toPage(page, gx, gy) {
   }), STEP_TIMEOUT_MS, 'reading the canvas box');
   return { x: r.x + (gx * r.w) / 480, y: r.y + (gy * r.h) / 270 };
 }
+/** Smoke builds: step n ticks while real time is frozen (__ngManual), then let a frame refresh the snapshot. */
+const step = async (page, n) => {
+  await within(page.evaluate((m) => window.__ngDebug.step(m), n), STEP_TIMEOUT_MS, 'stepping ticks');
+  await sleep(100);
+};
 const dbg = (page) => within(page.evaluate(() => window.__ngDebug ?? null), STEP_TIMEOUT_MS, 'reading the game state');
 
 async function touch(cdp, type, pts) {
@@ -49,6 +54,8 @@ async function touch(cdp, type, pts) {
 async function phone(browser) {
   const ctx = await browser.newContext({ ...devices['Pixel 7 landscape'] });
   await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} }); // tests skip the site intro
+  // ticks are stepped by the test (smoke build hook): a projectile can never end the run between two checks
+  await ctx.addInitScript(() => { window.__ngManual = true; });
   const page = await ctx.newPage();
   page.setDefaultTimeout(STEP_TIMEOUT_MS); // clicks, key presses, navigation and screenshots fail instead of hanging
   const errs = [];
@@ -79,13 +86,14 @@ async function phone(browser) {
     await touch(cdp, 'touchMove', [{ x: a.x + k * 8, y: a.y }]);
     await sleep(30);
   }
+  await step(page, 40);
   await touch(cdp, 'touchEnd', []);
-  await sleep(600);
+  await sleep(100);
   d = await dbg(page);
   ok(d && d.x > x0 + 20, `phone: drag moves the hero (${x0.toFixed(0)} -> ${d && d.x.toFixed(0)})`);
   const ps = d.parryStart;
   await tap(456, 222); // PARRY button (right margin)
-  await sleep(200);
+  await step(page, 2);
   d = await dbg(page);
   ok(d && d.parryStart !== ps, 'phone: the PARRY button triggers a parry');
   await page.screenshot({ path: path.join(OUT, 'touch_layout.png') });
@@ -129,9 +137,16 @@ async function desktop(browser) {
   await page.screenshot({ path: path.join(OUT, 'menu_settings.png') });
   await page.keyboard.press('Escape');
   await sleep(200);
-  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowUp');
-  await page.keyboard.press('Enter'); // play
-  await sleep(800);
+  // PLAY by a click on its row (keyboard focus after Escape depends on frame timing under load: flaky)
+  const L = await within(page.evaluate(() => window.__ngLayout ?? null), STEP_TIMEOUT_MS, 'reading the menu layout');
+  const row = L && L.texts.find((t) => t.text.replace(/[<>]/g, '').trim() === 'PLAY');
+  ok(!!row, 'desktop: the PLAY row is on the title');
+  if (row) {
+    const at = await toPage(page, row.box[0] + row.box[2] / 2, row.box[1] + row.box[3] / 2);
+    await page.mouse.click(at.x, at.y);
+  }
+  for (let i = 0; i < 20 && !(await dbg(page)); i++) await sleep(100); // the run scene is up
+  await sleep(500);
   let d = await dbg(page);
   ok(d && d.hint && d.paused, 'desktop: first run shows the controls card (run paused)');
   await page.keyboard.press('KeyX'); // any key dismisses it (after 250 ms) and is not used as an action

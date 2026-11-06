@@ -23,7 +23,7 @@ import { boardOverlayOpen, openBoardOverlay } from '../web/boardOverlay';
 import { PORTRAIT, portraitViewport } from '../data/view';
 import { FollowCam } from './camera';
 import { edgeMarkers } from './edgeMarkers';
-import { decayAlpha, doubleActive, LABEL, LABEL_MS, labelSpot, multColor } from './multFeedback';
+import { decayAlpha, doubleActive, LABEL, LABEL_MS, labelSpot, multColor, type LabelBounds } from './multFeedback';
 import { emitAudioEvent } from './events';
 import { InputCollector } from './input';
 import { settingsPage, type MenuCtx } from './menus';
@@ -123,6 +123,8 @@ export class GameScene extends Phaser.Scene {
   /** Where this tick's parried projectiles died (their points popups): the multiplier label keeps clear of them. */
   private killsThisTick: { x: number; y: number; w?: number }[] = [];
   private pointsThisTick = 0;
+  /** Live floating labels and rings: removed on an instant restart. */
+  private fx: Phaser.GameObjects.GameObject[] = [];
   private hudWave!: UIText;
   private hudDaily!: UIText;
   private banner!: UIText;
@@ -561,6 +563,13 @@ export class GameScene extends Phaser.Scene {
     this.sim = new Sim(run.seed, this.cfg.difficulty, this.cfg.startWave ? { startWave: this.cfg.startWave } : {});
     this.driver = new RunDriver(this.sim);
     this.runZoomed = false;
+    for (const o of this.fx) {
+      this.tweens.killTweensOf(o);
+      o.destroy();
+    }
+    this.fx = [];
+    this.tweens.killTweensOf(this.hudMult);
+    this.hudMult.setScale(1).setAlpha(1);
     this.boardBtn?.destroy();
     this.boardBtn = null;
     this.sounds.reset();
@@ -635,7 +644,7 @@ export class GameScene extends Phaser.Scene {
     if (this.pointsThisTick > 0) {
       // the points of this tick's parry, gold under Double Score, clear of projectiles, kills and the multiplier label
       const txt = `+${Math.round(this.pointsThisTick)}`;
-      const at = labelSpot(this.sim.state, ARENA_RECT[1] + 4, ARENA_RECT[3] - 4, this.killsThisTick, txt.length * 8);
+      const at = labelSpot(this.sim.state, this.labelBounds(), this.killsThisTick, txt.length * 8);
       this.floatLabel(txt, at.x, at.y, doubleActive(this.sim.state) ? LABEL.pointsDouble : LABEL.points);
     }
     for (const ev of this.sounds.tick(this.sim.state, this.sim.state.events, this.time.now)) emitAudioEvent(ev);
@@ -707,10 +716,10 @@ export class GameScene extends Phaser.Scene {
       case 'mult_step': {
         // a small label near the hero, away from the nearest projectile; the HUD multiplier pulses
         const txt = `${e.perfect ? 'PERFECT ' : ''}X${e.multiplier.toFixed(2)}`;
-        const at = labelSpot(this.sim.state, ARENA_RECT[1] + 4, ARENA_RECT[3] - 4, this.killsThisTick, txt.length * 8);
+        const at = labelSpot(this.sim.state, this.labelBounds(), this.killsThisTick, txt.length * 8);
         this.floatLabel(txt, at.x, at.y, e.perfect ? LABEL.perfect : LABEL.step);
         this.killsThisTick.push({ x: at.x, y: at.y, w: txt.length * 8 }); // the points popup keeps clear of it
-        if (!save().settings.reducedFlashes) {
+        if (!this.reducedFx()) {
           this.tweens.killTweensOf(this.hudMult);
           this.hudMult.setScale(1);
           this.tweens.add({ targets: this.hudMult, scale: 1.25, duration: 90, yoyo: true, onComplete: () => this.hudMult.setScale(1) });
@@ -724,10 +733,11 @@ export class GameScene extends Phaser.Scene {
         this.tweens.add({ targets: this.hudMult, alpha: 1, duration: 450 });
         break;
       case 'pickup_take':
-        if (e.kind === 'double') {
-          // a short gold ring at the hero
+        if (e.kind === 'double' && !this.reducedFx()) {
+          // a short gold ring at the hero (not with reduced flashes / reduced motion)
           const ring = this.add.circle(Math.round(e.x), Math.round(e.y), 6).setStrokeStyle(1, 0xffd86b, 0.9).setDepth(D_FOG + 7);
-          this.tweens.add({ targets: ring, scale: 3, alpha: 0, duration: 350, onComplete: () => ring.destroy() });
+          this.fx.push(ring);
+          this.tweens.add({ targets: ring, scale: 3, alpha: 0, duration: 350, onComplete: () => this.dropFx(ring) });
         }
         break;
       case 'parry_whiff':
@@ -752,7 +762,27 @@ export class GameScene extends Phaser.Scene {
   /** A small world-space label that rises a few px and fades within LABEL_MS (render-only). */
   private floatLabel(text: string, x: number, y: number, color: string): void {
     const t = snap(addText(this, Math.round(x), Math.round(y), text, { color }).setOrigin(0.5).setDepth(D_FOG + 7));
-    this.tweens.add({ targets: t, y: t.y - 8, alpha: 0, delay: LABEL_MS / 3, duration: (LABEL_MS * 2) / 3, onComplete: () => t.destroy() });
+    this.fx.push(t);
+    this.tweens.add({ targets: t, y: t.y - 8, alpha: 0, delay: LABEL_MS / 3, duration: (LABEL_MS * 2) / 3, onComplete: () => this.dropFx(t) });
+  }
+
+  private dropFx(o: Phaser.GameObjects.GameObject): void {
+    this.fx = this.fx.filter((x) => x !== o);
+    o.destroy();
+  }
+
+  /** Reduced flashes (setting) or the system's reduced-motion preference: no pulse, blink, breathing or ring. */
+  private reducedFx(): boolean {
+    return save().settings.reducedFlashes || !!this.reducedMq?.matches;
+  }
+
+  /** Labels stay inside the arena; in the zoomed portrait view also inside the camera window (clear of edge markers). */
+  private labelBounds(): LabelBounds {
+    const [x0, y0, x1, y1] = ARENA_RECT;
+    const b = { minX: x0 + 2, maxX: x1 - 2, minY: y0 + 4, maxY: y1 - 4 };
+    if (!this.zoomed) return b;
+    const v = this.follow.rect();
+    return { minX: Math.max(b.minX, v.x0 + 12), maxX: Math.min(b.maxX, v.x1 - 12), minY: Math.max(b.minY, v.y0 + 12), maxY: Math.min(b.maxY, v.y1 - 12) };
   }
 
   private burst(anim: SpriteName, x: number, y: number): void {
@@ -910,12 +940,16 @@ export class GameScene extends Phaser.Scene {
    */
   private drawScoreFeedback(): void {
     const st = this.sim.state;
-    const reduced = save().settings.reducedFlashes;
+    // paused: no blink and no breathing (frozen like the run)
+    const reduced = this.reducedFx() || this.driver.paused;
     setTextColor(this.hudMult, multColor(st.multiplier));
     if (!this.tweens.isTweening(this.hudMult)) this.hudMult.setAlpha(st.alive ? decayAlpha(st, this.sim.params, this.time.now, reduced) : 1);
     const dbl = st.alive && doubleActive(st);
     setTextColor(this.hudScore, dbl ? C.gold : C.bone);
-    this.hudX2.setVisible(dbl).setPosition(Math.round(this.hudScore.x + this.hudScore.width + 4), this.hudScore.y);
+    // the X2 tag follows the score; in the narrow portrait HUD it sits on the second row (never over the multiplier)
+    if (this.zoomed) this.hudX2.setPosition(176, 18);
+    else this.hudX2.setPosition(Math.round(this.hudScore.x + this.hudScore.width + 4), this.hudScore.y);
+    this.hudX2.setVisible(dbl);
     const g = this.dblGfx;
     g.clear();
     if (dbl) {

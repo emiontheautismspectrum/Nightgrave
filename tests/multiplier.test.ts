@@ -80,6 +80,31 @@ describe('multiplier rule', () => {
     expect(b.sim.state.lastParryTick).toBe(-1); // the reset timer is not refreshed by a crack
   });
 
+  it('a far kill on the first tick and a PERFECT kill later in the same pulse: one step each, one parry', () => {
+    const { sim, p, h } = fresh();
+    orbAt(sim, p.parryRadius - 2); // inside the pulse, not perfect
+    // an orb closing in at 7 px per tick: outside the reach on tick 1, perfect on tick 2 (the pulse is still active)
+    spawnProjectile(sim.state, p, 'orb_small', h.x - (30 + p.smallRadius), h.y, 7, 0);
+    const ev: SimEvent[] = [...events(sim, parry())];
+    expect(sim.state.multiplier).toBe(p.multStart + p.multStep);
+    for (let i = 0; i < 3; i++) ev.push(...events(sim, idle()));
+    expect(sim.state.parryCount).toBe(1);
+    expect(sim.state.multiplier).toBe(p.multStart + 2 * p.multStep);
+    expect(ev.filter((e) => e.type === 'mult_step').map((e) => (e as { perfect: boolean }).perfect)).toEqual([false, true]);
+  });
+
+  it('a split orb parried PERFECT: one step + the extra; its children cannot be parried by the same pulse', () => {
+    const { sim, p, h } = fresh();
+    spawnProjectile(sim.state, p, 'orb_split', h.x + 6, h.y, 0, 0);
+    sim.step(parry());
+    const kids = sim.state.projectiles.length;
+    expect(kids).toBe(TUNING.newThreats.split.children);
+    for (let i = 0; i < 4; i++) sim.step(idle()); // the rest of the active window
+    expect(sim.state.parryCount).toBe(1);
+    expect(sim.state.multiplier).toBe(p.multStart + 2 * p.multStep);
+    expect(sim.state.projectiles.length).toBeGreaterThan(0); // the children were not destroyed by the parent's pulse
+  });
+
   it('never exceeds the cap', () => {
     const { sim, p } = fresh();
     sim.state.multiplier = p.multCap - p.multStep;

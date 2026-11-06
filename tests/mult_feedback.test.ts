@@ -4,6 +4,7 @@ import { decayAlpha, doubleActive, labelSpot, multColor, resetTicksLeft } from '
 import { Sim, spawnProjectile } from '../src/sim/sim';
 
 const fresh = () => new Sim(1, 'medium', { spawner: false });
+const B = { minX: 50, maxX: 430, minY: 31, maxY: 239 };
 
 describe('multiplier feedback', () => {
   it('HUD colour by tier: x1 white, x2+ amber, x4+ gold', () => {
@@ -29,24 +30,33 @@ describe('multiplier feedback', () => {
     const sim = fresh();
     const s = sim.state;
     const h = s.hero;
-    const free = labelSpot(s, 31, 239);
+    const free = labelSpot(s, B);
     expect(free.y).toBeLessThanOrEqual(h.y - 14);
-    spawnProjectile(s, sim.params, 'orb_small', h.x + 4, h.y - 30, 0, 1);
-    const below = labelSpot(s, 31, 239);
+    spawnProjectile(s, sim.params, 'orb_small', h.x + 4, h.y - 30, 0, 0);
+    const below = labelSpot(s, B);
     expect(below.y).toBeGreaterThanOrEqual(h.y + 14);
     // projectiles above AND below: a side spot that touches none of them
-    spawnProjectile(s, sim.params, 'orb_small', h.x, h.y + 16, 0, -1);
-    const side = labelSpot(s, 31, 239, [], 64);
+    spawnProjectile(s, sim.params, 'orb_small', h.x, h.y + 16, 0, 0);
+    const side = labelSpot(s, B, [], 64);
     expect(Math.abs(side.x - h.x)).toBeGreaterThan(30);
     for (const pr of s.projectiles) expect(Math.abs(pr.x - side.x) > 38 + pr.radius || Math.abs(pr.y - side.y) > 10 + pr.radius).toBe(true);
     // the points popup of this tick is avoided like a projectile
     s.projectiles = [];
-    const pts = labelSpot(s, 31, 239, [{ x: h.x, y: h.y - 22 }]);
+    const pts = labelSpot(s, B, [{ x: h.x, y: h.y - 22 }]);
     expect(pts.y).not.toBe(Math.round(h.y - 22));
+    // a projectile that will fly through the spot above during the label's life (not there yet) is avoided too
+    spawnProjectile(s, sim.params, 'orb_small', h.x - 60, h.y - 22, 2, 0);
+    expect(labelSpot(s, B).y).not.toBe(Math.round(h.y - 22));
+    // clamped inside the bounds: a wide label next to the left edge
+    s.projectiles = [];
+    h.x = 52;
+    const edge = labelSpot(s, B, [], 104);
+    expect(edge.x - 52).toBeGreaterThanOrEqual(B.minX);
+    h.x = 240;
     // no room above (top of the arena): below
     h.y = 35;
     s.projectiles = [];
-    expect(labelSpot(s, 31, 239).y).toBeGreaterThan(h.y);
+    expect(labelSpot(s, B).y).toBeGreaterThan(h.y);
   });
 
   it('Double Score is active exactly while the sim says so', () => {

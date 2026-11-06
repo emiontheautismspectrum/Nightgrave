@@ -42,37 +42,48 @@ export function decayAlpha(s: SimState, p: SimParams, nowMs: number, reduced: bo
 /** Double Score is active (the same rule as the sim's isDouble). */
 export const doubleActive = (s: SimState): boolean => s.tick < s.doubleUntil;
 
+/** The area a label must stay inside (world px): the arena, or the camera window in the zoomed portrait view. */
+export interface LabelBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+/** Ticks a label is on screen (LABEL_MS at 60 Hz): a projectile is avoided along its path for that long. */
+const LABEL_TICKS = Math.ceil((LABEL_MS / 1000) * 60);
+
 /**
  * Where a label near the hero goes (its centre). Candidates in order: above the hero, below it, then up-left / up-right
- * / down-left / down-right; the first whose box (text width x 8 px, + 6 px of margin) touches no projectile and no
- * `avoid` point (e.g. this tick's points popup) wins, else the one touching the fewest. Never on the hero sprite and
- * always inside minY..maxY.
+ * / down-left / down-right, clamped inside `b`; the first whose box (text width x 8 px, + 6 px of margin) touches
+ * nothing wins, else the one touching the fewest. "Nothing" = no projectile anywhere along its path for the label's
+ * lifetime, no telegraph (rune, caster, sigil, the boss) and no `avoid` box (this tick's kills, the other label).
  */
-export function labelSpot(
-  s: SimState,
-  minY: number,
-  maxY: number,
-  avoid: readonly { x: number; y: number; w?: number }[] = [],
-  widthPx = 64,
-): { x: number; y: number } {
+export function labelSpot(s: SimState, b: LabelBounds, avoid: readonly { x: number; y: number; w?: number }[] = [], widthPx = 64): { x: number; y: number } {
   const h = s.hero;
-  const pts: { x: number; y: number; r: number; w: number }[] = [
-    ...s.projectiles.map((pr) => ({ x: pr.x, y: pr.y, r: pr.radius, w: 0 })),
-    ...avoid.map((a) => ({ x: a.x, y: a.y, r: 6, w: a.w ?? 0 })),
-  ];
+  const pts: { x: number; y: number; r: number; w: number }[] = [];
+  for (const pr of s.projectiles)
+    for (let k = 0; k <= LABEL_TICKS; k += 4) pts.push({ x: pr.x + pr.vx * k, y: pr.y + pr.vy * k, r: pr.radius, w: 0 });
+  for (const t of s.telegraphs) pts.push({ x: t.x, y: t.y, r: 8, w: 0 });
+  for (const c of s.casters) pts.push({ x: c.x, y: c.y, r: 10, w: 0 });
+  for (const g of s.sigils) pts.push({ x: g.x, y: g.y, r: g.r, w: 0 });
+  if (s.boss) pts.push({ x: s.boss.x, y: s.boss.y, r: 14, w: 0 });
+  for (const a of avoid) pts.push({ x: a.x, y: a.y, r: 6, w: a.w ?? 0 });
   const half = widthPx / 2;
   const cands: [number, number][] = [
     [0, -22], [0, 16], [-half - 6, -18], [half + 6, -18], [-half - 6, 14], [half + 6, 14],
   ];
   let best: { x: number; y: number; n: number } | null = null;
   for (const [dx, dy] of cands) {
-    const x = h.x + dx;
+    const x = Math.min(b.maxX - half, Math.max(b.minX + half, h.x + dx));
     const y = h.y + dy;
-    if (y - 4 < minY || y + 4 > maxY) continue;
+    if (y - 4 < b.minY || y + 4 > b.maxY) continue;
+    // never on the hero sprite (16 x 16 around its centre, the sprite is drawn 4 px up)
+    if (Math.abs(x - h.x) < half + 8 && Math.abs(y - (h.y - 4)) < 4 + 8 + 2) continue;
     const n = pts.filter((q) => Math.abs(q.x - x) <= half + 6 + (q.w ? q.w / 2 : q.r) && Math.abs(q.y - y) <= 4 + 6 + q.r).length;
     if (!best || n < best.n) best = { x, y, n };
     if (n === 0) break;
   }
-  const b = best ?? { x: h.x, y: h.y - 22 };
-  return { x: Math.round(b.x), y: Math.round(b.y) };
+  const r = best ?? { x: Math.min(b.maxX - half, Math.max(b.minX + half, h.x)), y: Math.max(b.minY + 4, h.y - 22) };
+  return { x: Math.round(r.x), y: Math.round(r.y) };
 }
