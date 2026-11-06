@@ -37,12 +37,18 @@ export interface HeroDef {
   ability: HeroAbility;
 }
 
+/**
+ * FROZEN after the balance pass (tools/bot/balance.ts, skilled bot, Hard): the start values were Knight radius 28 /
+ * guard 3 and Wisp radius 20 / trail 5 pts x 4; the Knight was far ahead (survival x1.36, score x1.9 on 150 seeds).
+ * Knight radius 24 / arc 120 and Wisp radius 22 / trail 10 pts x 5 put both heroes' Hard median survival and score
+ * within +-12% of each other on seeds 1-50 and on seeds 1-150.
+ */
 export const HEROES: Record<HeroId, HeroDef> = {
   knight: {
     id: 'knight',
     name: 'KNIGHT',
-    lines: ['SHIELD ARC 150 - PARRY IN FRONT', 'GUARD: 3 PARRIES = 1 LIFE'],
-    parry: { radius: 28, arcDegrees: 150, maxKillsPerPulse: 3 },
+    lines: ['SHIELD ARC 120 - LONGER REACH', 'GUARD: 3 PARRIES = 1 LIFE'],
+    parry: { radius: 24, arcDegrees: 120, maxKillsPerPulse: 3 },
     dashDistance: 80,
     ability: { kind: 'guard', charges: 3, invulnSeconds: 0.6 },
   },
@@ -50,9 +56,9 @@ export const HEROES: Record<HeroId, HeroDef> = {
     id: 'wisp',
     name: 'WISP',
     lines: ['FULL RING - SMALLER REACH', 'EMBER DASH BURNS SHOTS'],
-    parry: { radius: 20, arcDegrees: 360, maxKillsPerPulse: 3 },
+    parry: { radius: 22, arcDegrees: 360, maxKillsPerPulse: 3 },
     dashDistance: 100,
-    ability: { kind: 'trail', seconds: 0.8, halfWidth: 3, killPoints: 5, maxKills: 4 },
+    ability: { kind: 'trail', seconds: 0.8, halfWidth: 3, killPoints: 10, maxKills: 5 },
   },
 };
 

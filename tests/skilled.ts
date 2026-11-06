@@ -3,7 +3,9 @@
  * - ~200 ms reaction: it only perceives projectiles that have existed for >= 12 ticks;
  * - small aim error: the cursor target jitters by a few px;
  * - parry timing error: it presses parry for an incoming violet threat at the ideal tick +-2 ticks (seeded);
- * - dodges red threats and dashes through them when they are about to hit; walks to pickups when it is quiet.
+ * - dodges red threats and dashes through them when they are about to hit; walks to pickups when it is quiet;
+ * - an ARC hero (Knight) turns to the threat it is about to parry like a human would: for a few ticks around the
+ *   press it puts the cursor a few px from the hero toward the threat (it walks a little toward it: the honest cost).
  * Movement and dashing reuse the heuristic bot (tests/bot.ts) restricted to what it perceives.
  */
 import { BTN_DASH, BTN_PARRY, type InputFrame } from '../src/sim/input';
@@ -11,10 +13,15 @@ import { dashCooldownLeft, isFading, parryCooldownLeft, type Sim } from '../src/
 import { botInput } from './bot';
 
 export const REACTION_TICKS = 12;
+/** Ticks before a planned parry press at which an arc hero starts turning to the threat. */
+export const TURN_LEAD = 3;
 
 export class SkilledBot {
   private rng: number;
   private parryAt = -1;
+  /** The violet threat the planned parry is for (arc heroes turn to it). */
+  private target = -1;
+  private turnUntil = -1;
   private jitter = { x: 0, y: 0, until: 0 };
   /** parry = false: the same human-like player that never parries (the dodge-only comparison). */
   constructor(seed: number, private parry = true) {
@@ -66,20 +73,37 @@ export class SkilledBot {
         // the tick at which it is inside ~half the parry radius
         const d = Math.hypot(rx, ry);
         const want = Math.max(0, (d - p.parryRadius * 0.5) / Math.sqrt(v2));
-        if (want < best) best = want;
+        if (want < best) {
+          best = want;
+          this.target = pr.id;
+        }
       }
       // a perceived violet threat already deep inside the pulse and still closing in: parry now (+-2 ticks)
       for (const pr of seen) {
         if (!pr.parryable) continue;
         const rx = pr.x - h.x;
         const ry = pr.y - h.y;
-        if (Math.hypot(rx, ry) < p.parryRadius * 0.6 + pr.radius && rx * pr.vx + ry * pr.vy < 0) best = Math.min(best, 0);
+        if (Math.hypot(rx, ry) < p.parryRadius * 0.6 + pr.radius && rx * pr.vx + ry * pr.vy < 0 && best > 0) {
+          best = 0;
+          this.target = pr.id;
+        }
       }
       if (best < 40) this.parryAt = t + Math.max(0, Math.round(best)) + Math.round((this.rnd() - 0.5) * 4.999);
     }
     if (this.parryAt >= 0 && t >= this.parryAt) {
       buttons |= BTN_PARRY;
       this.parryAt = -1;
+      this.turnUntil = t + p.parryActive;
+    }
+    // an arc hero faces the threat from TURN_LEAD ticks before the press until the end of the pulse (or the threat's end)
+    const turning = (this.parryAt >= 0 && this.parryAt - t <= TURN_LEAD) || t < this.turnUntil;
+    const tgt = turning && !p.parryFull ? s.projectiles.find((pr) => pr.id === this.target) : undefined;
+    if (tgt && !(buttons & BTN_DASH)) {
+      const rx = tgt.x - h.x;
+      const ry = tgt.y - h.y;
+      const d = Math.hypot(rx, ry) || 1;
+      const k = p.aimDeadzone + p.heroSpeed + 1; // after this tick's step the cursor is still beyond the dead zone
+      f = { cursor: true, mx: Math.round(h.x + (rx / d) * k), my: Math.round(h.y + (ry / d) * k), buttons };
     }
     if ((f.buttons & BTN_DASH) && dashCooldownLeft(s, p) > 0) buttons &= ~BTN_DASH;
     return { ...f, buttons };

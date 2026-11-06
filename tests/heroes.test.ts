@@ -16,6 +16,7 @@ import { dailySeed } from '../src/shared/daily';
 import { CLIENT_VERSION, tuningFingerprint } from '../src/shared/version';
 import { verifyItem, type PendingItem } from '../tools/verify/core';
 import { botInputClamped } from './bot';
+import { TUNING } from '../src/data/tuning';
 
 const idle = (): InputFrame => ({ ...NEUTRAL_INPUT });
 const parry = (): InputFrame => ({ ...NEUTRAL_INPUT, buttons: BTN_PARRY });
@@ -125,7 +126,9 @@ describe('facing (aim)', () => {
 });
 
 describe('the shared parry zone (arc geometry)', () => {
-  const k = makeParams('hard', 'knight'); // arc 150: half 75 degrees
+  const k = makeParams('hard', 'knight');
+  const half = HEROES.knight.parry.arcDegrees / 2;
+  const tol = Math.asin(0.1) / DEG; // a 2 px projectile 20 px away
   const w = makeParams('hard', 'wisp');
   const at = (deg: number, d: number): [number, number] => { const [c, s] = rad(deg); return [c * d, s * d]; };
   const zone = (p: typeof k, deg: number, d: number, r: number, aim = 0) => {
@@ -135,12 +138,13 @@ describe('the shared parry zone (arc geometry)', () => {
   };
   it('inside the arc, outside it, and the asin(r / d) edge tolerance', () => {
     expect(zone(k, 0, 20, 2)).toBe(true);
-    expect(zone(k, 74, 20, 2)).toBe(true);
-    expect(zone(k, 80, 20, 2)).toBe(true); // 75 + asin(0.1) = 80.7
-    expect(zone(k, 82, 20, 2)).toBe(false);
-    expect(zone(k, -82, 20, 2)).toBe(false);
+    expect(zone(k, half - 1, 20, 2)).toBe(true);
+    expect(zone(k, half + tol - 0.3, 20, 2)).toBe(true); // the edge tolerance
+    expect(zone(k, half + tol + 0.3, 20, 2)).toBe(false);
+    expect(zone(k, -(half + tol + 0.3), 20, 2)).toBe(false);
     expect(zone(k, 180, 20, 2)).toBe(false);
-    expect(zone(k, 120, 20, 2, 90)).toBe(true); // the arc turns with the aim
+    expect(zone(k, 90 + half - 1, 20, 2, 90)).toBe(true); // the arc turns with the aim
+    expect(zone(k, 90 - half - tol - 0.3, 20, 2, 90)).toBe(false);
   });
   it('reach = radius + projectile radius, and a projectile closer than overlapPx always counts', () => {
     expect(zone(k, 0, k.parryRadius + 2, 2)).toBe(true);
@@ -424,5 +428,24 @@ describe('the hero in the replay core', () => {
     const b = Uint8Array.from(atob(encodeInputLog(K.log, 'knight')), (c) => c.charCodeAt(0));
     b[1] = 1;
     expect(verifyItem(item(K, { replay: btoa(String.fromCharCode(...b)) }))).toEqual({ status: 'rejected', reason: 'invalid_input' });
+  });
+});
+
+describe('maxPossibleScore bounds every hero', () => {
+  it('skilled bot runs of both heroes on Hard stay under the bound; the bound includes the trail term', async () => {
+    const { maxPossibleScore } = await import('../src/shared/maxScore');
+    const { SkilledBot } = await import('./skilled');
+    for (const hero of HERO_IDS)
+      for (let seed = 1; seed <= 6; seed++) {
+        const sim = new Sim(seed * 7919, 'hard', { hero });
+        const bot = new SkilledBot(seed);
+        while (sim.state.alive && sim.state.tick < 60 * 120) {
+          sim.step(bot.input(sim));
+          if (sim.state.tick % 300 === 0) expect(sim.score).toBeLessThanOrEqual(maxPossibleScore(sim.state.tick));
+        }
+        expect(sim.score).toBeLessThanOrEqual(maxPossibleScore(sim.state.tick));
+      }
+    // a 1-tick run can only hold the trail kills of one dash (and survival); the trail term is there
+    expect(maxPossibleScore(1)).toBeGreaterThanOrEqual(T.maxKills * T.killPoints * TUNING.multiplier.cap * TUNING.pickups.doubleScore.factor);
   });
 });

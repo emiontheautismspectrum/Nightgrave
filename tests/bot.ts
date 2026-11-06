@@ -3,6 +3,7 @@
  * Not part of the game; used by tests (the balance report, npm run bot, is tools/bot/balance.ts with the skilled bot).
  */
 import { BTN_DASH, BTN_PARRY, type InputFrame } from '../src/sim/input';
+import { inParryZone } from '../src/sim/parryZone';
 import { dashCooldownLeft, isFading, parryCooldownLeft, type Sim } from '../src/sim/sim';
 
 export interface BotOptions {
@@ -39,7 +40,8 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
     const rx = pr.x - h.x;
     const ry = pr.y - h.y;
     const d = Math.sqrt(rx * rx + ry * ry);
-    if (pr.parryable && d <= p.parryRadius + pr.radius - 3) parryTarget = true;
+    // inside the hero's real parry zone (radius and arc around its aim) with a 3 px margin
+    if (pr.parryable && inParryZone(h.x, h.y, h.aimX, h.aimY, pr.x, pr.y, pr.radius - 3, p) >= 0) parryTarget = true;
     // homing threats (wraiths): keep running away from them; the straight-line prediction below cannot see them coming
     if (pr.homing > 0 && d < 56) {
       fx -= (rx / (d || 1)) * (2 / (d / 10 + 1));
