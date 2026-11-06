@@ -7,7 +7,9 @@ import { describe, expect, it } from 'vitest';
 import { Sim } from '../src/sim/sim';
 import { FollowCam, type ViewRect } from '../src/render/camera';
 import { edgeMarkers } from '../src/render/edgeMarkers';
-import { PORTRAIT, portraitViewport } from '../src/data/view';
+import { PORTRAIT } from '../src/data/view';
+import { portraitLayout } from '../src/render/portraitLayout';
+import { portraitGameSize } from '../src/web/screen';
 import { SkilledBot } from './skilled';
 
 const FAIR_TICKS = 15;
@@ -15,17 +17,23 @@ const FAIR_TICKS = 15;
 const CONTACT_GAP = 12;
 const inView = (v: ViewRect, x: number, y: number) => x >= v.x0 && x <= v.x1 && y >= v.y0 && y <= v.y1;
 
-function makeCam(): FollowCam {
-  const vp = portraitViewport();
-  return new FollowCam({ viewW: vp.w / PORTRAIT.zoom, viewH: vp.h / PORTRAIT.zoom, worldW: 480, worldH: 270, deadZone: PORTRAIT.deadZone, lead: PORTRAIT.lead, follow: PORTRAIT.follow, followReduced: PORTRAIT.followReduced });
+/** Real phones in portrait (the taller windows of the phone UX pass): CSS viewport and devicePixelRatio. */
+const PHONES: [string, number, number, number][] = [['iPhone 14', 390, 844, 3], ['Pixel 7', 412, 915, 2.625], ['375x667', 375, 667, 2], ['360x800', 360, 800, 3]];
+
+/** The follow camera of a phone's portrait run layout (the same numbers GameScene uses). */
+function makeCam(phone: [string, number, number, number] = PHONES[0]!): FollowCam {
+  const [, vw, vh, dpr] = phone;
+  const P = portraitGameSize(vw, vh, dpr);
+  const L = portraitLayout(P.w, P.h, P.k, dpr, false);
+  return new FollowCam({ viewW: L.view.w / L.zoom, viewH: L.view.h / L.zoom, worldW: 480, worldH: 270, deadZone: PORTRAIT.deadZone, lead: PORTRAIT.lead, follow: PORTRAIT.follow, followReduced: PORTRAIT.followReduced });
 }
 
 interface Track { born: number; offAtBirth: boolean; seen: boolean[]; hitAt: number; sx: number; sy: number }
 
-function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 3600) {
+function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 3600, phone = PHONES[0]!) {
   const sim = new Sim(seed, 'hard', { startWave });
   const bot = new SkilledBot(seed);
-  const cam = makeCam();
+  const cam = makeCam(phone);
   cam.reset(sim.state.hero.x, sim.state.hero.y);
   const proj = new Map<number, Track>();
   const sig = new Map<number, Track & { fill: number }>();
@@ -85,19 +93,20 @@ function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 360
 }
 
 describe('phone portrait: fairness edge markers', () => {
-  it('every threat first appearing off-view is marked >= 15 ticks before it can hit', () => {
-    let checked = 0;
-    const fails: string[] = [];
-    for (const seed of [1, 7, 42, 1234, 99991]) {
-      for (const w of [1, 4, 6, 8, 12]) {
-        const r = audit(seed, w, seed % 2 === 0);
-        checked += r.checked;
-        fails.push(...r.fails);
+  for (const phone of PHONES)
+    it(`${phone[0]}: every threat first appearing off-view is marked >= 15 ticks before it can hit`, { timeout: 60_000 }, () => {
+      let checked = 0;
+      const fails: string[] = [];
+      for (const seed of [1, 7, 42, 1234, 99991]) {
+        for (const w of [1, 4, 6, 8, 12]) {
+          const r = audit(seed, w, seed % 2 === 0, 3600, phone);
+          checked += r.checked;
+          fails.push(...r.fails);
+        }
       }
-    }
-    expect(fails).toEqual([]);
-    expect(checked).toBeGreaterThan(50); // the audit really saw off-view threats
-  });
+      expect(fails).toEqual([]);
+      expect(checked).toBeGreaterThan(50); // the audit really saw off-view threats
+    });
 
   it('every off-view telegraph is marked for its whole telegraph time', () => {
     const sim = new Sim(5, 'hard', { startWave: 6 });
@@ -157,8 +166,9 @@ describe('phone portrait: fairness edge markers', () => {
     expect(run(true)).toBe(run(false));
   });
 
-  it('the camera keeps the hero inside the window and respects the world bounds', () => {
-    const cam = makeCam();
+  it('the camera keeps the hero inside the window and respects the world bounds (every phone)', () => {
+    for (const phone of PHONES) {
+    const cam = makeCam(phone);
     cam.reset(240, 135);
     for (let i = 0; i < 300; i++) {
       const hx = 48 + ((i * 7) % 384);
@@ -168,6 +178,9 @@ describe('phone portrait: fairness edge markers', () => {
       expect(v.x1).toBeLessThanOrEqual(480);
       expect(hx).toBeGreaterThanOrEqual(v.x0 + 20);
       expect(hx).toBeLessThanOrEqual(v.x1 - 20);
+      expect(v.y0).toBeGreaterThanOrEqual(0);
+      expect(v.y1).toBeLessThanOrEqual(270);
+    }
     }
   });
 });

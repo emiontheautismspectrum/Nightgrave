@@ -193,6 +193,52 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
       ok(s.errs.length === 0, 'run: no page errors', s.errs.join(' | '));
       await s.ctx.close();
 
+      // multi-touch in a fresh run (no cooldowns from the checks above)
+      s = await open(b, dev, { manual: true, url: `${URL0}?play=1` });
+      {
+        const stepN = async (n) => {
+          await s.page.evaluate((m) => window.__ngDebug.step(m), n);
+          await sleep(80);
+        };
+        const d = await s.dbg();
+        const btn = (id) => { const bb = d.buttons.find((x) => x.id === id); return [bb.x, bb.y]; };
+        const PARRY = btn('parry');
+        const DASH = btn('dash');
+        // multi-touch: one finger drags (movement) while a second finger presses PARRY, then DASH; the drag continues
+        {
+          const [mx, my, k] = await s.toCss(portrait ? d.game[0] * 0.3 : 200, portrait ? d.game[1] * 0.45 : 150);
+          const [pX, pY] = await s.toCss(...PARRY);
+          const [dX, dY] = await s.toCss(...DASH);
+          let e = await s.dbg();
+          const x0 = e.x;
+          const dir = x0 > 240 ? -1 : 1; // towards the middle of the arena (the hero may stand at an edge)
+          const pz0 = e.parryStart;
+          await s.touch('touchStart', [{ x: mx, y: my, id: 1 }]);
+          await stepN(2);
+          await s.touch('touchMove', [{ x: mx + dir * 20 * k, y: my, id: 1 }]);
+          await stepN(4);
+          await s.touch('touchStart', [{ x: mx + dir * 20 * k, y: my, id: 1 }, { x: pX, y: pY, id: 2 }]); // PARRY with finger 2
+          await stepN(2);
+          await s.touch('touchEnd', [{ x: mx + dir * 20 * k, y: my, id: 1 }]); // finger 2 lifts, finger 1 stays
+          e = await s.dbg();
+          const parried = e.parryStart !== pz0;
+          const dz0 = e.dashStart;
+          await s.touch('touchMove', [{ x: mx + dir * 40 * k, y: my, id: 1 }]);
+          await stepN(4);
+          await s.touch('touchStart', [{ x: mx + dir * 40 * k, y: my, id: 1 }, { x: dX, y: dY, id: 3 }]); // DASH with a second finger
+          await stepN(2);
+          await s.touch('touchEnd', [{ x: mx + dir * 40 * k, y: my, id: 1 }]);
+          e = await s.dbg();
+          const dashed = e.dashStart !== dz0;
+          await s.touch('touchMove', [{ x: mx + dir * 60 * k, y: my, id: 1 }]); // the movement finger still steers
+          await stepN(30);
+          e = await s.dbg();
+          await s.touch('touchEnd', []);
+          ok(parried && dashed && Math.abs(e.x - x0) > 30, 'multi-touch: drag + PARRY + DASH with a second finger, movement kept', `parried ${parried} dashed ${dashed} x ${x0.toFixed(0)} -> ${e.x.toFixed(0)}`);
+        }
+      }
+      await s.ctx.close();
+
       // later waves: edge markers in portrait; screenshots
       s = await open(b, dev, { url: `${URL0}?play=1&wave=6` });
       let marks = 0;
