@@ -191,7 +191,7 @@ export class GameScene extends Phaser.Scene {
     this.buildHud();
     this.bossView = new BossView(this, { ysort: D_YSORT, fog: D_FOG, hud: D_HUD }, this.vigOuter, this.banner, al.vignette_outer ?? 1);
     const st = save().settings;
-    const touch = new TouchModel({ sensitivity: st.dragSensitivity, leftHanded: st.leftHanded, secondFingerParry: st.secondFingerParry });
+    const touch = new TouchModel({ sensitivity: st.dragSensitivity, leftHanded: st.leftHanded, secondFingerParry: st.secondFingerParry, smoothing: st.touchSmoothing });
     this.input2 = new InputCollector(this, touch, {
       uiHit: (x, y) => this.uiHit(x, y),
       hero: () => this.sim.state.hero,
@@ -468,7 +468,7 @@ export class GameScene extends Phaser.Scene {
     const st = save().settings;
     const t = this.input2.touch;
     const mirrored = t.opts.leftHanded !== st.leftHanded;
-    t.opts = { sensitivity: st.dragSensitivity, leftHanded: st.leftHanded, secondFingerParry: st.secondFingerParry };
+    t.opts = { sensitivity: st.dragSensitivity, leftHanded: st.leftHanded, secondFingerParry: st.secondFingerParry, smoothing: st.touchSmoothing };
     if (mirrored && this.zoomed) this.setView(true); // the portrait buttons move to the other corner
     const low = st.effects === 'low' || this.fxLow;
     this.fog.setVisible(!low);

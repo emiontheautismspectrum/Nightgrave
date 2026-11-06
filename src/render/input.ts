@@ -250,6 +250,7 @@ export class InputCollector {
     if (this.mode === 'axis') {
       return sanitizeInput({ cursor: false, mx: Math.round(ax * AXIS_MAX), my: Math.round(ay * AXIS_MAX), buttons });
     }
+    if (this.last === 'touch') this.touch.smoothTick(); // smoothing happens before the frame is recorded
     const c = this.last === 'touch' ? this.touch.cursor : this.pointerSeen ? this.mouse : null;
     if (!c) return sanitizeInput({ cursor: false, mx: 0, my: 0, buttons });
     return sanitizeInput({ cursor: true, mx: Math.round(c.x), my: Math.round(c.y), buttons });

@@ -25,6 +25,7 @@ export interface MenuCtx {
 export const DIFF_LABEL = (d: Difficulty): string => d.toUpperCase();
 
 const onOff = (b: boolean): string => (b ? 'ON' : 'OFF');
+const SMOOTH = ['off', 'low', 'high'] as const;
 const step10 = (v: number, d: number): number => Math.max(0, Math.min(100, v + d * 10));
 
 export function settingsPage(ctx: MenuCtx, back: () => void): MenuPage {
@@ -78,6 +79,11 @@ export function settingsPage(ctx: MenuCtx, back: () => void): MenuPage {
         label: () => `DRAG SENSITIVITY ${s().dragSensitivity.toFixed(2)}`,
         onLeft: () => ((s().dragSensitivity = clampSensitivity(Math.max(0.5, s().dragSensitivity - 0.25))), changed()),
         onRight: () => ((s().dragSensitivity = clampSensitivity(Math.min(3, s().dragSensitivity + 0.25))), changed()),
+      },
+      {
+        label: () => `TOUCH SMOOTHING ${s().touchSmoothing.toUpperCase()}`,
+        onLeft: () => ((s().touchSmoothing = SMOOTH[(SMOOTH.indexOf(s().touchSmoothing) + 2) % 3]!), changed()),
+        onRight: () => ((s().touchSmoothing = SMOOTH[(SMOOTH.indexOf(s().touchSmoothing) + 1) % 3]!), changed()),
       },
       toggle('LEFT-HANDED BUTTONS', 'leftHanded'),
       toggle('SECOND-FINGER PARRY', 'secondFingerParry'),

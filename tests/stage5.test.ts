@@ -72,7 +72,7 @@ describe('storage', () => {
     expect(s.settings.sfx).toBe(80);
     expect(s.settings.shake).toBe(true);
     expect(s.settings.effects).toBe('high');
-    expect(s.settings.dragSensitivity).toBe(1.5);
+    expect(s.settings.dragSensitivity).toBe(1); // the default (phone UX pass: 1.5 -> 1.0)
     expect(s.settings.haptics).toBe(true);
     expect(s.hero).toBe('knight');
     expect(s.difficulty).toBe('medium');
