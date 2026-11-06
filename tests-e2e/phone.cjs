@@ -106,8 +106,9 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
         const r = p.getBoundingClientRect();
         return { below: r.top >= g.bottom - 0.5, inside: r.bottom <= innerHeight + 0.5 && r.right <= innerWidth + 0.5, sw: document.documentElement.scrollWidth, vw: innerWidth };
       });
-      if (portrait) ok(under && under.below && under.inside && under.sw <= under.vw, 'title: board under the canvas, no overflow', JSON.stringify(under));
-      else ok(!under, 'title (landscape): no side panel');
+      // portrait: the title uses the whole screen (the board is the BOARD overlay); landscape: no side panel either
+      const fill = await s.page.evaluate(() => { const c = document.querySelector('#game canvas').getBoundingClientRect(); return { h: c.height / innerHeight, sw: document.documentElement.scrollWidth, vw: innerWidth }; });
+      ok(!under && fill.sw <= fill.vw && (!portrait || fill.h >= 0.95), 'title: no side panel, no overflow, portrait fills >= 95% of the height', JSON.stringify(fill));
       ok(await s.tapText('BOARD'), 'title: BOARD item tapped');
       await sleep(600);
       const ov = await s.page.evaluate(() => {
@@ -133,9 +134,11 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
         await sleep(80);
       };
       let d = await s.dbg();
-      ok(d && d.zoomed === portrait && d.game[0] === (portrait ? 216 : 480), 'run view', d && `zoomed ${d.zoomed} game ${d.game}`);
-      const PARRY = portrait ? [188, 358] : [456, 222];
-      const DASH = portrait ? [148, 361] : [456, 182];
+      ok(d && d.zoomed === portrait && (portrait ? d.game[1] > d.game[0] : d.game[0] === 480), 'run view', d && `zoomed ${d.zoomed} game ${d.game}`);
+      const btn = (id) => { const b = d.buttons.find((x) => x.id === id); return [b.x, b.y]; };
+      const PARRY = btn('parry');
+      const DASH = btn('dash');
+      const PAUSE = [d.pause.x + d.pause.w / 2, d.pause.y + d.pause.h / 2];
       const p0 = d.parryStart;
       await s.tapGame(...PARRY);
       await stepN(2);
@@ -168,7 +171,7 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
       await s.page.setViewportSize({ width: vp.height, height: vp.width });
       await sleep(700);
       d = await s.dbg();
-      ok(d.paused && d.menu && !d.zoomed, 'rotation pauses (pause menu, full arena)');
+      ok(d.paused && d.menu && d.zoomed === !portrait, 'rotation pauses (pause menu on the new layout)');
       ok(await s.tapText('RESUME'), 'RESUME tapped');
       await sleep(400);
       d = await s.dbg();
@@ -179,13 +182,13 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
       await sleep(300);
       if (portrait) {
         // quit to the title and play again: the HUD camera must be rebuilt (the old one died with the scene)
-        await s.tapGame(203, 10); // pause button (zoomed HUD)
+        await s.tapGame(...PAUSE); // pause button (zoomed HUD)
         ok(await s.tapText('QUIT TO TITLE'), 'QUIT TO TITLE tapped');
         await sleep(700);
         ok(await s.tapText('PLAY'), 'PLAY tapped again');
         await sleep(900);
         d = await s.dbg();
-        ok(d && d.zoomed && d.uiCam && d.game[0] === 216, 'after quit + play: zoomed view with a live HUD camera', d && `uiCam ${d.uiCam}`);
+        ok(d && d.zoomed && d.uiCam && d.game[1] > d.game[0], 'after quit + play: zoomed view with a live HUD camera', d && `uiCam ${d.uiCam}`);
       }
       ok(s.errs.length === 0, 'run: no page errors', s.errs.join(' | '));
       await s.ctx.close();

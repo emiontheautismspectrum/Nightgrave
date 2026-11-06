@@ -49,8 +49,11 @@ function checkTouch(name, L) {
         if (lo > hi + 0.5) errs.push(`target never fully visible at any scroll: "${t.label}"`);
       }
     }
+    // a row scrolled under the title band is not tappable there (the menu ignores it): skip it against BACK
+    const hidden = (t) => t.kind !== 'back' && t.box[1] < top - 0.5;
     for (let i = 0; i < L.targets.length; i++)
       for (let j = i + 1; j < L.targets.length; j++) {
+        if ((L.targets[i].kind === 'back' && hidden(L.targets[j])) || (L.targets[j].kind === 'back' && hidden(L.targets[i]))) continue;
         const [ax, ay, aw, ah] = L.targets[i].box;
         const [bx, by, bw, bh] = L.targets[j].box;
         if (ax < bx + bw + 4 && bx < ax + aw + 4 && ay < by + bh + 4 && by < ay + ah + 4 && !(ax + aw <= bx || bx + bw <= ax) && !(ay + ah <= by || by + bh <= ay))
@@ -94,7 +97,15 @@ function check(name, L) {
   await sleep(2500);
   const b = await chromium.launch();
   try {
-    for (const [label, opts] of [['desktop', { viewport: { width: 1440, height: 810 } }], ['phone', { ...devices['Pixel 7 landscape'] }]]) {
+    const phone = (w, h, dpr) => ({ viewport: { width: w, height: h }, deviceScaleFactor: dpr, isMobile: true, hasTouch: true });
+    for (const [label, opts] of [
+      ['desktop', { viewport: { width: 1440, height: 810 } }],
+      ['phone', { ...devices['Pixel 7 landscape'] }],
+      ['portrait 390x844', phone(390, 844, 3)],
+      ['portrait 360x800', phone(360, 800, 3)],
+      ['portrait 412x915', phone(412, 915, 2.625)],
+      ['portrait 375x667', phone(375, 667, 2)],
+    ]) {
       const ctx = await b.newContext(opts);
       await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} }); // tests skip the site intro
       await ctx.addInitScript(() => localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'hard', settings: { touchHintSeen: true, hintsDone: true }, best: {}, daily: [] })));

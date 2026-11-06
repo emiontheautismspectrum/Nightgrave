@@ -19,10 +19,26 @@ const listeners = new Set<() => void>();
 
 export const getScreen = (): ScreenInfo => info;
 
+let notifying = false;
+let pending = false;
 export function setScreen(next: ScreenInfo): void {
   const changed = JSON.stringify(next) !== JSON.stringify(info);
   info = next;
-  if (changed) for (const f of listeners) f();
+  if (!changed) return;
+  // a listener may lay the page out again (and so call setScreen): notify once more afterwards, never re-entrantly
+  if (notifying) {
+    pending = true;
+    return;
+  }
+  notifying = true;
+  try {
+    do {
+      pending = false;
+      for (const f of listeners) f();
+    } while (pending);
+  } finally {
+    notifying = false;
+  }
 }
 
 /** Called when the screen info changed (rotation, browser bars, resize). Returns an unsubscribe function. */

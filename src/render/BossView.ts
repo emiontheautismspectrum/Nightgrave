@@ -54,9 +54,9 @@ export class BossView {
   }
 
   /** Move the HUD parts for the full arena or the zoomed portrait view (screen game px). */
-  setLayout(zoomed: boolean): void {
+  setLayout(zoomed: boolean, bar?: { x: number; y: number; w: number }): void {
     this.zoomed = zoomed;
-    this.barAt = zoomed ? BAR_ZOOMED : BAR_FULL;
+    this.barAt = zoomed ? (bar ?? BAR_ZOOMED) : BAR_FULL;
     this.timers.forEach((v, i) => {
       const [x, y] = zoomed ? [128 + i * 20, 22] : [268 + i * 22, 13];
       v.icon.setPosition(x, y);

@@ -191,13 +191,26 @@ export class MenuView {
     };
   }
 
+  /** Phones: disabled rows with an empty label (e.g. the Hard-only daily line) take no space. */
+  private collapsed = '';
+  private collapseKey(): string {
+    return (this.page?.items ?? []).map((it) => (it.disabled && it.label().trim() === '' ? '1' : '0')).join('');
+  }
+
   /** Centre y (content coords) of row i. */
   private rowY(i: number): number {
     const g = this.g;
     const it = this.page?.items[i];
     if (!g || !it) return 0;
     if (!g.touch) return it.y ?? g.listTop + i * g.rowH;
-    return g.listTop + g.rowH * (i + 0.5);
+    let n = 0;
+    for (let k = 0; k < i; k++) if (this.collapsed[k] !== '1') n++;
+    return g.listTop + g.rowH * (n + 0.5);
+  }
+
+  /** Rows taking space (phones). */
+  private shownRows(): number {
+    return [...this.collapsed].filter((c) => c !== '1').length;
   }
 
   show(page: MenuPage, focus = -1): void {
@@ -207,6 +220,7 @@ export class MenuView {
     this.active = true;
     const s = this.scene;
     const g = (this.g = this.geo(page));
+    this.collapsed = g.touch ? this.collapseKey() : '';
     if (this.dim > 0) this.objs.push(s.add.rectangle(0, 0, g.W, g.H, 0x0b0d12, this.dim).setOrigin(0).setDepth(this.depth).setInteractive());
     this.list = s.add.container(0, 0).setDepth(this.depth + 0.5);
     this.objs.push(this.list);
@@ -240,7 +254,7 @@ export class MenuView {
     const placed = page.items.filter((it) => it.y === undefined).length;
     const lowest = Math.max(g.listTop - g.rowH, ...page.items.map((_it, i) => this.rowY(i)));
     let y = g.touch
-      ? g.listTop + g.rowH * page.items.length + 6
+      ? g.listTop + g.rowH * this.shownRows() + 6
       : (page.linesTop ?? (page.items.length ? (placed === page.items.length ? g.listTop + placed * g.rowH + 6 : lowest + g.rowH) : g.listTop));
     if (g.touch && page.linesTop !== undefined && !page.items.every((it) => it.y === undefined)) y = Math.max(y, page.linesTop);
     lines.forEach((l) => {
@@ -292,6 +306,13 @@ export class MenuView {
     const p = this.page;
     const g = this.g;
     if (!p || !g) return;
+    if (g.touch && this.collapseKey() !== this.collapsed) {
+      // a row appeared or vanished (e.g. the difficulty changed): lay the page out again
+      const fresh = this.fresh;
+      this.show(p, this.focus);
+      this.fresh = fresh;
+      return;
+    }
     this.targets = this.targets.filter((t) => t.kind === 'back');
     let a = 0;
     p.items.forEach((it, i) => {
@@ -301,9 +322,15 @@ export class MenuView {
       const lab = it.label();
       const valueRow = !!(it.onLeft || (it.onRight && !it.onActivate));
       if (g.touch) {
-        // phones: the focus is shown by colour; value rows have their own tappable < > arrows
+        // phones: the focus is shown by colour; value rows have their own tappable < > arrows. The 16 px font when the
+        // label fits on one line, else the 8 px font (wrapped only if even that is too wide)
+        const maxW = g.W - 2 * g.mx - (valueRow ? 2 * g.arrowW : 8);
         setTextValue(t, lab);
-        t.setMaxWidth(g.W - 2 * g.mx - (valueRow ? 2 * g.arrowW : 8));
+        t.setMaxWidth(0).setFontSize(16);
+        if (t.width > maxW) {
+          t.setFontSize(8).setLineSpacing(2);
+          if (t.width > maxW) t.setMaxWidth(maxW);
+        }
       } else setTextValue(t, valueRow ? `${on ? '<' : ' '} ${lab} ${on ? '>' : ' '}` : on ? `> ${lab} <` : lab);
       setTextColor(t, it.disabled ? C.dim : on ? C.gold : C.bone);
       snap(t);

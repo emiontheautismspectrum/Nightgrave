@@ -21,6 +21,8 @@ export interface TouchButton {
   x: number;
   y: number;
   r: number;
+  /** Hit radius (default r + 2). */
+  hit?: number;
 }
 
 /**
@@ -69,6 +71,8 @@ export class TouchModel {
   pending = 0;
   /** Screen layout of the buttons (game px): the full arena or the zoomed portrait view. */
   view: 'full' | 'zoomed' = 'full';
+  /** The zoomed portrait view's buttons, sized for the real screen (src/render/portraitLayout.ts). */
+  zoomedButtons: TouchButton[] | null = null;
   private touches = new Map<number, Touch>();
 
   constructor(public opts: TouchOptions) {}
@@ -81,7 +85,7 @@ export class TouchModel {
   }
 
   buttons(): TouchButton[] {
-    return touchButtons(this.opts.leftHanded, this.view);
+    return this.view === 'zoomed' && this.zoomedButtons ? this.zoomedButtons : touchButtons(this.opts.leftHanded, this.view);
   }
 
   /** Which button (if any) is held right now (for the pressed look). */
@@ -92,7 +96,7 @@ export class TouchModel {
 
   down(id: number, x: number, y: number, t: number, hero: { x: number; y: number }): Role {
     let role: Role = 'move';
-    for (const b of this.buttons()) if ((x - b.x) ** 2 + (y - b.y) ** 2 <= (b.r + 2) ** 2) role = b.id;
+    for (const b of this.buttons()) if ((x - b.x) ** 2 + (y - b.y) ** 2 <= (b.hit ?? b.r + 2) ** 2) role = b.id;
     if (role === 'parry') this.pending |= BTN_PARRY;
     else if (role === 'dash') this.pending |= BTN_DASH;
     else if ([...this.touches.values()].some((o) => o.role === 'move')) role = 'tap';
