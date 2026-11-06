@@ -9,6 +9,8 @@ const path = require('node:path');
 const PORT = 4179;
 const URL = `http://localhost:${PORT}/`;
 const OUT = path.join(__dirname, '..', 'assets', 'preview');
+// untracked output (absent in a fresh clone): create it before writing screenshots
+require('node:fs').mkdirSync(OUT, { recursive: true });
 const fail = (m) => {
   console.error('SMOKE FAIL:', m);
   process.exitCode = 1;

@@ -658,7 +658,7 @@ def stone_layout():
 
 
 def ground(sprites, decals_, props, ritual, return_masks=False):
-    """v4 stone courtyard reclaimed by the forest (see ASSETS_SPEC.md 'Ground (v4)')."""
+    """v4 stone courtyard reclaimed by the forest (see docs/ASSETS_SPEC.md 'Ground (v4)')."""
     r = rng(5)
     S = stone_layout()
     lab, tone, joint = S["lab"], S["tone"], S["joint"]

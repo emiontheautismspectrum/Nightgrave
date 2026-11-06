@@ -1,20 +1,32 @@
 # Nightgrave
 
-A dark-fantasy, single-arena dodge/parry survival game: endless waves, one hit = death, instant restart, score chase.
-Two bosses (Eye Sentinel, Lich Mage), two pickups, three difficulties and an online Hard daily board.
-Static HTML5 (TypeScript, Phaser 3, Vite). The title lives in one constant: `TITLE` in `src/config.ts` (rename there).
+A dark-fantasy, single-arena dodge-and-parry survival game for the browser. Endless waves, one hit and the run is
+over, instant restart, a score chase. Parry the violet threats, dodge or dash through the red ones. Two bosses (Eye
+Sentinel, Lich Mage), two pickups, three difficulties and an online daily board for Hard, where every score is
+verified by re-simulating its replay. Static HTML5 (TypeScript, Phaser 3, Vite); the title lives in one constant,
+`TITLE` in `src/config.ts`.
 
-![Title](assets/preview/menu_title.png)
-![Eye Sentinel](assets/preview/boss_fight_eye.png)
-![Touch layout](assets/preview/touch_layout.png)
+**Play:** [nightgrave.pages.dev][play]
+
+| | |
+| --- | --- |
+| ![Title screen](docs/screenshots/title.png) | ![Desktop layout with today's board](docs/screenshots/desktop_layout.png) |
+| ![Eye Sentinel boss fight](docs/screenshots/boss_eye.png) | ![A run on a phone in landscape](docs/screenshots/run.png) |
+
+More: [Lich Mage](docs/screenshots/boss_lich.png), [phone in portrait](docs/screenshots/phone_portrait.png),
+[phone board](docs/screenshots/phone_board.png).
 
 ## Controls
 
-- **Mouse**: the hero follows the cursor. Left click = parry, right click = dash.
-- **Keyboard**: WASD / arrows move, J or Z = parry, K, Shift or Space = dash, Esc or P = pause.
-- **Gamepad**: left stick moves, A = parry, B or RT = dash, Start = pause.
-- **Touch** (landscape): drag anywhere to move a virtual cursor, PARRY button bottom right, DASH above it
-  (mirrored with "Left-handed"), a second-finger tap also parries.
+| Device | Move | Parry | Dash | Pause |
+| --- | --- | --- | --- | --- |
+| Mouse | the hero follows the cursor | left click | right click | Esc or P |
+| Keyboard | WASD / arrows | J or Z | K, Shift or Space | Esc or P |
+| Gamepad | left stick | A | B or RT | Start |
+| Touch | drag anywhere (a virtual cursor) | PARRY button, or a second-finger tap | DASH button | pause button |
+
+On phones, landscape shows the whole arena; portrait plays with a zoomed camera and edge markers for threats outside
+the view. "Left-handed" in Settings mirrors the touch buttons.
 
 ## Run it
 
@@ -26,17 +38,39 @@ npm run build        # production build in dist/
 npm run assets       # regenerate all art (Python 3 + Pillow + numpy) and run the art checks
 npm run audio:check  # which audio files are present / missing
 npm run smoke        # Playwright smoke test on a production build (phone + desktop)
+npm run bot          # balance report (skilled and dodge-only bots per difficulty)
 ```
 
-## Audio
+Audio: put mp3 files in `assets/audio/` with the exact names from [docs/AUDIO_LIST.md](docs/AUDIO_LIST.md), then run
+`npm run audio:check`. Missing files fall back to synthesized sounds. Without `VITE_API_BASE` the game runs fully
+offline.
 
-Put mp3 files in `assets/audio/` with the exact names from `AUDIO_LIST.md`, then run `npm run audio:check`.
-Missing files fall back to synthesized sounds; nothing else to configure.
+## Project layout
 
-## Deploy
+| Folder | Purpose |
+| --- | --- |
+| `src/sim/` | pure deterministic simulation (60 Hz fixed step, seeded PRNG, replay = seed + difficulty + inputs) |
+| `src/render/` | Phaser scenes, menus, input (mouse / keyboard / gamepad / touch), audio; they only read sim state |
+| `src/shared/` | pure code used by both the game and the server (daily seed, score bound, text rules, replay codec) |
+| `src/web/`, `src/net/` | the page around the canvas (layout, board panel) and the board API client |
+| `src/data/` | tuning and game data |
+| `server/` | Cloudflare Worker + D1 for the Hard daily board (`server/migrations/`, `server/wrangler.toml`) |
+| `tools/` | deterministic Python art pipeline and checks; `tools/verify/` is the replay verifier, `tools/bot/` the balance bots |
+| `assets/` | generated art (sprites, atlas, backgrounds, data), committed so the site build needs no Python; `assets/audio/` takes the mp3 files (none yet: synthesized fallback) |
+| `public/` | static files served as-is (font, icons, manifest, `og-image.png`, `_headers`) |
+| `tests/`, `tests-e2e/` | Vitest suites and Playwright scripts |
+| `docs/` | deploy guide, art and audio specs, README screenshots |
 
-Cloudflare Pages (the game) + one Worker with D1 (the Hard daily board). Step by step: [DEPLOY.md](DEPLOY.md).
-Without `VITE_API_BASE` the game runs fully offline.
+The root also holds `index.html` and the four player-facing pages (`privacy.html`, `rules.html`, `credits.html`,
+`license.html`), built by Vite as separate pages.
+
+## Documentation
+
+- [docs/DEPLOY.md](docs/DEPLOY.md) - Cloudflare Pages + Worker + D1, step by step, and the site constants.
+- [docs/ASSETS_SPEC.md](docs/ASSETS_SPEC.md) - art direction, palette and the full asset list.
+- [docs/AUDIO_LIST.md](docs/AUDIO_LIST.md) - every sound and music file with its generation prompt.
+- [CLAUDE.md](CLAUDE.md) - the design and the architecture rules.
+- [SECURITY.md](SECURITY.md) - how to report a vulnerability.
 
 ## How scores are verified
 
@@ -49,24 +83,14 @@ Remaining risks: a verified run can still come from an automated player (a bot t
 seed is a public hash of the date, so the next day's layout can be practised early. Proposed later fix: mix a server
 secret into the seed and publish it at 00:00 UTC (offline Hard runs would then be unranked).
 
-## Architecture
-
-- `src/sim/` - pure deterministic simulation (60 Hz fixed step, seeded PRNG, replay = seed + difficulty + inputs).
-- `src/render/` - Phaser scenes, menus, input (mouse/keyboard/gamepad/touch), audio; they only read sim state.
-- `src/shared/` - pure code used by both the game and the server (daily seed, score bound, text rules, replay codec).
-- `server/` - Cloudflare Worker + D1 for the Hard daily board (`server/migrations/`, `server/wrangler.toml`).
-- `tools/` - deterministic Python art pipeline and checks; `tools/verify/` is the replay verifier (Node).
-
-## Credits
-
-- Font: Press Start 2P by CodeMan38, SIL Open Font License 1.1 (via `@fontsource/press-start-2p`).
-- Art and code generated for this project. Engine: Phaser 3. Audio credits: to be added with the audio files.
-
 ## License
 
 - Code: [MIT](LICENSE), copyright (c) 2026 The Nightgrave Authors.
 - Art and audio: all rights reserved, see [assets/LICENSE.md](assets/LICENSE.md). Audio made with ElevenLabs also
   follows the ElevenLabs terms.
-- Font: Press Start 2P stays under the SIL Open Font License 1.1.
-- Player-facing pages: `privacy.html`, `rules.html`, `credits.html`, `license.html` (linked from the page footer and
-  the in-game Credits screen).
+- Font: Press Start 2P by CodeMan38 (and the `px8` bitmap font made from it) stays under the SIL Open Font License 1.1.
+- Engine: Phaser 3 (MIT).
+- Credits: art and code were generated for this project; audio credits come with the audio files
+  (`credits.html` in the game).
+
+[play]: https://nightgrave.pages.dev

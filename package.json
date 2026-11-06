@@ -2,6 +2,12 @@
   "name": "nightgrave",
   "private": true,
   "version": "0.1.0",
+  "description": "Dark-fantasy dodge-and-parry survival game for the browser: one hit and the night wins.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emiontheautismspectrum/nightgrave.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +15,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "assets": "python3 tools/gen_assets.py && python3 tools/run_checks.py",
-    "bot": "vite-node scripts/botsim.ts",
+    "bot": "vite-node tools/bot/balance.ts",
     "audio:check": "python3 tools/check_audio.py",
     "smoke": "VITE_SMOKE=1 npm run build && node tests-e2e/smoke.cjs && npm run build",
     "e2e:board": "node tests-e2e/board_e2e.cjs",

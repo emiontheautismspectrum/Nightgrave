@@ -9,7 +9,7 @@ Baselines are rendered from git, by exporting that commit's tools/ into a temp d
   PREV   (the arena right before the v2 softening pass: same composition as the current arena, incl. placed props)
 Requirements (both metrics): new <= 1.3 x STAGE0 and new <= 0.6 x PREV. The Stage 0 baseline is a floor without
 sprites, so it is compared like-for-like with the new floor (no props). The full arena with props is held to the
-approved v4 baseline (ARENA_BASELINE): at most 10% noisier, at most 10% flatter (see ASSETS_SPEC.md).
+approved v4 baseline (ARENA_BASELINE): at most 10% noisier, at most 10% flatter (see docs/ASSETS_SPEC.md).
 Also: zero fine dither in ground, forest, fog and vignette layers: no 4x4 window may be a non-uniform period-2 lattice
 (1-px checkerboards, stripes, 25/50/75% bayer). The coarse 2x2-block pattern allowed on the fog edge has period 4.
 Placed arena props may have at most PROP_DITHER_MAX such windows each.
@@ -239,6 +239,7 @@ def write_v3_compare(v2_img, v3_img, floor_img):
     out[:, :v2_img.shape[1]] = v2_img
     out[:, v2_img.shape[1] + 8:] = v3_img
     pv = os.path.join(ROOT, "assets", "preview")
+    os.makedirs(pv, exist_ok=True)  # assets/preview/ is untracked output: absent in a fresh clone
     Image.fromarray(np.repeat(np.repeat(out, 2, 0), 2, 1)).save(os.path.join(pv, "arena_v3_compare.png"), optimize=False)
     x0, y0, x1, y1 = L.ARENA
     crop = floor_img[y0:y1, x0:x1]
@@ -254,6 +255,7 @@ def write_v4_compare(imgs, floor_img):
     for i, im in enumerate(imgs):
         out[:, i * (w + 8):i * (w + 8) + w] = im
     pv = os.path.join(ROOT, "assets", "preview")
+    os.makedirs(pv, exist_ok=True)  # assets/preview/ is untracked output: absent in a fresh clone
     Image.fromarray(np.repeat(np.repeat(out, 2, 0), 2, 1)).save(os.path.join(pv, "arena_v4_compare.png"), optimize=False)
     crop = floor_img[27:191, 40:300]
     Image.fromarray(np.repeat(np.repeat(crop, 2, 0), 2, 1)).save(os.path.join(pv, "ground_closeup.png"), optimize=False)
@@ -355,8 +357,10 @@ def write_wagon_closeup(old_path, new_path):
     canvas = Image.new("RGBA", (48 + 56 + 8, 40), (18, 22, 29, 255))
     canvas.paste(old, (0, 40 - 32), old)
     canvas.paste(new, (56, 0), new)
+    pv = os.path.join(ROOT, "assets", "preview")
+    os.makedirs(pv, exist_ok=True)  # assets/preview/ is untracked output: absent in a fresh clone
     canvas.convert("RGB").resize((canvas.width * 8, canvas.height * 8), Image.NEAREST).save(
-        os.path.join(ROOT, "assets", "preview", "wagon_closeup.png"), optimize=False)
+        os.path.join(pv, "wagon_closeup.png"), optimize=False)
 
 
 def write_compare(panels):

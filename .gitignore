@@ -18,3 +18,10 @@ __pycache__/
 *.sqlite-wal
 *.db
 server/.wrangler/
+# generated previews and test screenshots (tools/ and tests-e2e/ write them; curated copies live in docs/screenshots/)
+assets/preview/
+# raw audio sources (only final mp3 files belong in assets/audio/)
+assets/audio-src/
+*.log
+.idea/
+.vscode/
