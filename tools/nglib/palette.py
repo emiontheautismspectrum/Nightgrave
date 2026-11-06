@@ -1,4 +1,4 @@
-"""The fixed 22-color palette from ASSETS_SPEC.md (16 + 3 decor-only + 3 ground-only). Single source of truth."""
+"""The fixed 22-color palette from docs/ASSETS_SPEC.md (16 + 3 decor-only + 3 ground-only). Single source of truth."""
 
 PALETTE = [
     ("bg0", "#0b0d12"),
@@ -31,7 +31,7 @@ PALETTE = [
 # never in hero, threat, pickup, caster or UI sprites.
 GROUND_ONLY = {"fern", "loam", "mist"}
 
-# Gameplay colors that arena decor must never use (see ASSETS_SPEC.md).
+# Gameplay colors that arena decor must never use (see docs/ASSETS_SPEC.md).
 RESERVED = {"amber", "ember", "gold", "blood", "blood_dark", "violet", "violet_dark", "teal"}
 
 NAMES = [n for n, _ in PALETTE]

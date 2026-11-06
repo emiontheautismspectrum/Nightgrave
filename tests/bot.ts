@@ -1,6 +1,6 @@
 /**
  * A heuristic test player. It only READS sim state and produces inputs, like a human would.
- * Not part of the game; used for balance reports (scripts/botsim.ts) and tests.
+ * Not part of the game; used by tests (the balance report, npm run bot, is tools/bot/balance.ts with the skilled bot).
  */
 import { BTN_DASH, BTN_PARRY, type InputFrame } from '../src/sim/input';
 import { dashCooldownLeft, isFading, parryCooldownLeft, type Sim } from '../src/sim/sim';

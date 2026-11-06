@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audio file check: which AUDIO_LIST.md files are present or missing in assets/audio/, wrong extensions or names,
+"""Audio file check: which docs/AUDIO_LIST.md files are present or missing in assets/audio/, wrong extensions or names,
 and files longer than 3x the listed duration (MP3 duration measured by walking the frame headers; VBR-safe).
 
 Usage: python3 tools/check_audio.py   (npm run audio:check). Missing files are fine (the game falls back to
@@ -11,7 +11,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUDIO = os.path.join(ROOT, "assets", "audio")
-LIST = os.path.join(ROOT, "AUDIO_LIST.md")
+LIST = os.path.join(ROOT, "docs", "AUDIO_LIST.md")
 
 BITRATES = {  # MPEG-1 / MPEG-2(.5) Layer III, kbps
     1: [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320],
@@ -65,7 +65,7 @@ def main():
     want = listed()
     have = sorted(os.listdir(AUDIO)) if os.path.isdir(AUDIO) else []
     problems = 0
-    print(f"audio folder: {os.path.relpath(AUDIO, ROOT)}  ({len(want)} files listed in AUDIO_LIST.md)")
+    print(f"audio folder: {os.path.relpath(AUDIO, ROOT)}  ({len(want)} files listed in docs/AUDIO_LIST.md)")
     for name, dur in sorted(want.items()):
         if name in have:
             d = mp3_duration(os.path.join(AUDIO, name))
@@ -87,7 +87,7 @@ def main():
                 print(f"  missing  {name}  (synthesized fallback)")
     for h in have:
         if h not in want and h != "README.txt" and not any(os.path.splitext(h)[0] == n[:-4] for n in want) and not h.startswith("."):
-            print(f"  UNKNOWN  {h} (not in AUDIO_LIST.md; check the name)")
+            print(f"  UNKNOWN  {h} (not in docs/AUDIO_LIST.md; check the name)")
             problems += 1
     print(f"{len([n for n in want if n in have])}/{len(want)} present, {problems} problem(s)")
     return 1 if problems else 0

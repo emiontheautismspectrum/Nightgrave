@@ -88,7 +88,8 @@ def check_board(images, bp, scale=3):
     """A preview board must exist and be an exact nearest-neighbour upscale."""
     name = os.path.relpath(bp, ASSETS)
     if bp not in images:
-        err(f"missing {name}")
+        # previews are untracked output: tools/gen_assets.py and check_noise.py write them (npm run assets runs both first)
+        err(f"missing {name} (generate it with: npm run assets)")
         return
     b = images[bp]
     if b.shape[0] % scale or b.shape[1] % scale:

@@ -11,7 +11,7 @@ export type SfxEvent =
 export type MusicTrack = 'music_menu' | 'music_run_calm' | 'music_run_tense' | 'music_boss';
 export const AMBIENCE = 'amb_graveyard';
 
-/** Event -> file stem from AUDIO_LIST.md (the boss intros are named sfx_boss_<kind>_intro there). */
+/** Event -> file stem from docs/AUDIO_LIST.md (the boss intros are named sfx_boss_<kind>_intro there). */
 export const SFX_FILE: Record<SfxEvent, string> = {
   parry: 'sfx_parry', parry_chain: 'sfx_parry_chain', dash: 'sfx_dash', death: 'sfx_death',
   orb_spawn: 'sfx_orb_spawn', rune_charge: 'sfx_rune_charge', rune_burst: 'sfx_rune_burst',

@@ -11,6 +11,8 @@ const { spawn, execSync } = require('node:child_process');
 const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
+// assets/preview/ is untracked output (absent in a fresh clone): create it before writing screenshots
+require('node:fs').mkdirSync(path.join(ROOT, 'assets', 'preview'), { recursive: true });
 const URL0 = 'http://localhost:4187/';
 const API = 'http://localhost:8799';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

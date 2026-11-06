@@ -308,11 +308,11 @@ describe('touch controls', () => {
 });
 
 describe('audio logic (no real audio)', () => {
-  it('manifest: only existing .mp3 files with valid names; every sfx maps to an AUDIO_LIST.md file', () => {
+  it('manifest: only existing .mp3 files with valid names; every sfx maps to a docs/AUDIO_LIST.md file', () => {
     const m = buildManifest({ '../../assets/audio/sfx_parry.mp3': '/a.mp3', '../../assets/audio/Evil Name.mp3': '/b', '../../assets/audio/sfx_dash.ogg': '/c' });
     expect([...m.keys()]).toEqual(['sfx_parry']);
     expect(buildManifest({}).size).toBe(0);
-    const list = readFileSync('AUDIO_LIST.md', 'utf8');
+    const list = readFileSync('docs/AUDIO_LIST.md', 'utf8');
     for (const e of ALL_SFX) expect(list).toContain(`${SFX_FILE[e]}.mp3`);
     expect(ALL_SFX.length).toBe(18);
   });

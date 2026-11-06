@@ -4,9 +4,9 @@ A dark-fantasy, single-arena dodge/parry survival game: endless waves, one hit =
 Two bosses (Eye Sentinel, Lich Mage), two pickups, three difficulties and an online Hard daily board.
 Static HTML5 (TypeScript, Phaser 3, Vite). The title lives in one constant: `TITLE` in `src/config.ts` (rename there).
 
-![Title](assets/preview/menu_title.png)
-![Eye Sentinel](assets/preview/boss_fight_eye.png)
-![Touch layout](assets/preview/touch_layout.png)
+![Title](docs/screenshots/title.png)
+![Eye Sentinel](docs/screenshots/boss_eye.png)
+![Phone, landscape](docs/screenshots/run.png)
 
 ## Controls
 
@@ -30,12 +30,12 @@ npm run smoke        # Playwright smoke test on a production build (phone + desk
 
 ## Audio
 
-Put mp3 files in `assets/audio/` with the exact names from `AUDIO_LIST.md`, then run `npm run audio:check`.
+Put mp3 files in `assets/audio/` with the exact names from `docs/AUDIO_LIST.md`, then run `npm run audio:check`.
 Missing files fall back to synthesized sounds; nothing else to configure.
 
 ## Deploy
 
-Cloudflare Pages (the game) + one Worker with D1 (the Hard daily board). Step by step: [DEPLOY.md](DEPLOY.md).
+Cloudflare Pages (the game) + one Worker with D1 (the Hard daily board). Step by step: [docs/DEPLOY.md](docs/DEPLOY.md).
 Without `VITE_API_BASE` the game runs fully offline.
 
 ## How scores are verified
