@@ -211,25 +211,26 @@ describe('multi-kill scoring', () => {
     sim.step({ ...idle(), buttons: BTN_PARRY });
     expect(sim.state.projectiles).toHaveLength(16 - p.parryMaxKills);
     expect(sim.state.parryCount).toBe(1);
-    expect(sim.state.multiplier).toBe(p.multStart + p.multStep);
+    // one step for the pulse + the PERFECT extra (the shards touch the hero)
+    expect(sim.state.multiplier).toBe(p.multStart + 2 * p.multStep);
     // extras in the same pulse score at the already-stepped multiplier
-    expect(sim.state.parryScoreHundredths).toBe(p.parryBase * p.multStart + (p.parryMaxKills - 1) * p.extraKillPoints * (p.multStart + p.multStep));
+    expect(sim.state.parryScoreHundredths).toBe(p.parryBase * p.multStart + (p.parryMaxKills - 1) * p.extraKillPoints * (p.multStart + 2 * p.multStep));
   });
 
-  it('a far parry scores but neither steps nor resets the multiplier; a close one steps it', () => {
+  it('a far parry scores and steps the multiplier once; a PERFECT one steps it twice', () => {
     const sim = new Sim(1, 'medium', { spawner: false });
     const p = sim.params;
     const h = sim.state.hero;
     sim.state.multiplier = 200;
-    spawnProjectile(sim.state, p, 'orb_small', h.x + p.parryRadius * 0.9, h.y, 0, 0); // far: outer 40%
+    spawnProjectile(sim.state, p, 'orb_small', h.x + p.parryRadius, h.y, 0, 0); // far: the edge is outside the perfect zone
     sim.step({ ...idle(), buttons: BTN_PARRY });
     expect(sim.state.parryCount).toBe(1);
-    expect(sim.state.multiplier).toBe(200);
+    expect(sim.state.multiplier).toBe(200 + p.multStep);
     expect(sim.state.parryScoreHundredths).toBe(p.parryBase * 200);
     for (let i = 0; i < p.parryCooldown + 1; i++) sim.step(idle());
-    spawnProjectile(sim.state, p, 'orb_small', h.x + p.parryRadius * 0.4, h.y, 0, 0); // close
+    spawnProjectile(sim.state, p, 'orb_small', h.x + p.parryRadius * 0.4, h.y, 0, 0); // close: perfect
     sim.step({ ...idle(), buttons: BTN_PARRY });
-    expect(sim.state.multiplier).toBe(200 + p.multStep);
+    expect(sim.state.multiplier).toBe(200 + 3 * p.multStep);
   });
 });
 

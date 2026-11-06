@@ -20,16 +20,22 @@ export const TUNING = {
    * orbs cannot cross the pulse-to-body gap during the short off-window.
    */
   // Polish 2: parry is a skill: smaller (22 px), shorter (0.10 s), slower to recover (0.9 s after a hit, 1.4 s after a
-  // whiff), at most 3 kills per pulse; the multiplier steps only for a close parry (a kill within closeFraction of the
-  // radius).
-  parry: { radius: 22, activeSeconds: 0.1, cooldownSeconds: 0.9, whiffCooldownSeconds: 1.4, bufferSeconds: 0.1, maxKillsPerPulse: 3, closeFraction: 0.6 },
+  // whiff), at most 3 kills per pulse. Multiplier fix: every successful pulse steps the multiplier; a PERFECT parry (a
+  // destroyed projectile whose EDGE is within radius * closeFraction = 16.5 px of the hero) steps it once more. The
+  // perfect timing window is (16.5 - hero radius 3) px / projectile speed: ~0.16 s for a Medium orb at wave 1 (83 px/s),
+  // ~0.21 s on Easy (64 px/s), ~0.13 s on Hard (108 px/s). Tuned with tools/bot/multiplier_report.ts: the skilled bot
+  // (+-2 ticks of timing) is perfect on ~85% of its parries, the heuristic bot (no timing) on ~25%.
+  parry: { radius: 22, activeSeconds: 0.1, cooldownSeconds: 0.9, whiffCooldownSeconds: 1.4, bufferSeconds: 0.1, maxKillsPerPulse: 3, closeFraction: 0.75 },
   dash: { distance: 80, durationSeconds: 0.2, invulnSeconds: 0.12, cooldownSeconds: 3, bufferSeconds: 0.1 }, // i-frames only for the first 0.12 s
   /** Multiplier is stored as integer hundredths inside the sim (100 = x1.00). */
-  multiplier: { start: 1, step: 0.25, cap: 5, resetSeconds: 3 }, // resets after 3 s without a successful parry
+  // +step per successful pulse, +step more for a PERFECT parry; capped; resets after 3 s without a successful parry
+  multiplier: { start: 1, step: 0.25, cap: 5, resetSeconds: 3 },
   /**
    * A successful parry = one pulse that destroyed something. The first projectile of a pulse scores
    * parryBase x multiplier; every extra one in the same pulse scores extraKillPoints x multiplier.
-   * The multiplier steps once per successful pulse (a 16-shard ring is not 16 parries).
+   * The first kill of a pulse scores at the multiplier before the pulse's step; later kills of the same pulse score at
+   * the current (already stepped) one. The multiplier steps once per successful pulse (a 16-shard ring is not 16
+   * parries), plus once more if the pulse had a PERFECT kill.
    */
   score: { survivalPerSecond: 10, parryBase: 25, extraKillPoints: 5 },
   // Polish 2: base projectile speeds +30% (orbs, shards, blades, wraiths, the eye's ring; caster and other boss shots use

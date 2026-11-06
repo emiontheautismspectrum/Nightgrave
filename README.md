@@ -14,7 +14,8 @@ verified by re-simulating its replay. Static HTML5 (TypeScript, Phaser 3, Vite);
 | ![Eye Sentinel boss fight](docs/screenshots/boss_eye.png) | ![A run on a phone in landscape](docs/screenshots/run.png) |
 
 More: [Lich Mage](docs/screenshots/boss_lich.png), [phone in portrait](docs/screenshots/phone_portrait.png),
-[phone board](docs/screenshots/phone_board.png).
+[phone board](docs/screenshots/phone_board.png),
+[multiplier label](docs/screenshots/multiplier_hud.png), [Double Score](docs/screenshots/double_score.png).
 
 ## Controls
 

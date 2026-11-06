@@ -64,7 +64,8 @@ describe('splitting orb', () => {
 });
 
 describe('blood sigil', () => {
-  it('fairness fuzz: telegraph >= 0.25 s, never under the hero, at most 2, the arena always keeps a path', () => {
+  // 36 runs of 90 s each: ~2 s alone, but it must not time out on a loaded machine (5 s was flaky there)
+  it('fairness fuzz: telegraph >= 0.25 s, never under the hero, at most 2, the arena always keeps a path', { timeout: 30_000 }, () => {
     let seen = 0;
     for (const d of ['easy', 'medium', 'hard'] as const)
       for (let seed = 1; seed <= 12; seed++) {

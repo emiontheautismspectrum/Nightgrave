@@ -169,7 +169,7 @@ export interface Hero {
   parryHit: boolean;
   /** Projectiles destroyed by the current/last pulse (capped at parryMaxKills). */
   parryKills: number;
-  /** The current/last pulse already stepped the multiplier (a close parry). */
+  /** The current/last pulse already had its PERFECT kill (the extra multiplier step is taken once per pulse). */
   parryClose: boolean;
   /** The current/last pulse destroyed (scored) something; a pulse that only cracked a shell has a short cooldown. */
   parryScored: boolean;
@@ -184,7 +184,12 @@ export interface Hero {
 
 export type SimEvent =
   | { type: 'parry_start' }
-  | { type: 'parry_hit'; id: number; x: number; y: number; points: number; multiplier: number }
+  /** multiplier: the one used for these points; perfect: this kill was the pulse's PERFECT one; multAfter: after the step. */
+  | { type: 'parry_hit'; id: number; x: number; y: number; points: number; multiplier: number; perfect: boolean; multAfter: number }
+  /** The multiplier stepped (once per successful pulse, +1 step more for a PERFECT parry); multiplier = the new value. */
+  | { type: 'mult_step'; multiplier: number; perfect: boolean; x: number; y: number }
+  /** The multiplier fell back to the start after the reset time without a successful parry. */
+  | { type: 'mult_reset' }
   | { type: 'dash_start'; dirX: number; dirY: number }
   | { type: 'parry_whiff'; x: number; y: number }
   | { type: 'spawn'; id: number; kind: ProjectileKind; dist: number; telegraphTicks: number }
