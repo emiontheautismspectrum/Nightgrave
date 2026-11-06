@@ -133,8 +133,8 @@ export function validateSave(raw: unknown): SaveData {
     shake: bool(s.shake, d.shake),
     reducedFlashes: bool(s.reducedFlashes, d.reducedFlashes),
     effects: oneOf(s.effects, ['high', 'low'], d.effects),
-    // a save from before the touch-smoothing setting still holding the old default sensitivity (1.5) moves to the new
-    // default; any value the player picked themselves is kept
+    // a save from before the touch-smoothing setting that holds 1.5 (the old default) moves to the new default 1.0;
+    // other values are kept. A player who had deliberately picked exactly 1.5 is moved too (indistinguishable)
     dragSensitivity: s.touchSmoothing === undefined && s.dragSensitivity === 1.5 ? d.dragSensitivity : clampSensitivity(s.dragSensitivity),
     touchSmoothing: oneOf(s.touchSmoothing, ['off', 'low', 'high'], d.touchSmoothing),
     leftHanded: bool(s.leftHanded, d.leftHanded),

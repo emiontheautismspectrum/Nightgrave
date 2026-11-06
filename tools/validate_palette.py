@@ -109,7 +109,8 @@ def main():
     images = {}
     for p in pngs:
         images[p] = load(p)
-        if os.path.basename(p) not in PALETTE_EXEMPT:
+        # phone_*.png: browser screenshots of the phone layouts (tests-e2e), blended like the other screenshots
+        if os.path.basename(p) not in PALETTE_EXEMPT and not os.path.basename(p).startswith('phone_'):
             check_pixels(p, images[p])
 
     # expected sprite table: gameplay sprites (spec.py) + arena sprites (layout-dependent, from the generator)

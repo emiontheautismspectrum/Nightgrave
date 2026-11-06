@@ -9,6 +9,7 @@
  */
 import { BTN_DASH, BTN_PARRY } from '../sim/input';
 import { TOUCH_INPUT, type TouchSmoothing } from '../data/input';
+import { getScreen } from '../web/screen';
 import { PORTRAIT } from '../data/view';
 
 export const TAP_MS = 200;
@@ -41,9 +42,13 @@ export function touchButtons(leftHanded: boolean, view: 'full' | 'zoomed' = 'ful
     ];
   }
   const cx = leftHanded ? ARENA.x0 / 2 : VIEW_W - (VIEW_W - ARENA.x1) / 2;
+  // hit areas of at least 44 CSS px across where the margin allows (24 px radius at most: inside the 48 px margin and
+  // clear of each other, 50 px apart)
+  const css = Math.max(0.1, getScreen().cssPerPx);
+  const hit = (r: number) => Math.max(r + 2, Math.min(24, Math.ceil(22 / css)));
   return [
-    { id: 'parry', x: cx, y: 222, r: 18 },
-    { id: 'dash', x: cx, y: 182, r: 14 },
+    { id: 'parry', x: cx, y: 222, r: 18, hit: hit(18) },
+    { id: 'dash', x: cx, y: 172, r: 14, hit: hit(14) },
   ];
 }
 
@@ -123,7 +128,11 @@ export class TouchModel {
 
   /** The screen space changed (full arena <-> zoomed portrait view): held fingers re-anchor without moving the cursor. */
   rebase(): void {
-    for (const t of this.touches.values()) t.rebase = true;
+    for (const t of this.touches.values()) {
+      t.rebase = true;
+      t.jx = 0;
+      t.jy = 0;
+    }
   }
 
   move(id: number, x: number, y: number): void {

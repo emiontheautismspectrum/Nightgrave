@@ -98,14 +98,39 @@ export class SubmitPanel {
     const y0 = Math.round(H / 2 + 56);
     const fw = W - 16;
     const msg = this.wantsMessage ? 18 : 0;
-    return { x: 8, w: W - 8, y0, fields: [[8, y0 + 12, fw], [8, y0 + 30, fw]], btnY: y0 + 34 + msg, btnX: [Math.round(W * 0.2), Math.round(W * 0.62)], h: 70 + msg };
+    return { x: 8, w: W - 8, y0, fields: [[8, y0 + 12, fw], [8, y0 + 30, fw]], btnY: y0 + 34 + msg, btnX: [Math.round(W * 0.2), Math.round(W * 0.62)], h: 78 + msg };
   }
   private scale(): number {
     return this.scene.scale.height;
   }
 
+  private rank = 0;
+
+  /** The screen changed (rotation, keyboard, browser bars): rebuild at the new size, keeping what was typed. */
+  relayout(): void {
+    if (!this.objs.length || !this.run) return;
+    const vals = this.inputs.map((el) => el.value);
+    const status = this.status?.text ?? '';
+    const note = this.note?.text ?? '';
+    const done = this.done;
+    window.removeEventListener('resize', this.onResize);
+    for (const el of this.inputs) el.remove();
+    for (const o of this.objs) o.destroy();
+    this.inputs = [];
+    this.objs = [];
+    this.rects = [];
+    this.build(this.run, this.rank);
+    this.inputs.forEach((el, i) => {
+      el.value = vals[i] ?? el.value;
+      el.disabled = done;
+    });
+    if (status) setTextValue(this.status, status);
+    if (note) this.note?.setText(note);
+  }
+
   private build(run: RunResult, rank: number): void {
     this.run = run;
+    this.rank = rank;
     this.wantsMessage = rank === 1;
     const s = this.scene;
     const G = this.geo();

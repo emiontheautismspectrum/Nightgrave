@@ -83,11 +83,12 @@ export class TitleScene extends Phaser.Scene {
     this.menu = new MenuView(this, 1000);
     // the screen changed (rotation, browser bars, resize): the canvas size, then the open page
     const off = onScreenChange(() => this.applyView());
+    this.events.on(Phaser.Scenes.Events.PRE_RENDER, this.filterCameras, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       off();
+      this.events.off(Phaser.Scenes.Events.PRE_RENDER, this.filterCameras, this); // the scene is reused
       this.uiCam = null;
     });
-    this.events.on(Phaser.Scenes.Events.PRE_RENDER, () => this.filterCameras());
     this.applyView();
     audio.setMusic('music_menu');
     audio.setAmbience(false);
@@ -109,6 +110,7 @@ export class TitleScene extends Phaser.Scene {
     const H = this.scale.height;
     const cy = Math.round(H * 0.43); // the classic screen: 116
     const cover = this.add.rectangle(0, 0, W, H, 0x0b0d12, 0.92).setOrigin(0).setDepth(1100).setInteractive();
+    this.introCover = cover;
     objs.push(cover);
     const word = TITLE.toUpperCase();
     const x0 = W / 2 - (word.length * 16) / 2;
@@ -146,6 +148,7 @@ export class TitleScene extends Phaser.Scene {
   private introSkip: (() => void) | null = null;
   private uiCam: Phaser.Cameras.Scene2D.Camera | null = null;
   private bgDim: Phaser.GameObjects.Rectangle | null = null;
+  private introCover: Phaser.GameObjects.Rectangle | null = null;
 
   /**
    * A phone in portrait: the canvas takes the real screen aspect (src/web/screen.ts), the arena art is a dimmed
@@ -170,6 +173,11 @@ export class TitleScene extends Phaser.Scene {
       for (const o of this.children.list) o.cameraFilter = 0;
     }
     this.bgDim?.setVisible(portrait);
+    if (this.introCover?.active) {
+      // an intro still running covers the new size (and still takes the skip tap everywhere)
+      this.introCover.setSize(W, H);
+      (this.introCover.input?.hitArea as Phaser.Geom.Rectangle | undefined)?.setTo(0, 0, W, H);
+    }
     requestRelayout();
     this.menu.relayout();
   }

@@ -274,9 +274,12 @@ export class MenuView {
 
   /** Lay the current page out again (the screen changed: rotation, browser bars, a resize). */
   relayout(): void {
-    if (this.active && this.page) {
+    // also while inactive (e.g. under the intro): the page must match the canvas once it is shown
+    if (this.page) {
+      const active = this.active;
       const fresh = this.fresh;
       this.show(this.page, this.focus);
+      this.active = active;
       this.fresh = fresh;
     }
   }
@@ -285,6 +288,7 @@ export class MenuView {
     this.clear();
     this.active = false;
     this.page = null;
+    this.scene.input.setDefaultCursor('default');
   }
 
   private clear(): void {
@@ -417,9 +421,10 @@ export class MenuView {
     const pr = this.press;
     if (!pr || pr.id !== p.id) {
       // mouse hover moves the focus (as before)
-      if (!p.isDown && !p.wasTouch) {
+      if (!p.wasTouch) {
         const t = this.targetAt(p.x, p.y);
         if (t && t.kind === 'row') this.setFocus(t.i);
+        this.scene.input.setDefaultCursor(t ? 'pointer' : 'default'); // the hand cursor over items, as before
       }
       return;
     }
@@ -429,7 +434,9 @@ export class MenuView {
     if (!pr.moved && Math.hypot(dx, dy) / (g?.css ?? 1) > TAP_SLOP_CSS) {
       // a drag: never a tap. Vertical = scroll the list; horizontal on a value row = step its value
       const it = pr.t && pr.t.kind !== 'back' ? this.page.items[pr.t.i] : undefined;
-      pr.moved = Math.abs(dy) >= Math.abs(dx) ? 'scroll' : it?.onLeft && it?.onRight ? 'slide' : 'tap';
+      // a value slide needs a clearly horizontal touch drag; anything else on a phone scrolls (never changes a value)
+      const slide = p.wasTouch && Math.abs(dx) > 2 * Math.abs(dy) && !!(it?.onLeft && it?.onRight);
+      pr.moved = slide ? 'slide' : Math.abs(dy) >= Math.abs(dx) ? 'scroll' : 'tap';
       this.showPress(null);
     }
     if (pr.moved === 'scroll' && this.list && g?.touch) {

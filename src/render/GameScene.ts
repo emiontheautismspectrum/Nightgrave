@@ -168,7 +168,7 @@ export class GameScene extends Phaser.Scene {
     this.uiCam = null; // the camera manager destroyed the old one on shutdown (a scene restart reuses this instance)
     this.zoomed = false;
     // the world / HUD camera split is assigned right before every render (objects created anywhere this frame too)
-    this.events.on(Phaser.Scenes.Events.PRE_RENDER, () => this.filterCameras());
+    this.events.on(Phaser.Scenes.Events.PRE_RENDER, this.filterCameras, this);
     this.buildArena();
     // y-sorted world: props, casters, hero, projectiles and effects all use depth = Y_SORT + base y
     this.shadow = this.add.image(0, 0, ATLAS, frame('hero_shadow'));
@@ -206,10 +206,8 @@ export class GameScene extends Phaser.Scene {
     });
     this.menu = new MenuView(this, D_HUD + 10, 0.7);
     // the screen changed (rotation, browser bars, resize): the portrait layout, then the open menu
-    const offScreen = onScreenChange(() => {
-      if (this.zoomed) this.setView(true);
-      this.menu.relayout();
-    });
+    // the screen changed (rotation, browser bars, resize): one path for the orientation, the layout and the panels
+    const offScreen = onScreenChange(() => this.onResize());
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, offScreen);
     this.buildPauseButton();
     this.touchGfx = this.add.graphics().setDepth(D_HUD);
@@ -236,11 +234,15 @@ export class GameScene extends Phaser.Scene {
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('resize', onOrient);
+      this.events.off(Phaser.Scenes.Events.PRE_RENDER, this.filterCameras, this); // the scene is reused on the next run
       if (this.zoomed) {
-        // back to the full 480x270 game for the title screen
         this.zoomed = false;
-        this.scale.resize(VIEW_WIDTH, VIEW_HEIGHT);
-        requestRelayout();
+        // back to the full 480x270 game for a landscape title (a portrait title sets its own size: no flicker of the
+        // board panel and no extra board fetch in between)
+        if (!getScreen().portrait) {
+          this.scale.resize(VIEW_WIDTH, VIEW_HEIGHT);
+          requestRelayout();
+        }
       }
     });
     audio.setAmbience(true);
@@ -259,9 +261,23 @@ export class GameScene extends Phaser.Scene {
       const pd = hitPad(r.width, r.height, 6);
       if (x >= r.x - pd.x && x <= r.right + pd.x && y >= r.y - pd.y && y <= r.bottom + pd.y) return true;
     }
+    const r = this.pauseHitRect();
+    return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  }
+
+  /**
+   * The pause button's touch target (game px, screen space): >= 44 CSS px on phones, grown upwards (off the top edge)
+   * and sideways into the right margin, never down into the playfield. The same rect for Phaser and uiHit.
+   */
+  private pauseHitRect(): { x: number; y: number; w: number; h: number } {
     const b = this.pauseRect;
     const pd = hitPad(b.w, b.h);
-    return x >= b.x - pd.x && x <= b.x + b.w + pd.x && y >= b.y - pd.y && y <= b.y + b.h + pd.y;
+    const w = b.w + 2 * pd.x;
+    const h = b.h + 2 * pd.y;
+    const playTop = this.zoomed ? this.pl.view.y : 27;
+    const bottom = Math.max(b.y + b.h, Math.min(b.y + b.h + pd.y, playTop - 1));
+    const right = Math.min(this.scale.width, b.x + b.w + Math.max(pd.x, w - b.w - pd.x));
+    return { x: right - w, y: bottom - h, w, h };
   }
 
   private buildPauseButton(): void {
@@ -269,21 +285,26 @@ export class GameScene extends Phaser.Scene {
     const bg = this.add.rectangle(0, 0, b.w, b.h, 0x0b0d12, 0.6).setOrigin(0).setStrokeStyle(1, 0x3a4558);
     const t = addText(this, b.w / 2 - 7, b.h / 2 - 4, 'II', { color: C.bone });
     this.pauseBtn = this.add.container(b.x, b.y, [bg, t]).setDepth(D_HUD + 1).setSize(b.w, b.h);
+    // a separate invisible zone takes the taps (origin top-left: no container display-origin offset)
+    this.pauseZone = this.add.zone(0, 0, 1, 1).setOrigin(0).setDepth(D_HUD + 1);
     this.setPauseHit();
-    onTap(this.pauseBtn, () => this.togglePause());
+    onTap(this.pauseZone, () => this.togglePause(), (down) => this.pauseBtn.setAlpha(down ? 0.6 : 1));
   }
+  private pauseZone!: Phaser.GameObjects.Zone;
 
   /** The pause button's hit area: >= 44 CSS px on phones (the layout can change it: rotation, browser bars). */
   private setPauseHit(): void {
-    const b = this.pauseRect;
-    const pd = hitPad(b.w, b.h);
-    const r = new Phaser.Geom.Rectangle(-pd.x, -pd.y, b.w + 2 * pd.x, b.h + 2 * pd.y);
-    if (this.pauseBtn.input) this.pauseBtn.input.hitArea = r;
-    else this.pauseBtn.setInteractive(r, Phaser.Geom.Rectangle.Contains);
+    const r = this.pauseHitRect();
+    this.pauseZone.setPosition(r.x, r.y).setSize(r.w, r.h);
+    const area = new Phaser.Geom.Rectangle(0, 0, r.w, r.h);
+    if (this.pauseZone.input) this.pauseZone.input.hitArea = area;
+    else this.pauseZone.setInteractive(area, Phaser.Geom.Rectangle.Contains);
   }
 
+  /** The same portrait test as the page layout (safe-area-reduced viewport, phone). */
   private isPortrait(): boolean {
-    return isPortraitView(window.innerWidth, window.innerHeight, this.cfg.isTouch());
+    const sc = getScreen();
+    return sc.phone ? sc.portrait : isPortraitView(window.innerWidth, window.innerHeight, this.cfg.isTouch());
   }
 
   /** Rotating mid-run re-lays out and pauses: the player resumes deliberately (RESUME). */
@@ -294,6 +315,11 @@ export class GameScene extends Phaser.Scene {
       if (this.driver && this.sim.state.alive && !this.hint) this.autoPause('rotate');
     }
     this.syncView();
+    // a new portrait size (browser bars, keyboard): lay out again only when the layout really changed (the follow
+    // camera keeps its state otherwise)
+    if (this.zoomed && JSON.stringify(this.portraitLayoutNow()) !== JSON.stringify(this.pl)) this.setView(true);
+    this.menu.relayout();
+    this.submit?.relayout();
   }
 
   /** A phone in portrait always uses the portrait screen (run, pause menu, cards, death panel); landscape the arena. */
