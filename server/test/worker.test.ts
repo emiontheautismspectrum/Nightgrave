@@ -27,7 +27,7 @@ function body(over: Record<string, unknown> = {}): Record<string, unknown> {
     date: DATE, seed: dailySeed(DATE), difficulty: 'hard', score: 100, durationTicks: ticks, hero: 'knight', name: 'Tester',
     playerId: pid(1), tuningFingerprint: tuningFingerprint(), clientVersion: CLIENT_VERSION,
     // a distinct replay per player (identical replays are refused as duplicates on promotion)
-    replay: encodeInputLog(Array.from({ length: ticks }, () => ({ cursor: true, mx: 40 + (Number(String(over.playerId ?? pid(1)).slice(-4)) % 400), my: 135, buttons: 0 }))),
+    replay: encodeInputLog(Array.from({ length: ticks }, () => ({ cursor: true, mx: 40 + (Number(String(over.playerId ?? pid(1)).slice(-4)) % 400), my: 135, buttons: 0 })), ((over.hero as 'knight' | 'wisp' | undefined) === 'wisp' ? 'wisp' : 'knight')),
     ...over,
   };
 }
@@ -67,6 +67,8 @@ describe('POST /api/submit: every rejection path', () => {
     ['float score', { score: 1.5 }, {}, 'invalid'],
     ['unsafe integer', { score: 2 ** 60 }, {}, 'invalid'],
     ['bad hero', { hero: 'mage' }, {}, 'invalid'],
+    ['claimed hero differs from the replay core', { replay: encodeInputLog(Array.from({ length: 600 }, () => ({ cursor: true, mx: 240, my: 135, buttons: 0 })), 'wisp') }, {}, 'invalid'],
+    ['old-format replay (no hero header)', { replay: btoa(String.fromCharCode(0xd8, 0x04, 1, 0xe0, 0x03, 0x8e, 0x02)) }, {}, 'replay'],
     ['bad view', { view: 'tiny' }, {}, 'invalid'],
     ['view of another type', { view: 1 }, {}, 'invalid'],
     ['view with a payload', { view: "zoomed'; DROP TABLE entries; --" }, {}, 'invalid'],
@@ -82,7 +84,7 @@ describe('POST /api/submit: every rejection path', () => {
     ['longer than the day so far', { durationTicks: 60 * 60 * 60 * 13 }, {}, 'duration'],
     ['negative score', { score: -1 }, {}, 'too_high'],
     ['score above the bound', { score: maxPossibleScore(600) + 1 }, {}, 'too_high'],
-    ['replay tick mismatch', { replay: encodeInputLog([{ cursor: true, mx: 1, my: 1, buttons: 0 }]) }, {}, 'replay'],
+    ['replay tick mismatch', { replay: encodeInputLog([{ cursor: true, mx: 1, my: 1, buttons: 0 }], 'knight') }, {}, 'replay'],
     ['replay garbage', { replay: '!!!notbase64' }, {}, 'replay'],
     ['short name', { name: 'ab' }, {}, 'name'],
     ['zero-width name', { name: 'Te​ster' }, {}, 'name'],

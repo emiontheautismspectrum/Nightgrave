@@ -1,7 +1,9 @@
 # Nightgrave
 
 A dark-fantasy, single-arena dodge-and-parry survival game for the browser. Endless waves, one hit and the run is
-over, instant restart, a score chase. Parry the violet threats, dodge or dash through the red ones. Two bosses (Eye
+over, instant restart, a score chase. Parry the violet threats, dodge or dash through the red ones. Two heroes play
+differently: the Knight parries with a shield arc where it moves and banks a guard, the Wisp parries all around and
+its dash burns shots. Two bosses (Eye
 Sentinel, Lich Mage), two pickups, three difficulties and an online daily board for Hard, where every score is
 verified by re-simulating its replay. Static HTML5 (TypeScript, Phaser 3, Vite); the title lives in one constant,
 `TITLE` in `src/config.ts`.
@@ -16,7 +18,8 @@ Chrome: menu -> Add to Home screen / Install app) opens the game fullscreen with
 
 More: [Lich Mage](docs/screenshots/boss_lich.png), [phone in portrait](docs/screenshots/phone_portrait.png),
 [phone board](docs/screenshots/phone_board.png),
-[multiplier label](docs/screenshots/multiplier_hud.png), [Double Score](docs/screenshots/double_score.png).
+[multiplier label](docs/screenshots/multiplier_hud.png), [Double Score](docs/screenshots/double_score.png),
+[heroes: Knight shield arc and Wisp ember trail](docs/screenshots/heroes.png).
 
 ## Controls
 
@@ -40,7 +43,7 @@ npm run build        # production build in dist/
 npm run assets       # regenerate all art (Python 3 + Pillow + numpy) and run the art checks
 npm run audio:check  # which audio files are present / missing
 npm run smoke        # Playwright smoke test on a production build (phone + desktop)
-npm run bot          # balance report (skilled and dodge-only bots per difficulty)
+npm run bot          # balance report per hero (skilled and dodge-only bots per difficulty)
 ```
 
 Audio: put mp3 files in `assets/audio/` with the exact names from [docs/AUDIO_LIST.md](docs/AUDIO_LIST.md), then run

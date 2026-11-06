@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Sim } from '../src/sim/sim';
 import { decodeReplay, encodeReplay, playReplay } from '../src/sim/replay';
+import type { HeroId } from '../src/data/heroes';
 import { mulberryInputs } from './scripted';
 
-function run(seed: number, frames = mulberryInputs(seed * 7 + 3, 60 * 60)) {
-  const sim = new Sim(seed, 'hard');
+function run(seed: number, frames = mulberryInputs(seed * 7 + 3, 60 * 60), hero: HeroId = seed % 2 ? 'knight' : 'wisp') {
+  const sim = new Sim(seed, 'hard', { hero });
   for (const f of frames) sim.step(f);
   return sim;
 }
@@ -30,7 +31,7 @@ describe('determinism', () => {
   for (const seed of [5, 77, 31337]) {
     it(`seed ${seed}: replay (encode -> JSON -> decode -> play) reproduces the run exactly`, () => {
       const live = run(seed);
-      const json = JSON.stringify(encodeReplay(seed, 'hard', live.log));
+      const json = JSON.stringify(encodeReplay(seed, 'hard', live.state.heroId as HeroId, live.log));
       const replayed = playReplay(JSON.parse(json));
       // `events` is a per-tick render buffer; the live sim was stepped (as no-ops) after death, the replay was not.
       const strip = (st: object) => JSON.stringify({ ...st, events: undefined });
@@ -53,7 +54,7 @@ describe('determinism', () => {
   });
 
   it('replay RLE compresses idle runs', () => {
-    const r = encodeReplay(1, 'easy', Array.from({ length: 500 }, () => ({ cursor: true, mx: 10, my: 10, buttons: 0 })));
+    const r = encodeReplay(1, 'easy', 'knight', Array.from({ length: 500 }, () => ({ cursor: true, mx: 10, my: 10, buttons: 0 })));
     expect(r.runs).toEqual([[500, 1, 10, 10, 0]]);
     expect(decodeReplay(r).frames.length).toBe(500);
   });
@@ -61,12 +62,12 @@ describe('determinism', () => {
 
 describe('replay validation', () => {
   it('rejects a replay recorded under different tuning', () => {
-    const r = encodeReplay(1, 'hard', []);
+    const r = encodeReplay(1, 'hard', 'wisp', []);
     expect(() => decodeReplay({ ...r, tuning: 'deadbeef' })).toThrow(/tuning/);
   });
   it('rejects malformed replays', () => {
-    const r = encodeReplay(1, 'hard', []);
-    for (const bad of [null, 1, {}, { ...r, v: 2 }, { ...r, seed: -1 }, { ...r, seed: 1.5 }, { ...r, difficulty: '__proto__' },
+    const r = encodeReplay(1, 'hard', 'wisp', []);
+    for (const bad of [null, 1, {}, { ...r, v: 1 }, { ...r, hero: undefined }, { ...r, hero: 'classic' }, { ...r, hero: 'mage' }, { ...r, hero: 'KNIGHT' }, { ...r, seed: -1 }, { ...r, seed: 1.5 }, { ...r, difficulty: '__proto__' },
       { ...r, runs: [[1e300, 1, 0, 0, 0]] }, { ...r, runs: [[0, 1, 0, 0, 0]] }, { ...r, runs: [[1, 1, 0, 0]] }]) {
       expect(() => decodeReplay(bad)).toThrow();
     }

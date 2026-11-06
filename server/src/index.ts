@@ -12,7 +12,8 @@
  */
 import { addDays, dailySeed, dayStartMs, utcDateKey, DATE_RE } from '../../src/shared/daily';
 import { maxPossibleScore } from '../../src/shared/maxScore';
-import { countTicks, MAX_REPLAY_BYTES } from '../../src/shared/replayCodec';
+import { countTicks, logHero, MAX_REPLAY_BYTES } from '../../src/shared/replayCodec';
+import { isHeroId } from '../../src/data/heroes';
 import { validateMessage, validateName } from '../../src/shared/text';
 import { CLIENT_VERSION, tuningFingerprint } from '../../src/shared/version';
 
@@ -222,7 +223,7 @@ export function checkBody(raw: unknown, now: number):
   }
   for (const k of REQUIRED) if (!(k in o)) return { reason: 'invalid', status: 400 };
   for (const k of ['seed', 'score', 'durationTicks']) if (!Number.isSafeInteger(o[k])) return { reason: 'invalid', status: 400 };
-  if (o.hero !== 'knight' && o.hero !== 'wisp') return { reason: 'invalid', status: 400 };
+  if (!isHeroId(o.hero)) return { reason: 'invalid', status: 400 }; // the shared hero list (src/data/heroes.ts)
   if (o.view !== undefined && !VIEWS.includes(o.view as (typeof VIEWS)[number])) return { reason: 'invalid', status: 400 };
   if (!UUID4.test(o.playerId as string)) return { reason: 'invalid', status: 400 };
   // 2. Hard only; today, or yesterday until 00:15 UTC
@@ -244,6 +245,8 @@ export function checkBody(raw: unknown, now: number):
   // 6. replay decodes, fits and matches the duration (cheap: run lengths only, stops past durationTicks)
   const replay = o.replay as string;
   if (replay.length > Math.ceil((MAX_REPLAY_BYTES * 4) / 3) + 4 || countTicks(replay, d) !== d) return { reason: 'replay', status: 400 };
+  // the hero is in the replay core: the claimed hero must be that hero (a format-1 log has no hero: rejected above)
+  if (logHero(replay) !== o.hero) return { reason: 'invalid', status: 400 };
   // 7. text
   const name = validateName(o.name);
   if (!name.ok) return { reason: name.error === 'words' ? 'words' : 'name', status: 400 };

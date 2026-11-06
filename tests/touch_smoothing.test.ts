@@ -64,7 +64,7 @@ describe('touch smoothing', () => {
 
   it('a smoothed run records the smoothed cursor and its replay verifies with the existing verifier', () => {
     const date = '2026-11-06';
-    const sim = new Sim(dailySeed(date), 'hard');
+    const sim = new Sim(dailySeed(date), 'hard', { hero: 'wisp' });
     const t = new TouchModel({ sensitivity: 1, leftHanded: false, secondFingerParry: true, smoothing: 'high' });
     t.down(1, 240, 135, 0, sim.state.hero);
     for (let k = 0; k < 600 && sim.state.alive; k++) {
@@ -75,8 +75,8 @@ describe('touch smoothing', () => {
       sim.step(f);
     }
     const verdict = verifyItem({
-      id: '1-1', date, seed: dailySeed(date), difficulty: 'hard', durationTicks: sim.log.length, score: sim.score, hero: 'knight',
-      tuningFingerprint: tuningFingerprint(), clientVersion: CLIENT_VERSION, replay: encodeInputLog(sim.log),
+      id: '1-1', date, seed: dailySeed(date), difficulty: 'hard', durationTicks: sim.log.length, score: sim.score, hero: 'wisp',
+      tuningFingerprint: tuningFingerprint(), clientVersion: CLIENT_VERSION, replay: encodeInputLog(sim.log, 'wisp'),
     });
     expect(verdict).toEqual({ status: 'verified' });
   });

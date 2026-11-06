@@ -1,7 +1,8 @@
 /**
  * Replay verification core (pure, no network): re-simulate a submitted run with the SAME deterministic sim and compare
- * EXACTLY. A run is verified only if every input frame is valid, the run lasts exactly durationTicks, the hero died on
- * the last tick, and the final score equals the submitted score.
+ * EXACTLY, with the hero stored in the replay core. A run is verified only if every input frame is valid, the claimed
+ * hero equals the replay's hero, the run lasts exactly durationTicks, the hero died on the last tick, and the final
+ * score equals the submitted score.
  */
 import { decodeInputLog } from '../../src/shared/replayCodec';
 import { CLIENT_VERSION, tuningFingerprint } from '../../src/shared/version';
@@ -31,10 +32,13 @@ export function verifyItem(it: PendingItem): Verdict {
   if (it.difficulty !== 'hard' || typeof it.date !== 'string' || it.seed !== dailySeed(it.date)) return { status: 'rejected', reason: 'invalid_input' };
   const d = it.durationTicks;
   if (!Number.isSafeInteger(d) || d < 1 || d > MAX_TICKS || !Number.isSafeInteger(it.score)) return { status: 'rejected', reason: 'length_mismatch' };
-  const frames = decodeInputLog(it.replay, d + 1, true);
-  if (!frames) return { status: 'rejected', reason: 'invalid_input' };
+  const log = decodeInputLog(it.replay, d + 1, true);
+  // a format-1 log, a missing / unknown hero, or a claimed hero that differs from the replay's hero: invalid
+  if (!log || log.hero !== it.hero) return { status: 'rejected', reason: 'invalid_input' };
+  const frames = log.frames;
   if (frames.length !== d) return { status: 'rejected', reason: 'length_mismatch' };
-  const sim = new Sim(it.seed, 'hard');
+  // the hero ALWAYS comes from the replay core (never from the claimed field)
+  const sim = new Sim(it.seed, 'hard', { hero: log.hero });
   for (let i = 0; i < frames.length; i++) {
     if (!sim.state.alive) return { status: 'rejected', reason: 'length_mismatch' }; // died before the replay ended
     sim.step(frames[i]!);

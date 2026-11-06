@@ -102,15 +102,16 @@ describe('text validation', () => {
 describe('replay codec', () => {
   it('round-trips (RLE + base64) and rejects garbage', () => {
     const frames = mulberryInputs(3, 5000);
-    const b64 = encodeInputLog(frames);
+    const b64 = encodeInputLog(frames, 'wisp');
     const back = decodeInputLog(b64)!;
-    expect(back.length).toBe(frames.length);
-    expect(back).toEqual(frames.map((f) => sanitizeInput(f)));
-    const idle = encodeInputLog(Array.from({ length: 10_000 }, () => ({ cursor: true, mx: 240, my: 135, buttons: 0 })));
-    expect(idle.length).toBeLessThan(16);
+    expect(back.hero).toBe('wisp');
+    expect(back.frames.length).toBe(frames.length);
+    expect(back.frames).toEqual(frames.map((f) => sanitizeInput(f)));
+    const idle = encodeInputLog(Array.from({ length: 10_000 }, () => ({ cursor: true, mx: 240, my: 135, buttons: 0 })), 'knight');
+    expect(idle.length).toBeLessThan(20); // the 3-byte header (format, hero) + one run
     for (const g of ['', '@@@', 'AAAA', btoa('ÿÿÿÿÿÿ'), btoa('\u0001\u0009\u0000\u0000')]) {
       const r = decodeInputLog(g);
-      expect(r === null || Array.isArray(r)).toBe(true);
+      expect(r === null || Array.isArray(r.frames)).toBe(true);
     }
     expect(decodeInputLog(btoa('\u0001\u0009\u0000\u0000'))).toBeNull(); // flags > 7
     expect(decodeInputLog('A'.repeat(400_000))).toBeNull(); // too big

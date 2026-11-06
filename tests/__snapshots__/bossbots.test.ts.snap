@@ -1,6 +1,15 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`golden replays > easy: golden bot run 1`] = `
+exports[`golden replays > easy knight: golden bot run 1`] = `
+{
+  "alive": true,
+  "bosses": 1,
+  "score": 3077,
+  "tick": 7200,
+}
+`;
+
+exports[`golden replays > easy wisp: golden bot run 1`] = `
 {
   "alive": true,
   "bosses": 1,
@@ -9,7 +18,16 @@ exports[`golden replays > easy: golden bot run 1`] = `
 }
 `;
 
-exports[`golden replays > hard: golden bot run 1`] = `
+exports[`golden replays > hard knight: golden bot run 1`] = `
+{
+  "alive": true,
+  "bosses": 1,
+  "score": 5390,
+  "tick": 7200,
+}
+`;
+
+exports[`golden replays > hard wisp: golden bot run 1`] = `
 {
   "alive": false,
   "bosses": 0,
@@ -18,11 +36,20 @@ exports[`golden replays > hard: golden bot run 1`] = `
 }
 `;
 
-exports[`golden replays > medium: golden bot run 1`] = `
+exports[`golden replays > medium knight: golden bot run 1`] = `
 {
   "alive": true,
   "bosses": 1,
-  "score": 4521,
+  "score": 4007,
+  "tick": 7200,
+}
+`;
+
+exports[`golden replays > medium wisp: golden bot run 1`] = `
+{
+  "alive": true,
+  "bosses": 1,
+  "score": 4411,
   "tick": 7200,
 }
 `;

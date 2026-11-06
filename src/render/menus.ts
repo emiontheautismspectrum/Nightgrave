@@ -8,6 +8,7 @@ import { COPYRIGHT_YEAR, legalLinks, owner } from '../legal';
 import { utcDateKey } from '../daily';
 import { clampSensitivity, persist, save, todaysBest, type BestEntry, type Difficulty } from '../storage';
 import { audio } from './audio';
+import { HERO_IDS, HEROES, type HeroId } from '../data/heroes';
 import { ATLAS, frame } from './assets';
 import { BEST_HEADER, fmtBestRow, fmtEntry } from './bestFormat';
 import { C, FONT, type MenuPage, type MenuView } from './ui';
@@ -173,17 +174,18 @@ export function creditsPage(back: () => void): MenuPage {
   };
 }
 
-const HERO_LINES = { knight: ['SHIELD FLASH', 'CLOAK DASH'], wisp: ['FLARE PULSE', 'FLAME STREAK'] };
-const HERO_X = { knight: 160, wisp: 320 };
+const HERO_LINES = (h: HeroId): readonly string[] => HEROES[h].lines;
+/** Desktop: heroes side by side, evenly spread over the 480 px screen. */
+const heroX = (h: HeroId): number => Math.round((480 * (HERO_IDS.indexOf(h) + 1)) / (HERO_IDS.length + 1));
 
-/** Each hero: sprite, name (the focusable item: "> <" + highlight when focused), one short line, a SELECTED tag. */
+/** Each hero: sprite, name (the focusable item: "> <" + highlight when focused), two stat lines (HeroDef), a SELECTED tag. */
 export function heroPage(back: () => void, onPick: () => void): MenuPage {
   return {
     title: 'HERO',
     onBack: back,
-    items: (['knight', 'wisp'] as const).map((h) => ({
-      label: () => h.toUpperCase(),
-      x: HERO_X[h],
+    items: HERO_IDS.map((h) => ({
+      label: () => HEROES[h].name,
+      x: heroX(h),
       y: 132,
       onActivate: () => {
         save().hero = h;
@@ -191,31 +193,31 @@ export function heroPage(back: () => void, onPick: () => void): MenuPage {
         onPick();
       },
     })),
-    lines: () => ['COSMETIC ONLY - SAME STATS'],
+    lines: () => ['THE SHIELD FACES WHERE YOU MOVE'],
     linesTop: 186,
     gap: 44, // phones: room for the name and the ability line in one row
     decorate: (scene: Phaser.Scene, rowY: (i: number) => number, touch: boolean) => {
       const out: Phaser.GameObjects.GameObject[] = [];
       if (touch) {
-        // phones: one row per hero: the sprite on the left, the name (the row), its abilities under it, SELECTED right
+        // phones: one row per hero: the sprite on the left, the name (the row), its two stat lines under it, SELECTED right
         const W = scene.scale.width;
-        (['knight', 'wisp'] as const).forEach((h, i) => {
+        HERO_IDS.forEach((h, i) => {
           const y = rowY(i);
           // the sprite (y-22..y+10) sits above the ability line (y+11..y+19): the line can stay centred on any width
           const sp = scene.add.sprite(24, Math.round(y - 6), ATLAS, frame(`${h}_idle`)).setScale(2);
           if (scene.anims.exists(`${h}_idle`)) sp.play(`${h}_idle`);
           out.push(sp);
-          out.push(snap(addText(scene, W / 2, Math.round(y + 15), HERO_LINES[h].join(' - '), { color: C.dim }).setOrigin(0.5)));
+          HERO_LINES(h).forEach((l, k) => out.push(snap(addText(scene, W / 2, Math.round(y + 12 + k * 9), l, { color: C.dim }).setOrigin(0.5))));
           if (save().hero === h) out.push(snap(addText(scene, Math.round(W * 0.86), Math.round(y - 4), 'SELECTED', { color: C.gold }).setOrigin(0.5)));
         });
         return out;
       }
-      (['knight', 'wisp'] as const).forEach((h) => {
-        const x = HERO_X[h];
+      HERO_IDS.forEach((h) => {
+        const x = heroX(h);
         const sp = scene.add.sprite(x, 98, ATLAS, frame(`${h}_idle`)).setScale(3).setDepth(1001);
         if (scene.anims.exists(`${h}_idle`)) sp.play(`${h}_idle`);
         out.push(sp);
-        HERO_LINES[h].forEach((l, k) => out.push(snap(addText(scene, x, 146 + k * 10, l, { color: C.dim }).setOrigin(0.5).setDepth(1001))));
+        HERO_LINES(h).forEach((l, k) => out.push(snap(addText(scene, x, 146 + k * 10, l, { color: C.dim }).setOrigin(0.5).setDepth(1001))));
         if (save().hero === h) out.push(snap(addText(scene, x, 170, 'SELECTED', { color: C.gold }).setOrigin(0.5).setDepth(1001)));
       });
       return out;

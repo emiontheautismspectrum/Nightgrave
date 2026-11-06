@@ -110,7 +110,7 @@ describe('segments and defeat', () => {
 
   it('the last attack must still be survived: a lingering final projectile delays the defeat', () => {
     const p = makeParams('easy');
-    const s = createState(5, 'easy', p);
+    const s = createState(5, 'easy', p.hero, p);
     const opts = { startWave: EYE_WAVE };
     while (!s.boss) step(s, idle, p, opts);
     const b = s.boss!;
@@ -136,7 +136,7 @@ describe('segments and defeat', () => {
 
   it('+1000 is not affected by the multiplier or Double Score', () => {
     const p = makeParams('easy');
-    const s = createState(8, 'easy', p);
+    const s = createState(8, 'easy', p.hero, p);
     const opts = { startWave: EYE_WAVE };
     while (!s.boss) step(s, idle, p, opts);
     s.boss!.remaining = 0; // empty bar, nothing in flight
@@ -156,7 +156,7 @@ describe('segments and defeat', () => {
 describe('ember charge', () => {
   it('stacks per boss kill and caps', () => {
     const p = makeParams('medium');
-    const s = createState(1, 'medium', p);
+    const s = createState(1, 'medium', p.hero, p);
     const base = parryActiveTicks(s, p);
     const capTicks = Math.max(1, Math.round((TUNING.parry.activeSeconds + TUNING.emberCharge.capSeconds) * 60));
     const seen: number[] = [];
@@ -182,7 +182,7 @@ describe('reflect bonus', () => {
   function parryBossShot(bonus: number): SimState {
     const base = makeParams('easy');
     const p: SimParams = { ...base, bosses: { ...base.bosses, reflectBonusSegments: bonus } };
-    const s = createState(4, 'easy', p);
+    const s = createState(4, 'easy', p.hero, p);
     const opts = { startWave: EYE_WAVE };
     while (!s.boss) step(s, idle, p, opts);
     s.boss!.serial = 1;
@@ -235,7 +235,7 @@ describe('review fixes', () => {
   it('reflect bonus applies once per pulse, not once per destroyed orb', () => {
     const base = makeParams('easy');
     const p: SimParams = { ...base, bosses: { ...base.bosses, reflectBonusSegments: 1 } };
-    const s = createState(4, 'easy', p);
+    const s = createState(4, 'easy', p.hero, p);
     const opts = { startWave: EYE_WAVE };
     while (!s.boss) step(s, idle, p, opts);
     s.boss!.serial = 1;
@@ -251,8 +251,8 @@ describe('review fixes', () => {
 describe('pickups', () => {
   it('Slow Time slows projectiles only (hero, beams and timers keep their pace)', () => {
     const p = makeParams('medium');
-    const a = createState(1, 'medium', p);
-    const b = createState(1, 'medium', p);
+    const a = createState(1, 'medium', p.hero, p);
+    const b = createState(1, 'medium', p.hero, p);
     b.slowUntil = 1_000_000;
     for (const s of [a, b]) {
       spawnProjectile(s, p, 'orb_small', 100, 100, 1, 0);
@@ -312,7 +312,7 @@ describe('pickups', () => {
 
   it('taking the same pickup twice refreshes the timer instead of stacking', () => {
     const p = makeParams('medium');
-    const s = createState(1, 'medium', p);
+    const s = createState(1, 'medium', p.hero, p);
     s.tick = 100;
     s.pickupAt = 1e9;
     s.pickup = { id: 1, kind: 'slow', x: s.hero.x, y: s.hero.y, born: 100, expires: 800 };
@@ -329,8 +329,8 @@ describe('pickups', () => {
 
   it('Double Score doubles survival and parry points while active', () => {
     const p = makeParams('easy');
-    const a = createState(1, 'easy', p);
-    const b = createState(1, 'easy', p);
+    const a = createState(1, 'easy', p.hero, p);
+    const b = createState(1, 'easy', p.hero, p);
     b.doubleUntil = 1_000_000;
     for (let i = 0; i < 600; i++) {
       step(a, idle, p, { spawner: false });
@@ -388,9 +388,9 @@ describe('determinism with bosses and pickups', () => {
         const b = run();
         expect(JSON.stringify(b.state)).toBe(JSON.stringify(a.state));
         // a bot run through the first real boss (no test options) replays exactly
-        const live = new Sim(seed, d);
+        const live = new Sim(seed, d, { hero: 'knight' });
         while (live.state.alive && live.state.tick < 60 * 110) live.step(botInput(live));
-        const replayed = playReplay(JSON.parse(JSON.stringify(encodeReplay(seed, d, live.log))));
+        const replayed = playReplay(JSON.parse(JSON.stringify(encodeReplay(seed, d, 'knight', live.log))));
         expect(replayed.score).toBe(live.score);
         expect(replayed.state.bossesDefeated).toBe(live.state.bossesDefeated);
       }

@@ -1,8 +1,18 @@
 import { TICK_RATE, TUNING, type Difficulty } from '../data/tuning';
+import { HERO_RULES, heroDef, type AnyHeroId } from '../data/heroes';
+import { dcos, dsin, PI } from './dmath';
 
 /** Tuning converted to tick units for one run. Derived purely from TUNING + difficulty. */
+/** A hero ability in tick units (see HeroAbility in src/data/heroes.ts). */
+export type AbilityParams =
+  | { kind: 'none' }
+  | { kind: 'guard'; charges: number; invulnTicks: number }
+  | { kind: 'trail'; ticks: number; halfWidth: number; killPoints: number; maxKills: number };
+
 export interface SimParams {
   difficulty: Difficulty;
+  /** The hero these rules are for (baked in: the hero is part of the run definition). */
+  hero: AnyHeroId;
   cx: number;
   cy: number;
   x0: number;
@@ -15,6 +25,14 @@ export interface SimParams {
   heroSpeed: number; // px per tick
   heroRadius: number;
   parryRadius: number;
+  /** Parry arc: full circle, or half-angle as cos / sin (computed with dmath: deterministic on every engine). */
+  parryFull: boolean;
+  parryHalfCos: number;
+  parryHalfSin: number;
+  /** A projectile centre closer than this is always inside the zone (no blind spot). */
+  parryOverlap: number;
+  aimDeadzone: number;
+  ability: AbilityParams;
   parryActive: number; // ticks
   parryCooldown: number; // ticks, measured from activation, after a parry that hit
   parryWhiffCooldown: number; // ticks, measured from activation, after a parry that hit nothing
@@ -89,20 +107,38 @@ export const ticks = (seconds: number): number => Math.max(1, Math.round(seconds
 const hundredths = (v: number): number => Math.round(v * 100);
 
 /** Parry window per ember charge: active + min(cap, n * step) seconds, until the cap is reached. */
-function emberTable(): number[] {
+function emberTable(active: number): number[] {
   const { stepSeconds, capSeconds } = TUNING.emberCharge;
-  const out = [ticks(TUNING.parry.activeSeconds)];
-  for (let n = 1; stepSeconds > 0 && n * stepSeconds <= capSeconds + 1e-9 && n < 64; n++)
-    out.push(ticks(TUNING.parry.activeSeconds + n * stepSeconds));
+  const out = [ticks(active)];
+  for (let n = 1; stepSeconds > 0 && n * stepSeconds <= capSeconds + 1e-9 && n < 64; n++) out.push(ticks(active + n * stepSeconds));
   return out;
 }
 
-export function makeParams(difficulty: Difficulty): SimParams {
+/**
+ * The rules of one run: TUNING + difficulty + HERO. `hero` defaults to the test-only 'classic' (the pre-heroes rules)
+ * so the old tests keep their numbers; the game, the verifier, the Worker and the bots always pass it explicitly.
+ */
+export function makeParams(difficulty: Difficulty, hero: AnyHeroId = 'classic'): SimParams {
   const T = TUNING;
   const d = T.difficulty[difficulty];
+  const H = heroDef(hero);
   const dashTicks = ticks(T.dash.durationSeconds);
+  const active = H.parry.activeSeconds ?? T.parry.activeSeconds;
+  const half = (Math.min(360, Math.max(0, H.parry.arcDegrees)) / 360) * PI;
+  const A = H.ability;
+  const ability: AbilityParams =
+    A.kind === 'guard' ? { kind: 'guard', charges: A.charges, invulnTicks: ticks(A.invulnSeconds) }
+    : A.kind === 'trail' ? { kind: 'trail', ticks: ticks(A.seconds), halfWidth: A.halfWidth, killPoints: A.killPoints, maxKills: A.maxKills }
+    : { kind: 'none' };
   return {
     difficulty,
+    hero,
+    parryFull: H.parry.arcDegrees >= 360,
+    parryHalfCos: dcos(half),
+    parryHalfSin: dsin(half),
+    parryOverlap: HERO_RULES.overlapPx,
+    aimDeadzone: HERO_RULES.aimDeadzonePx,
+    ability,
     cx: T.arena.centerX,
     cy: T.arena.centerY,
     x0: T.arena.x0,
@@ -114,15 +150,15 @@ export function makeParams(difficulty: Difficulty): SimParams {
     despawnMargin: T.arena.despawnMargin,
     heroSpeed: T.hero.speed / TICK_RATE,
     heroRadius: T.hero.radius,
-    parryRadius: T.parry.radius,
-    parryActive: ticks(T.parry.activeSeconds),
+    parryRadius: H.parry.radius,
+    parryActive: ticks(active),
     parryCooldown: ticks(T.parry.cooldownSeconds),
     parryWhiffCooldown: ticks(T.parry.whiffCooldownSeconds),
     parryBuffer: ticks(T.parry.bufferSeconds),
-    parryMaxKills: T.parry.maxKillsPerPulse,
+    parryMaxKills: H.parry.maxKillsPerPulse ?? T.parry.maxKillsPerPulse,
     parryCrackCooldown: ticks(T.newThreats.armored.crackCooldownSeconds),
     parryCloseFrac: T.parry.closeFraction,
-    dashSpeed: T.dash.distance / dashTicks,
+    dashSpeed: H.dashDistance / dashTicks,
     dashTicks,
     dashInvuln: ticks(T.dash.invulnSeconds),
     dashCooldown: ticks(T.dash.cooldownSeconds),
@@ -179,6 +215,6 @@ export function makeParams(difficulty: Difficulty): SimParams {
     bosses: T.bosses,
     newThreats: T.newThreats,
     pickups: T.pickups,
-    parryActiveByCharge: emberTable(),
+    parryActiveByCharge: emberTable(active),
   };
 }

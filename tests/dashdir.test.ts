@@ -9,7 +9,7 @@ describe('dash direction indicator', () => {
     let x = 12345;
     const rnd = () => ((x = (Math.imul(x, 1664525) + 1013904223) >>> 0) / 4294967296);
     for (let i = 0; i < 2000; i++) {
-      const s = createState(i, 'medium', p);
+      const s = createState(i, 'medium', p.hero, p);
       s.hero.x = 60 + rnd() * 360;
       s.hero.y = 40 + rnd() * 190;
       const a = rnd() * Math.PI * 2;

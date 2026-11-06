@@ -1,4 +1,5 @@
 import type { Difficulty } from '../data/tuning';
+import type { AnyHeroId } from '../data/heroes';
 
 /** Sentinel start tick meaning "never happened" (JSON-safe, unlike -Infinity). */
 export const NEVER = -1_000_000_000;
@@ -180,6 +181,25 @@ export interface Hero {
   dashBufferedUntil: number;
   dashDirX: number;
   dashDirY: number;
+  /**
+   * FACING (unit vector): toward the cursor when it is farther than aimDeadzone, else unchanged; with axis input the
+   * movement direction while the axis is non-zero. A dash never changes it. The Knight's parry arc is centred on it.
+   */
+  aimX: number;
+  aimY: number;
+  /** Knight guard charges (0..max); reset only by a guard break (or the end of the run). */
+  guardCharges: number;
+  /** Guard break invulnerability lasts until this tick (exclusive); -1 = none. */
+  guardInvulnUntil: number;
+}
+
+/** One straight piece of the Wisp's ember trail, burning until `until` (exclusive). */
+export interface TrailSegment {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  until: number;
 }
 
 export type SimEvent =
@@ -190,6 +210,11 @@ export type SimEvent =
   | { type: 'mult_step'; multiplier: number; perfect: boolean; x: number; y: number }
   /** The multiplier fell back to the start after the reset time without a successful parry. */
   | { type: 'mult_reset' }
+  | { type: 'guard_gain'; charges: number }
+  | { type: 'guard_ready' }
+  | { type: 'guard_break'; id: number; x: number; y: number }
+  | { type: 'trail_start' }
+  | { type: 'trail_kill'; id: number; x: number; y: number; points: number }
   | { type: 'dash_start'; dirX: number; dirY: number }
   | { type: 'parry_whiff'; x: number; y: number }
   | { type: 'spawn'; id: number; kind: ProjectileKind; dist: number; telegraphTicks: number }
@@ -214,6 +239,11 @@ export type SimEvent =
 export interface SimState {
   seed: number;
   difficulty: Difficulty;
+  /** The hero of the run (its rules are baked into SimParams). */
+  heroId: AnyHeroId;
+  /** The Wisp's burning dash trail (empty for other heroes) and the trail kills of the current dash. */
+  trail: TrailSegment[];
+  trailKills: number;
   /** Number of ticks simulated so far. */
   tick: number;
   rng: number;

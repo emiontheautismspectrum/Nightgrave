@@ -1,9 +1,21 @@
 /**
- * Compact binary replay input log: run-length encoding of identical consecutive input frames, then base64.
- * Per run: varint count, one flag byte (bit0 cursor, bits1-2 buttons), zigzag varint mx, zigzag varint my.
- * Pure (no DOM): btoa/atob exist in browsers, Workers and Node.
+ * Compact binary replay input log: a 3-byte header, then run-length encoding of identical consecutive input frames,
+ * then base64. Header (format 2): 0x00, the format byte 2, the hero index in HERO_IDS (the hero is part of the
+ * replay CORE: it changes the rules). Per run: varint count, one flag byte (bit0 cursor, bits1-2 buttons), zigzag
+ * varint mx, zigzag varint my. A format-1 log (no header: it starts with a non-zero run count) or an unknown hero is
+ * rejected (null), never given a default. Pure (no DOM): btoa/atob exist in browsers, Workers and Node.
  */
 import { AXIS_MAX, sanitizeInput, type InputFrame } from '../sim/input';
+import { HERO_IDS, isHeroId, type HeroId } from '../data/heroes';
+
+export const LOG_FORMAT = 2;
+const HEADER = 3;
+
+/** The hero of an encoded log (format 2 header), or null for a format-1 / malformed / unknown-hero log. */
+function headerHero(bin: string): HeroId | null {
+  if (bin.length < HEADER || bin.charCodeAt(0) !== 0 || bin.charCodeAt(1) !== LOG_FORMAT) return null;
+  return HERO_IDS[bin.charCodeAt(2)] ?? null;
+}
 
 export const MAX_REPLAY_BYTES = 256 * 1024;
 
@@ -18,8 +30,9 @@ function pushVar(out: number[], v: number): void {
 const zig = (v: number): number => ((v << 1) ^ (v >> 31)) >>> 0;
 const unzig = (v: number): number => (v >>> 1) ^ -(v & 1);
 
-export function encodeInputLog(frames: readonly InputFrame[]): string {
-  const out: number[] = [];
+export function encodeInputLog(frames: readonly InputFrame[], hero: HeroId): string {
+  if (!isHeroId(hero)) throw new Error('replay: unknown hero');
+  const out: number[] = [0, LOG_FORMAT, HERO_IDS.indexOf(hero)];
   let i = 0;
   while (i < frames.length) {
     const f = sanitizeInput(frames[i]);
@@ -40,8 +53,8 @@ export function encodeInputLog(frames: readonly InputFrame[]): string {
   return btoa(bin);
 }
 
-/** Decode an untrusted base64 log. Returns null on any malformed input (never throws). */
-export function decodeInputLog(b64: string, maxTicks = 60 * 60 * 120, strict = false): InputFrame[] | null {
+/** Decode an untrusted base64 log (hero + frames). Returns null on any malformed input (never throws). */
+export function decodeInputLog(b64: string, maxTicks = 60 * 60 * 120, strict = false): { hero: HeroId; frames: InputFrame[] } | null {
   let bin: string;
   try {
     if (typeof b64 !== 'string' || b64.length > Math.ceil((MAX_REPLAY_BYTES * 4) / 3) + 4) return null;
@@ -50,7 +63,9 @@ export function decodeInputLog(b64: string, maxTicks = 60 * 60 * 120, strict = f
     return null;
   }
   if (bin.length > MAX_REPLAY_BYTES) return null;
-  let p = 0;
+  const hero = headerHero(bin);
+  if (!hero) return null;
+  let p = HEADER;
   const readVar = (): number | null => {
     let v = 0;
     for (let s = 0; s < 35; s += 7) {
@@ -78,7 +93,7 @@ export function decodeInputLog(b64: string, maxTicks = 60 * 60 * 120, strict = f
     const f = sanitizeInput({ cursor, mx: x, my: y, buttons: flags >> 1 });
     for (let k = 0; k < n; k++) frames.push({ ...f });
   }
-  return frames;
+  return { hero, frames };
 }
 
 /**
@@ -93,7 +108,8 @@ export function countTicks(b64: string, maxTicks = 60 * 60 * 120): number | null
   } catch {
     return null;
   }
-  let p = 0;
+  if (!headerHero(bin)) return null; // a format-1 log or an unknown hero
+  let p = HEADER;
   const readVar = (): number | null => {
     let v = 0;
     for (let s = 0; s < 35; s += 7) {
@@ -114,4 +130,14 @@ export function countTicks(b64: string, maxTicks = 60 * 60 * 120): number | null
     if (readVar() === null || readVar() === null) return null;
   }
   return total;
+}
+
+/** The hero stored in an encoded log's core, or null (format 1, malformed, unknown hero). Cheap: reads the header. */
+export function logHero(b64: string): HeroId | null {
+  try {
+    if (typeof b64 !== 'string' || b64.length > Math.ceil((MAX_REPLAY_BYTES * 4) / 3) + 4) return null;
+    return headerHero(atob(b64.slice(0, 8)));
+  } catch {
+    return null;
+  }
 }

@@ -2,8 +2,10 @@
  * Multiplier report: per difficulty and bot (skilled, heuristic parry bot, dodge-only), over N seeds:
  * parries per run, the share of successful pulses that stepped the multiplier, the mean of each run's highest
  * multiplier and the overall highest, mean final score and mean survival. Also prints a hash of every run's survival
- * ticks (scoring changes must leave survival identical). Run: npx vite-node tools/bot/multiplier_report.ts [seeds]
+ * ticks (scoring changes must leave survival identical).
+ * Run: npx vite-node tools/bot/multiplier_report.ts [seeds] [hero: classic | knight | wisp, default classic]
  */
+import type { AnyHeroId } from '../../src/data/heroes';
 import type { Difficulty } from '../../src/data/tuning';
 import type { InputFrame } from '../../src/sim/input';
 import { maxPossibleScore } from '../../src/shared/maxScore';
@@ -12,6 +14,7 @@ import { botInput } from '../../tests/bot';
 import { SkilledBot } from '../../tests/skilled';
 
 const N = Number(process.argv[2] ?? 50);
+const HERO = (process.argv[3] ?? 'classic') as AnyHeroId;
 const CAP = { easy: 60 * 900, medium: 60 * 540, hard: 60 * 270 } as Record<Difficulty, number>;
 type Bot = { name: string; make: (seed: number) => (sim: Sim) => InputFrame };
 const BOTS: Bot[] = [
@@ -25,7 +28,7 @@ for (const d of ['easy', 'medium', 'hard'] as Difficulty[]) {
   for (const bot of BOTS) {
     let parries = 0, pulses = 0, steps = 0, perfect = 0, maxSum = 0, maxAll = 0, score = 0, surv = 0, ratio = 0;
     for (let seed = 1; seed <= N; seed++) {
-      const sim = new Sim(seed * 7919, d);
+      const sim = new Sim(seed * 7919, d, { hero: HERO });
       const input = bot.make(seed);
       let runMax = sim.state.multiplier;
       while (sim.state.alive && sim.state.tick < CAP[d]) {

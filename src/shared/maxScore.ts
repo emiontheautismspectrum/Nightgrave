@@ -3,8 +3,10 @@
  * densest difficulty, every cap at its maximum). Used by the server's plausibility check. It assumes the impossible
  * best case everywhere: Double Score always on, every parry pulse at the max multiplier with the shortest cooldown,
  * the maximum number of kills per pulse bounded by the number of projectiles that can exist, every pickup taken,
- * every boss killed as early as the schedule allows.
+ * every boss killed as early as the schedule allows. It bounds EVERY hero: the most kills per pulse of any hero, plus
+ * the Wisp-style trail term (every dash burns the most trail kills at the max multiplier).
  */
+import { HEROES, HERO_IDS } from '../data/heroes';
 import { TICK_RATE, TUNING } from '../data/tuning';
 
 const t = (s: number): number => Math.max(1, Math.round(s * TICK_RATE));
@@ -48,7 +50,8 @@ export function maxPossibleScore(durationTicks: number): number {
   // parry: one successful pulse per (shortest) cooldown; kills bounded by projectiles that could have spawned
   const pulses = Math.ceil(n / t(T.parry.cooldownSeconds));
   // kills are bounded by the projectiles that could exist AND by maxKillsPerPulse per successful pulse
-  const kills = Math.min(Math.ceil((n / TICK_RATE) * maxSpawnsPerSecond() * (1 + T.newThreats.split.children)), pulses * T.parry.maxKillsPerPulse);
+  const maxKills = Math.max(T.parry.maxKillsPerPulse, ...HERO_IDS.map((id) => HEROES[id].parry.maxKillsPerPulse ?? T.parry.maxKillsPerPulse));
+  const kills = Math.min(Math.ceil((n / TICK_RATE) * maxSpawnsPerSecond() * (1 + T.newThreats.split.children)), pulses * maxKills);
   const firsts = Math.min(pulses, kills);
   const extras = Math.max(0, kills - firsts);
   const parry = (firsts * T.score.parryBase + extras * T.score.extraKillPoints) * T.multiplier.cap * dbl;
@@ -58,7 +61,14 @@ export function maxPossibleScore(durationTicks: number): number {
   // bosses: every boss that could possibly be defeated in that time
   let bosses = 0;
   while (earliestBossDefeat(bosses + 1) <= n) bosses++;
-  return survival + Math.ceil(parry) + pickups + bosses * B_KILL();
+  // trail (any hero with a trail ability): the most trail kills on every dash, at the max multiplier, doubled
+  const dashes = n > 0 ? Math.floor(n / t(T.dash.cooldownSeconds)) + 1 : 0;
+  let trail = 0;
+  for (const id of HERO_IDS) {
+    const a = HEROES[id].ability;
+    if (a.kind === 'trail') trail = Math.max(trail, a.maxKills * a.killPoints * T.multiplier.cap * dbl * dashes);
+  }
+  return survival + Math.ceil(parry) + Math.ceil(trail) + pickups + bosses * B_KILL();
 }
 
 const B_KILL = (): number => TUNING.bosses.killScore;

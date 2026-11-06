@@ -5,16 +5,17 @@
  * Pure TypeScript, no Phaser and no sim imports (render-side helper).
  */
 import { TOUCH_INPUT, type TouchSmoothing } from './data/input';
+import { HERO_IDS, isHeroId, type HeroId } from './data/heroes';
 export const STORAGE_KEY = 'nightgrave.v1';
 export const BEST_PER_DIFFICULTY = 5;
 export const DAILY_DAYS = 7;
 const MAX_RAW_CHARS = 64 * 1024;
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
-export type Hero = 'knight' | 'wisp';
+export type Hero = HeroId;
 export type Effects = 'high' | 'low';
 export const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard'];
-export const HEROES: readonly Hero[] = ['knight', 'wisp'];
+export const HEROES: readonly Hero[] = HERO_IDS; // the hero list lives in src/data/heroes.ts
 
 export interface Settings {
   master: number; // 0..100, steps of 10
@@ -116,7 +117,7 @@ export function validEntry(v: unknown): BestEntry | null {
   if (typeof score !== 'number' || !Number.isInteger(score) || score < 0 || score > 1e9) return null;
   if (typeof secs !== 'number' || !Number.isFinite(secs) || secs < 0 || secs > 1e6) return null;
   if (typeof date !== 'string' || date.length !== 10 || !DATE_RE.test(date)) return null;
-  if (hero !== 'knight' && hero !== 'wisp') return null;
+  if (!isHeroId(hero)) return null;
   return { score, hero, date, secs: Math.round(secs * 10) / 10 };
 }
 

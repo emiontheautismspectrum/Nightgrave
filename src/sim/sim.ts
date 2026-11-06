@@ -5,6 +5,8 @@ import { makeParams, ticks, type SimParams } from './params';
 import { isDouble, isSlow, runPickups } from './pickups';
 import { toSeed } from './rng';
 import { NEVER, type Hero, type Projectile, type SimState } from './state';
+import { inParryZone, segDist2 } from './parryZone';
+import type { AnyHeroId } from '../data/heroes';
 import { isFading, moveProjectile, runDirector, sigilHits, splitBurst, type DirectorOptions } from './waves';
 
 export { spawnProjectile } from './waves';
@@ -12,13 +14,21 @@ export { spawnProjectile } from './waves';
 export interface SimOptions extends DirectorOptions {
   /** Disable the wave director (tests place projectiles by hand). Default true. */
   spawner?: boolean;
+  /**
+   * The hero of the run (part of the run definition: it changes the rules). Default: the test-only 'classic' hero
+   * (the pre-heroes rules) so the old tests keep their numbers; the game, the verifier and the bots always pass it.
+   */
+  hero?: AnyHeroId;
 }
 
-export function createState(seed: number, difficulty: Difficulty, p: SimParams = makeParams(difficulty)): SimState {
+export function createState(seed: number, difficulty: Difficulty, hero: AnyHeroId = 'classic', p: SimParams = makeParams(difficulty, hero)): SimState {
   const s = toSeed(seed);
   return {
     seed: s,
     difficulty,
+    heroId: hero,
+    trail: [],
+    trailKills: 0,
     tick: 0,
     rng: s,
     hero: {
@@ -37,6 +47,11 @@ export function createState(seed: number, difficulty: Difficulty, p: SimParams =
       dashBufferedUntil: -1,
       dashDirX: 1,
       dashDirY: 0,
+      // the hero spawns at the arena centre: the initial aim is to the right (the sprite faces right)
+      aimX: 1,
+      aimY: 0,
+      guardCharges: 0,
+      guardInvulnUntil: -1,
     },
     projectiles: [],
     nextId: 1,
@@ -79,7 +94,14 @@ export const parryActiveTicks = (s: SimState, p: SimParams): number =>
   p.parryActiveByCharge[Math.min(s.emberCharges, p.parryActiveByCharge.length - 1)] ?? p.parryActive;
 export const isParryActive = (s: SimState, p: SimParams): boolean => s.tick - s.hero.parryStart < parryActiveTicks(s, p);
 export const isDashing = (s: SimState, p: SimParams): boolean => s.tick - s.hero.dashStart < p.dashTicks;
-export const isInvulnerable = (s: SimState, p: SimParams): boolean => s.tick - s.hero.dashStart < p.dashInvuln;
+/** ONE invulnerability test (the sim and the renderer): the dash i-frames or the Knight's guard break. */
+/**
+ * THE i-frame rule (sim and renderer): dash i-frames protect from everything; the Knight's guard i-frames (after a
+ * guard break) only from PARRYABLE hits: unparryables (blades, sigils, beams) still kill. `unparryable`: ask for an
+ * unparryable threat.
+ */
+export const isInvulnerable = (s: SimState, p: SimParams, unparryable = false): boolean =>
+  s.tick - s.hero.dashStart < p.dashInvuln || (!unparryable && s.tick < s.hero.guardInvulnUntil);
 /** Cooldown of the current/last parry: short after a hit, long after a whiff. */
 export const parryCooldownOf = (s: SimState, p: SimParams): number =>
   !s.hero.parryHit ? p.parryWhiffCooldown : s.hero.parryScored ? p.parryCooldown : p.parryCrackCooldown;
@@ -181,9 +203,15 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
     h.dashBufferedUntil = -1;
     [h.dashDirX, h.dashDirY] = dashDirection(h, input, p);
     s.events.push({ type: 'dash_start', dirX: h.dashDirX, dirY: h.dashDirY });
+    if (p.ability.kind === 'trail') {
+      s.trailKills = 0;
+      s.events.push({ type: 'trail_start' });
+    }
   }
 
   // 4. hero movement
+  const px0 = h.x;
+  const py0 = h.y;
   let mx: number;
   let my: number;
   if (isDashing(s, p)) {
@@ -200,6 +228,10 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   [h.x, h.y] = clampToArena(h.x + mx, h.y + my, p);
   if (mx > 0.01) h.facing = 1;
   else if (mx < -0.01) h.facing = -1;
+  updateAim(h, input, ix, iy, want, p);
+  // the Wisp's dash lays a burning line along its path
+  if (p.ability.kind === 'trail' && isDashing(s, p) && (h.x !== px0 || h.y !== py0))
+    s.trail.push({ x0: px0, y0: py0, x1: h.x, y1: h.y, until: t + p.ability.ticks });
 
   // 5. spawn + move projectiles
   if (opts.spawner !== false) {
@@ -220,13 +252,12 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
     // steps the multiplier once, after its first kill has scored; a PERFECT parry (a destroyed projectile whose EDGE is
     // within parryRadius * parryCloseFrac of the hero) steps it once more (at most once per pulse). Every destroyed
     // projectile, perfect or not, refreshes the reset timer; a whiff or a crack alone neither steps nor refreshes.
+    // the hero's parry zone (radius + arc around the aim): THE shared zone function (src/sim/parryZone.ts)
     const cand: { pr: Projectile; d2: number }[] = [];
     for (const pr of s.projectiles) {
-      const dx = pr.x - h.x;
-      const dy = pr.y - h.y;
-      const r = p.parryRadius + pr.radius;
-      const d2 = dx * dx + dy * dy;
-      if (pr.parryable && !isFading(s, pr) && pr.crackedBy !== h.parryStart && d2 <= r * r) cand.push({ pr, d2 });
+      if (!pr.parryable || isFading(s, pr) || pr.crackedBy === h.parryStart) continue;
+      const d2 = inParryZone(h.x, h.y, h.aimX, h.aimY, pr.x, pr.y, pr.radius, p);
+      if (d2 >= 0) cand.push({ pr, d2 });
     }
     cand.sort((a, b) => a.d2 - b.d2 || a.pr.id - b.pr.id);
     const hit = new Set<number>();
@@ -263,7 +294,15 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       }
       const after = Math.min(p.multCap, s.multiplier + step);
       s.events.push({ type: 'parry_hit', id: pr.id, x: pr.x, y: pr.y, points: points / 100, multiplier: s.multiplier / 100, perfect, multAfter: after / 100 });
-      if (first) s.parryCount++;
+      if (first) {
+        s.parryCount++;
+        // Knight guard: every successful pulse adds a charge (the same definition as the multiplier step)
+        if (p.ability.kind === 'guard' && h.guardCharges < p.ability.charges) {
+          h.guardCharges++;
+          s.events.push({ type: 'guard_gain', charges: h.guardCharges });
+          if (h.guardCharges === p.ability.charges) s.events.push({ type: 'guard_ready' });
+        }
+      }
       if (step > 0) {
         s.multiplier = after;
         s.events.push({ type: 'mult_step', multiplier: after / 100, perfect, x: h.x, y: h.y });
@@ -278,8 +317,12 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
     if (t - h.parryStart === parryActiveTicks(s, p) - 1 && !h.parryHit) s.events.push({ type: 'parry_whiff', x: h.x, y: h.y });
   }
 
-  // 7. hits: one hit = death (fading projectiles are harmless)
-  if (!isInvulnerable(s, p)) {
+  // 6b. the Wisp's trail: parryable, non-armored projectiles touching it burn (after the pulse: never a double kill)
+  if (s.trail.length) runTrail(s, p);
+
+  // 7. hits: one hit = death (fading projectiles are harmless); a FULL Knight guard absorbs one parryable hit
+  if (p.ability.kind === 'guard' && !isInvulnerable(s, p, true)) guardHits(s, p);
+  else if (!isInvulnerable(s, p)) {
     for (const pr of s.projectiles) {
       if (isFading(s, pr) || t < pr.safeUntil) continue;
       const dx = pr.x - h.x;
@@ -320,6 +363,87 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   s.tick++;
 }
 
+/**
+ * FACING: with cursor input the aim points to the (arena-clamped) cursor when it is farther than aimDeadzone, else it
+ * keeps its value; with axis input it is the movement direction while the axis is non-zero. Never a zero / NaN vector.
+ */
+function updateAim(h: Hero, input: InputFrame, ix: number, iy: number, want: number, p: SimParams): void {
+  if (input.cursor) {
+    const [tx, ty] = clampToArena(input.mx, input.my, p);
+    const ax = tx - h.x;
+    const ay = ty - h.y;
+    const d = Math.sqrt(ax * ax + ay * ay);
+    if (d > p.aimDeadzone) {
+      h.aimX = ax / d;
+      h.aimY = ay / d;
+    }
+  } else if (want > 0) {
+    h.aimX = ix;
+    h.aimY = iy;
+  }
+}
+
+/** The Wisp's ember trail: expire old segments, burn parryable non-armored projectiles (no step, no timer, no parry). */
+function runTrail(s: SimState, p: SimParams): void {
+  const A = p.ability;
+  const t = s.tick;
+  s.trail = s.trail.filter((g) => g.until > t);
+  if (A.kind !== 'trail' || !s.trail.length) return;
+  const burnt = new Set<number>();
+  for (const pr of s.projectiles) {
+    if (s.trailKills >= A.maxKills) break;
+    // never a split piece the pulse just burst (nor one still harmless): the pieces fly clear, as with the parry
+    if (!pr.parryable || pr.kind === 'orb_armored' || isFading(s, pr) || pr.crackedBy === s.hero.parryStart || t < pr.safeUntil) continue;
+    const r = pr.radius + A.halfWidth;
+    if (!s.trail.some((g) => segDist2(pr.x, pr.y, g.x0, g.y0, g.x1, g.y1) <= r * r)) continue;
+    burnt.add(pr.id);
+    s.trailKills++;
+    const dbl = isDouble(s) ? p.pickups.doubleScore.factor : 1;
+    const points = A.killPoints * s.multiplier * dbl; // hundredths; the multiplier is used, never stepped
+    s.parryScoreHundredths += points;
+    s.events.push({ type: 'trail_kill', id: pr.id, x: pr.x, y: pr.y, points: points / 100 });
+  }
+  if (burnt.size) s.projectiles = s.projectiles.filter((pr) => !burnt.has(pr.id));
+}
+
+function die(s: SimState, by: number): void {
+  s.alive = false;
+  s.deathTick = s.tick;
+  s.events.push({ type: 'death', x: s.hero.x, y: s.hero.y, by });
+}
+
+/**
+ * Hits for a guard hero. Unparryable threats (projectiles flagged unparryable, blood sigils, boss beams) kill as
+ * always. A lethal PARRYABLE projectile is absorbed by a FULL guard: the charges reset, the projectile is destroyed,
+ * the hero gets guard i-frames, no points. Otherwise it kills.
+ */
+function guardHits(s: SimState, p: SimParams): void {
+  const h = s.hero;
+  const t = s.tick;
+  let parryHit: Projectile | null = null;
+  for (const pr of s.projectiles) {
+    if (isFading(s, pr) || t < pr.safeUntil) continue;
+    const dx = pr.x - h.x;
+    const dy = pr.y - h.y;
+    const r = p.heroRadius + pr.radius;
+    if (dx * dx + dy * dy >= r * r) continue;
+    if (!pr.parryable) return die(s, pr.id);
+    if (!isInvulnerable(s, p)) parryHit ??= pr; // guard i-frames: parryable hits pass harmlessly
+  }
+  if (sigilHits(s, p)) return die(s, -2);
+  if (beamHits(s, p)) return die(s, -1);
+  if (!parryHit) return;
+  if (p.ability.kind === 'guard' && h.guardCharges >= p.ability.charges) {
+    const pr = parryHit;
+    h.guardCharges = 0;
+    h.guardInvulnUntil = t + p.ability.invulnTicks;
+    s.projectiles = s.projectiles.filter((q) => q.id !== pr.id);
+    s.events.push({ type: 'guard_break', id: pr.id, x: pr.x, y: pr.y });
+    return;
+  }
+  die(s, parryHit.id);
+}
+
 /** Convenience wrapper: owns state + params and records the sanitized input log for replays. */
 export class Sim {
   readonly params: SimParams;
@@ -331,8 +455,9 @@ export class Sim {
     readonly difficulty: Difficulty,
     readonly options: SimOptions = {},
   ) {
-    this.params = makeParams(difficulty);
-    this.state = createState(seed, difficulty, this.params);
+    const hero = options.hero ?? 'classic';
+    this.params = makeParams(difficulty, hero);
+    this.state = createState(seed, difficulty, hero, this.params);
   }
 
   step(input: InputFrame): void {

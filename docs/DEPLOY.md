@@ -238,3 +238,14 @@ Order for such an update (for example the multiplier fix, version 0.8.0, which c
    so the Worker never accepts runs its verifier cannot replay.
 4. Enable the workflow again. Players with an old page open get "Game updated: reload the page" when they submit; a
    reload fixes it.
+
+The heroes pass (version 0.9.0) is such an update, and more: the hero is now part of the replay CORE (binary log
+format 2). An old Worker refuses a 0.9.0 submission as `outdated` without writing anything (checked by
+`npm run e2e:old-worker`, which runs the Worker code of `origin/main` locally against an in-memory database), and the
+new Worker / verifier refuse old-format logs. So the steps above are mandatory, in that order: pause the verifier,
+drain the queue with the OLD code, merge, deploy the Worker and Pages together (no new D1 migration), enable the
+verifier. Today's board keeps its already verified entries; both heroes share one daily board.
+
+Preview without Cloudflare (nothing is deployed): `npm install`, then `npm run dev` and open
+`http://localhost:5173/?hero=knight` or `?hero=wisp` (dev-only override, never saved, absent from production
+builds). For the board flow locally: `npx wrangler dev --port 8787 --local` in `server/` and `npm run e2e:board`.
