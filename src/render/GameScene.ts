@@ -1102,8 +1102,8 @@ export class GameScene extends Phaser.Scene {
   /**
    * The Knight's shield arc, ALWAYS visible while the hero is alive in a run (also during dashes; frozen while paused):
    * the nominal sim parry zone (src/render/knightArc.ts), 1 px crisp violet pixels, faint while idle with brighter end
-   * pixels so the width reads; brighter and 2 px thick during the pulse (less bright with reduced flashes). It sits
-   * just under the hero sprite and is redrawn only when the position, the aim or the pulse state changes.
+   * pixels so the width reads; brighter and 2 px thick during the pulse (less bright with reduced flashes). It is drawn
+   * above the props, below the fog, and redrawn only when the position, the aim or the pulse state changes.
    */
   private drawKnightArc(): void {
     const st = this.sim.state;
@@ -1118,9 +1118,10 @@ export class GameScene extends Phaser.Scene {
     Object.assign(k, { x: h.x, y: h.y, ax: h.aimX, ay: h.aimY, pulse, reduced, on });
     const g = this.arcGfx;
     g.clear();
-    publishArc(geom);
-    if (!geom) return;
-    g.setDepth(D_YSORT + h.y + 3.95); // under the hero sprite (4), over its shadow (3.9)
+    if (!geom) return publishArc(null);
+    // above every y-sorted prop (a prop never hides part of the shield), below the fog; the 24 px arc never overlaps
+    // the 16 px hero sprite
+    g.setDepth(D_FOG - 0.5);
     const px = this.arcPx;
     const outer = arcPixels(geom, 0, px);
     const len = pulse ? arcPixels(geom, 1, px, outer) : outer;
@@ -1131,6 +1132,7 @@ export class GameScene extends Phaser.Scene {
       const end = i === 0 || i === outer - 2;
       g.fillStyle(VIOLET, end ? ends : body).fillRect(px[i]!, px[i + 1]!, 1, 1);
     }
+    publishArc(geom, pulse, len / 2, body);
   }
 
   private lastDir = { x: 1, y: 0, at: 0 };
@@ -1309,7 +1311,7 @@ export class GameScene extends Phaser.Scene {
  * Test hook (dev and smoke builds only, never in production): the arc as drawn right now, read-only copy, or null when
  * none is shown (title, menus, death, Wisp). e2e checks compare it with the sim's aim and position.
  */
-function publishArc(g: ArcGeom | null): void {
+function publishArc(g: ArcGeom | null, pulse = false, pixels = 0, alpha = 0): void {
   if (import.meta.env.DEV || import.meta.env.VITE_SMOKE === '1')
-    (window as unknown as { __nightgrave?: { arc: ArcGeom | null } }).__nightgrave = { arc: g ? { ...g } : null };
+    (window as unknown as { __nightgrave?: { arc: object | null } }).__nightgrave = { arc: g ? { ...g, pulse, pixels, alpha } : null };
 }

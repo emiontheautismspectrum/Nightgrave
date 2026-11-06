@@ -25,7 +25,9 @@ export function arcGeom(def: HeroDef, x: number, y: number, aimX: number, aimY: 
 }
 
 /**
- * Integer pixels of a 1 px arc (crisp: whole game pixels, no anti-aliasing), in order from start to end; `inset` draws
+ * Integer pixels of a 1 px arc (crisp: whole game pixels, no anti-aliasing): the pixel CONTAINING each arc point
+ * (floor: a 1x1 rect at (x, y) covers [x, x + 1), so its centre is within 0.71 px of the true arc, no half-pixel bias),
+ * in order from start to end; `inset` draws
  * the same arc that many px further in (the thicker pulse). Appends x, y pairs to `out` from index `len` (reused: no
  * garbage) and skips any pixel already in out[0..len) so a translucent arc never stacks alpha. Returns the new length.
  */
@@ -34,8 +36,8 @@ export function arcPixels(g: ArcGeom, inset: number, out: number[], len = 0): nu
   const n = Math.max(2, Math.ceil((g.end - g.start) * r * 2)); // ~0.5 px steps along the arc
   for (let i = 0; i <= n; i++) {
     const a = g.start + ((g.end - g.start) * i) / n;
-    const x = Math.round(g.cx + Math.cos(a) * r);
-    const y = Math.round(g.cy + Math.sin(a) * r);
+    const x = Math.floor(g.cx + Math.cos(a) * r);
+    const y = Math.floor(g.cy + Math.sin(a) * r);
     let dup = false;
     for (let k = len - 2; k >= 0 && !dup; k -= 2) dup = out[k] === x && out[k + 1] === y;
     if (dup) continue;

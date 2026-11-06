@@ -91,11 +91,14 @@ async function desktop(browser) {
   await mouse(d.x, d.y);
   await step(1);
   // the pulse: the same arc, brighter and thicker, still centred and rotated
+  const before0 = await arc();
+  ok(before0 && !before0.pulse && before0.alpha <= 0.35 && before0.alpha >= 0.25, 'idle arc: faint (25-35%)', JSON.stringify(before0));
   await page.keyboard.press('j');
   await step(1);
   d = await dbg();
   const pa = await arc();
   ok(pa && pa.cx === d.x && pa.cy === d.y && angDiff(pa.start, Math.atan2(d.aim[1], d.aim[0]) - HALF) < 1e-9, 'pulse: the same arc, centred and rotated');
+  ok(pa && pa.pulse && before0 && pa.pixels > before0.pixels * 1.5 && pa.alpha > before0.alpha, 'pulse: brighter and about twice the pixels (2 px thick)', JSON.stringify({ pa, before0 }));
   await crop('knight_arc_pulse.png', d);
   // paused: frozen where it was
   await step(60);

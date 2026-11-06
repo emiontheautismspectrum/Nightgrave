@@ -61,11 +61,12 @@ describe('knight arc geometry', () => {
         expect(Number.isInteger(x) && Number.isInteger(y)).toBe(true);
         expect(seen.has(`${x},${y}`)).toBe(false);
         seen.add(`${x},${y}`);
-        expect(Math.abs(Math.hypot(x - g.cx, y - g.cy) - g.r)).toBeLessThanOrEqual(0.75);
+        // the visible pixel centre (x + 0.5, y + 0.5) is within 0.71 px of the true arc (no half-pixel bias)
+        expect(Math.abs(Math.hypot(x + 0.5 - g.cx, y + 0.5 - g.cy) - g.r)).toBeLessThanOrEqual(Math.SQRT1_2 + 1e-9);
         if (i > 0) expect(Math.max(Math.abs(x - out[i - 2]!), Math.abs(y - out[i - 1]!))).toBe(1);
       }
-      expect(out[0]).toBe(Math.round(g.cx + Math.cos(g.start) * g.r));
-      expect(out[len - 2]).toBe(Math.round(g.cx + Math.cos(g.end) * g.r));
+      expect(out[0]).toBe(Math.floor(g.cx + Math.cos(g.start) * g.r));
+      expect(out[len - 2]).toBe(Math.floor(g.cx + Math.cos(g.end) * g.r));
       // the pulse's inner row adds pixels without repeating any (no alpha stacking)
       const both = arcPixels(g, 1, out, len);
       const all = new Set<string>();
@@ -75,12 +76,17 @@ describe('knight arc geometry', () => {
     }
   });
 
-  it('the drawn arc never claims more than the sim: every arc pixel centre is inside the real zone with a 1 px shot', () => {
+  it('the drawn arc never claims more than the sim: every visible pixel centre, any aim and sub-pixel position, is inside the real zone for a 1 px shot', () => {
     const p = makeParams('hard', 'knight');
     const out: number[] = [];
-    const g = arcGeom(K, 240, 135, 0, -1)!;
-    const len = arcPixels(g, 0, out);
-    for (let i = 0; i < len; i += 2) expect(inParryZone(240, 135, 0, -1, out[i]!, out[i + 1]!, 1, p)).toBeGreaterThanOrEqual(0);
+    for (let deg = 0; deg < 360; deg += 7)
+      for (const [hx, hy] of [[240, 135], [240.3, 135.7], [200.9, 100.1]] as const) {
+        const ax = Math.cos(deg * DEG);
+        const ay = Math.sin(deg * DEG);
+        const g = arcGeom(K, hx, hy, ax, ay)!;
+        const len = arcPixels(g, 0, out);
+        for (let i = 0; i < len; i += 2) expect(inParryZone(hx, hy, ax, ay, out[i]! + 0.5, out[i + 1]! + 0.5, 1, p)).toBeGreaterThanOrEqual(0);
+      }
     expect(HERO_RULES.overlapPx).toBeLessThan(K.parry.radius);
   });
 });
