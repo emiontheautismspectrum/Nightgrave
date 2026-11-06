@@ -6,6 +6,8 @@
 const { chromium } = require('playwright');
 const { spawn, execSync } = require('node:child_process');
 const path = require('node:path');
+// run vite itself (not through npx): kill() then stops the server instead of leaving an orphan on the port
+const VITE_BIN = path.join(__dirname, '..', 'node_modules', 'vite', 'bin', 'vite.js');
 const ROOT = path.join(__dirname, '..');
 // assets/preview/ is untracked output (absent in a fresh clone): create it before writing screenshots
 require('node:fs').mkdirSync(path.join(ROOT, 'assets', 'preview'), { recursive: true });
@@ -14,7 +16,7 @@ let failed = false;
 
 (async () => {
   execSync('npx vite build', { cwd: ROOT, stdio: 'ignore' });
-  const srv = spawn('npx', ['vite', 'preview', '--port', '4181', '--strictPort'], { cwd: ROOT, stdio: 'ignore' });
+  const srv = spawn(process.execPath, [VITE_BIN, 'preview', '--port', '4181', '--strictPort'], { cwd: ROOT, stdio: 'ignore' });
   await sleep(2500);
   const browser = await chromium.launch();
   try {

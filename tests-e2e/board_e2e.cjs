@@ -9,6 +9,8 @@ const { chromium } = require('playwright');
 const { spawn, execSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+// run vite itself (not through npx): kill() then stops the server instead of leaving an orphan on the port
+const VITE_BIN = path.join(__dirname, '..', 'node_modules', 'vite', 'bin', 'vite.js');
 
 const ROOT = path.join(__dirname, '..');
 const API = 'http://localhost:8787';
@@ -27,7 +29,7 @@ const ok = (c, m) => (c ? console.log('ok  ', m) : fail(m));
   const headers = fs.readFileSync(path.join(ROOT, 'dist', '_headers'), 'utf8');
   const csp = /Content-Security-Policy: (.*)/.exec(headers)[1];
   ok(csp.includes(`connect-src 'self' ${API}`), 'CSP connect-src includes the API origin');
-  const srv = spawn('npx', ['vite', 'preview', '--port', '5173', '--strictPort'], { cwd: ROOT, stdio: 'ignore' });
+  const srv = spawn(process.execPath, [VITE_BIN, 'preview', '--port', '5173', '--strictPort'], { cwd: ROOT, stdio: 'ignore' });
   const violations = [];
   try {
     await sleep(2500);

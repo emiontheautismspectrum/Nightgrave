@@ -5,6 +5,8 @@
 const { chromium, devices } = require('playwright');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+// run vite itself (not through npx): kill() then stops the server instead of leaving an orphan on the port
+const VITE_BIN = path.join(__dirname, '..', 'node_modules', 'vite', 'bin', 'vite.js');
 
 const PORT = 4179;
 const URL = `http://localhost:${PORT}/`;
@@ -15,18 +17,30 @@ const fail = (m) => {
   console.error('SMOKE FAIL:', m);
   process.exitCode = 1;
 };
-const ok = (c, m) => (c ? console.log('ok  ', m) : fail(m));
+/** The last check that passed or failed: named in the timeout message. */
+let lastStep = 'start';
+const ok = (c, m) => {
+  lastStep = m;
+  return c ? console.log('ok  ', m) : fail(m);
+};
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// No step may hang the run: every page call has a timeout, and a watchdog ends the whole script with a clear message.
+const STEP_TIMEOUT_MS = 15_000;
+const TOTAL_TIMEOUT_MS = 240_000;
+const within = (p, ms, what) => {
+  let timer;
+  return Promise.race([p, new Promise((_, rej) => (timer = setTimeout(() => rej(new Error(`timed out after ${ms} ms: ${what} (last check: "${lastStep}")`)), ms)))]).finally(() => clearTimeout(timer));
+};
 
 /** Game px -> page px via the canvas box. */
 async function toPage(page, gx, gy) {
-  const r = await page.evaluate(() => {
+  const r = await within(page.evaluate(() => {
     const c = document.querySelector('#game canvas').getBoundingClientRect();
     return { x: c.left, y: c.top, w: c.width, h: c.height };
-  });
+  }), STEP_TIMEOUT_MS, 'reading the canvas box');
   return { x: r.x + (gx * r.w) / 480, y: r.y + (gy * r.h) / 270 };
 }
-const dbg = (page) => page.evaluate(() => window.__ngDebug ?? null);
+const dbg = (page) => within(page.evaluate(() => window.__ngDebug ?? null), STEP_TIMEOUT_MS, 'reading the game state');
 
 async function touch(cdp, type, pts) {
   await cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: p.id ?? i })) });
@@ -36,6 +50,7 @@ async function phone(browser) {
   const ctx = await browser.newContext({ ...devices['Pixel 7 landscape'] });
   await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} }); // tests skip the site intro
   const page = await ctx.newPage();
+  page.setDefaultTimeout(STEP_TIMEOUT_MS); // clicks, key presses, navigation and screenshots fail instead of hanging
   const errs = [];
   page.on('pageerror', (e) => errs.push(String(e)));
   await page.goto(URL);
@@ -94,6 +109,7 @@ async function desktop(browser) {
   const ctx = await browser.newContext({ viewport: { width: 960, height: 540 }, deviceScaleFactor: 2 });
   await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} }); // tests skip the site intro
   const page = await ctx.newPage();
+  page.setDefaultTimeout(STEP_TIMEOUT_MS); // clicks, key presses, navigation and screenshots fail instead of hanging
   const errs = [];
   page.on('pageerror', (e) => errs.push(String(e)));
   await page.goto(URL);
@@ -164,18 +180,40 @@ async function desktop(browser) {
   await ctx.close();
 }
 
+/** Is something already listening on the port (e.g. a stale vite preview serving an old build)? */
+const portBusy = (port) =>
+  new Promise((res) => {
+    const s = require('node:net').connect(port, '127.0.0.1');
+    s.once('connect', () => (s.destroy(), res(true)));
+    s.once('error', () => res(false));
+  });
+
 (async () => {
-  const srv = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore' });
+  if (await portBusy(PORT)) {
+    console.error(`SMOKE FAIL: port ${PORT} is already in use (a stale "vite preview"?); stop it and run again.`);
+    console.log('SMOKE: FAILED');
+    process.exit(1);
+  }
+  const srv = spawn(process.execPath, [VITE_BIN, 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore' });
+  const watchdog = setTimeout(() => {
+    console.error(`SMOKE FAIL: the whole smoke test took longer than ${TOTAL_TIMEOUT_MS / 1000} s (last check: "${lastStep}")`);
+    console.log('SMOKE: FAILED');
+    srv.kill();
+    process.exit(1);
+  }, TOTAL_TIMEOUT_MS);
+  let browser = null;
   try {
     await sleep(2500);
-    const browser = await chromium.launch();
+    browser = await within(chromium.launch(), 60_000, 'launching the browser');
     await phone(browser);
     await desktop(browser);
-    await browser.close();
   } catch (e) {
     fail(String(e));
   } finally {
+    if (browser) await within(browser.close(), STEP_TIMEOUT_MS, 'closing the browser').catch((e) => fail(String(e)));
     srv.kill();
+    clearTimeout(watchdog);
   }
   console.log(process.exitCode ? 'SMOKE: FAILED' : 'SMOKE: all passed');
+  process.exit(process.exitCode ?? 0); // never wait on a stray handle
 })();

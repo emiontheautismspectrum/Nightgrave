@@ -226,3 +226,12 @@ board is new, so as few pending runs as possible are caught between versions.
 Every client sends `clientVersion` and the tuning fingerprint. When tuning or `CLIENT_VERSION`
 (`src/shared/version.ts`) changes, deploy the Worker and Pages together: old clients get "Game updated: reload the
 page" instead of posting incompatible runs.
+
+Order for such an update (for example the multiplier fix, version 0.8.0, which changes the tuning fingerprint):
+
+1. Let the replay verifier clear the queue first (the GitHub Action runs every 20 minutes; `npm run verify:pending`
+   by hand also works). Runs still pending when the new Worker is live were recorded with the old version and are
+   rejected as `outdated`.
+2. Deploy the Worker and Pages together (`npx wrangler deploy` in `server/`, then the Pages build), so that the
+   Worker never accepts runs that its verifier cannot replay.
+3. Players with an open old page get "Game updated: reload the page" when they submit; a reload fixes it.
