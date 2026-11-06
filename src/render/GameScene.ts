@@ -630,8 +630,9 @@ export class GameScene extends Phaser.Scene {
     this.hudMult = addText(this, HUD_X.mult, 9, '', { color: C.bone });
     this.hudX2 = addText(this, 0, 9, 'X2', { color: C.gold }).setVisible(false);
     this.dblGfx = this.add.graphics().setDepth(D_FOG + 1.5);
-    this.hudWave = addText(this, HUD_X.wave, 9, '', { color: '#7f93b8' });
-    this.hudDaily = addText(this, HUD_X.daily, 9, '', { color: '#7f93b8' });
+    // the HUD is as bright as the menu text (bone), crisp 8 px BitmapText on whole pixels, nothing drawn above it
+    this.hudWave = addText(this, HUD_X.wave, 9, '', { color: C.bone });
+    this.hudDaily = addText(this, HUD_X.daily, 9, '', { color: C.bone });
     this.banner = addText(this, VIEW_WIDTH / 2, 70, '').setOrigin(0.5).setAlpha(0);
     // ability cooldown icons in the left margin at the bottom (x 8..40, y 214..262); touch buttons replace them
     this.icons = {
