@@ -123,6 +123,7 @@ async function boot(): Promise<void> {
     return {
       difficulty,
       hero: devHero ?? save().hero,
+      ...(devHero ? { devHero } : {}),
       // Hard: the same daily seed for everyone. The UTC date is read ONCE per run and both the seed and the HUD label
       // come from it, so they can never disagree at midnight.
       makeRun:

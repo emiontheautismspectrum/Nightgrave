@@ -10,10 +10,10 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   "cosmetic only" rule). All hero numbers live in `src/data/heroes.ts` (HeroDef: parry radius / arc / kills, dash
   distance, a typed `ability`); the sim dispatches on `ability.kind`, never on a hero name:
   - Knight: shield ARC 120 degrees around the aim, radius 24; ability GUARD: +1 charge per successful pulse (max 3); a
-    FULL guard absorbs one lethal PARRYABLE hit (charges -> 0, the projectile is destroyed, 0.6 s guard i-frames, no
-    points); unparryables (blades, sigils, beams) still kill; no decay. Dash 80 px.
+    FULL guard absorbs one lethal PARRYABLE hit (charges -> 0, the projectile is destroyed, 0.6 s guard i-frames against
+    parryable hits only, no points); unparryables (blades, sigils, beams) always kill, also during guard i-frames; no decay. Dash 80 px.
   - Wisp (ember spirit): full ring, radius 22; dash 100 px; ability EMBER TRAIL: the dash leaves a 0.8 s burning line
-    that destroys parryable, non-armored projectiles (max 5 per dash), each 10 x the current multiplier (x2 under
+    that destroys parryable, non-armored projectiles (max 5 per dash; never the pieces of a split orb the pulse just burst), each 10 x the current multiplier (x2 under
     Double Score); no multiplier step, no reset-timer refresh, not a parry.
   - Frozen by the balance pass (`npx vite-node tools/bot/balance.ts 50`): on Hard the median survival and median score
     of the two heroes are within +-12%. A test-only `classic` hero (full circle 22, dash 80, no ability) keeps the old
@@ -28,7 +28,9 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   - The hero is part of the run: `createState(seed, difficulty, heroId)`, `makeParams(difficulty, hero)`; the replay
     stores it in its CORE (JSON replay v2, binary log format 2 header); a missing / unknown hero or an old-format
     replay is invalid; the verifier and the Worker take the hero from the core and reject a different claimed `hero`.
-    Hero code never consumes the PRNG (test: identical spawn schedule for both heroes). One shared daily board.
+    Hero code never consumes the PRNG (tests: the PRNG state is unchanged by parries, guard, dashes and trail kills;
+    a standing hero gets the identical spawn schedule with either hero; spawns depend on the hero's POSITION, so
+    different movement legitimately changes them). One shared daily board.
   - Adding a hero: append its id to `HERO_IDS` (append only: the index is the replay byte), add a HeroDef in `HEROES`
     (two stat lines <= 19 chars), sprites (`<id>_idle`, `_run`, `_dash`, ... in tools/ and the atlas), a new
     `ability` kind + its sim branch only for a new mechanic, a balance run, then bump CLIENT_VERSION (the fingerprint

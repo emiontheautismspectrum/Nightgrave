@@ -67,6 +67,8 @@ export type HeroKind = HeroId;
 export interface RunConfig {
   difficulty: Difficulty;
   hero: HeroKind;
+  /** Dev only (`?hero=`, import.meta.env.DEV): overrides the saved hero for every run, never saved. */
+  devHero?: HeroKind;
   /**
    * Called once per run. The seed source lives on the render side (crypto/clock are fine here, never in
    * src/sim). `label` is shown in the HUD (Hard: the UTC date the daily seed was derived from).
@@ -636,7 +638,7 @@ export class GameScene extends Phaser.Scene {
 
   private newRun(): void {
     const run = this.cfg.makeRun();
-    this.cfg.hero = save().hero;
+    this.cfg.hero = this.cfg.devHero ?? save().hero;
     // the hero is part of the run definition (it changes the rules); an instant restart keeps the selected hero
     this.sim = new Sim(run.seed, this.cfg.difficulty, { hero: this.cfg.hero, ...(this.cfg.startWave ? { startWave: this.cfg.startWave } : {}) });
     this.driver = new RunDriver(this.sim);

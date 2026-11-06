@@ -52,13 +52,13 @@ describe('hero data', () => {
 
 describe('daily fairness: the hero never changes the spawn schedule', () => {
   for (const d of ['easy', 'medium', 'hard'] as Difficulty[]) {
-    it(`${d}: identical spawns (kind, tick, position) and PRNG over 3000 ticks with empty input`, () => {
+    it(`${d}: identical spawns (kind, tick, position) and PRNG over 3000 ticks (no movement, parries pressed)`, () => {
       const trace = (hero: HeroId) => {
         const sim = new Sim(dailySeed('2026-11-06'), d, { hero });
         const out: string[] = [];
         for (let t = 0; t < 3000; t++) {
           sim.state.alive = true; // keep the run going: only the schedule matters here
-          sim.step(idle());
+          sim.step(t % 37 === 0 ? parry() : idle()); // the hero stands still (spawns avoid the hero's position) but parries
           for (const e of sim.state.events) {
             if (e.type !== 'spawn') continue;
             const pr = sim.state.projectiles.find((q) => q.id === e.id);
@@ -73,6 +73,27 @@ describe('daily fairness: the hero never changes the spawn schedule', () => {
       expect(trace('wisp')).toEqual(k);
     });
   }
+});
+
+describe('hero code never touches the PRNG', () => {
+  for (const hero of HERO_IDS)
+    it(`${hero}: parries, guard gains / breaks, dashes and trail burns leave the PRNG state unchanged`, () => {
+      const sim = new Sim(99, 'hard', { spawner: false, hero });
+      const rng0 = sim.state.rng;
+      const types = new Set<string>();
+      for (let t = 0; t < 1500; t++) {
+        const h = sim.state.hero;
+        sim.state.alive = true;
+        if (t % 20 === 0) spawnProjectile(sim.state, sim.params, t % 60 === 0 ? 'orb_split' : 'orb_small', h.x + (t % 40 === 0 ? 14 : -2), h.y, 0, 0);
+        if (t % 200 === 100) for (let k = 0; k < 4; k++) spawnProjectile(sim.state, sim.params, 'orb_small', h.x - 30 - k * 12, h.y, 0, 0);
+        const dash = t % 200 === 60 ? BTN_DASH : 0;
+        sim.step({ cursor: false, mx: t % 400 < 200 ? 100 : -100, my: 0, buttons: (t % 20 === 1 ? BTN_PARRY : 0) | dash });
+        for (const e of sim.state.events) types.add(e.type);
+        expect(sim.state.rng).toBe(rng0);
+      }
+      expect(types.has('parry_hit')).toBe(true);
+      expect(types.has(hero === 'knight' ? 'guard_break' : 'trail_kill')).toBe(true);
+    });
 });
 
 describe('facing (aim)', () => {
@@ -221,6 +242,18 @@ describe('Knight guard', () => {
     wait(sim, 2);
     expect(sim.state.alive).toBe(false);
   });
+  it('guard i-frames protect from parryable hits only: a blade still kills right after a guard break', () => {
+    const sim = fresh('knight');
+    fillGuard(sim);
+    const h = sim.state.hero;
+    spawnProjectile(sim.state, sim.params, 'orb_small', h.x - 2, h.y, 0, 0);
+    expect(ev(sim, idle()).some((x) => x.type === 'guard_break')).toBe(true);
+    wait(sim, 5);
+    expect(sim.state.alive).toBe(true);
+    spawnProjectile(sim.state, sim.params, 'blade', h.x - 2, h.y, 0, 0);
+    wait(sim, 1);
+    expect(sim.state.alive).toBe(false);
+  });
   it('without a full guard a parryable hit kills', () => {
     const sim = fresh('knight');
     const h = sim.state.hero;
@@ -347,6 +380,17 @@ describe('Wisp ember trail', () => {
     const pr = spawnProjectile(sim.state, sim.params, 'orb_small', h.x - 10, h.y, 0, 0); // in the pulse AND on the trail
     const e = ev(sim, parry());
     expect(e.filter((x) => (x.type === 'parry_hit' || x.type === 'trail_kill') && x.id === pr.id).map((x) => x.type)).toEqual(['parry_hit']);
+  });
+  it('the trail never burns the pieces of a split orb the pulse just burst (they fly clear)', () => {
+    const sim = fresh('wisp');
+    dashRight(sim);
+    const h = sim.state.hero;
+    const orb = spawnProjectile(sim.state, sim.params, 'orb_split', h.x - 12, h.y, 0, 0); // in the pulse, on the trail
+    const e = ev(sim, parry());
+    expect(e.some((x) => x.type === 'parry_hit' && x.id === orb.id)).toBe(true);
+    expect(e.some((x) => x.type === 'split')).toBe(true);
+    expect(e.some((x) => x.type === 'trail_kill')).toBe(false);
+    expect(sim.state.projectiles.length).toBeGreaterThan(0);
   });
   it('the Knight leaves no trail', () => {
     const sim = fresh('knight');

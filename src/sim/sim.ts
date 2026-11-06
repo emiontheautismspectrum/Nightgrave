@@ -95,7 +95,13 @@ export const parryActiveTicks = (s: SimState, p: SimParams): number =>
 export const isParryActive = (s: SimState, p: SimParams): boolean => s.tick - s.hero.parryStart < parryActiveTicks(s, p);
 export const isDashing = (s: SimState, p: SimParams): boolean => s.tick - s.hero.dashStart < p.dashTicks;
 /** ONE invulnerability test (the sim and the renderer): the dash i-frames or the Knight's guard break. */
-export const isInvulnerable = (s: SimState, p: SimParams): boolean => s.tick - s.hero.dashStart < p.dashInvuln || s.tick < s.hero.guardInvulnUntil;
+/**
+ * THE i-frame rule (sim and renderer): dash i-frames protect from everything; the Knight's guard i-frames (after a
+ * guard break) only from PARRYABLE hits: unparryables (blades, sigils, beams) still kill. `unparryable`: ask for an
+ * unparryable threat.
+ */
+export const isInvulnerable = (s: SimState, p: SimParams, unparryable = false): boolean =>
+  s.tick - s.hero.dashStart < p.dashInvuln || (!unparryable && s.tick < s.hero.guardInvulnUntil);
 /** Cooldown of the current/last parry: short after a hit, long after a whiff. */
 export const parryCooldownOf = (s: SimState, p: SimParams): number =>
   !s.hero.parryHit ? p.parryWhiffCooldown : s.hero.parryScored ? p.parryCooldown : p.parryCrackCooldown;
@@ -315,7 +321,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   if (s.trail.length) runTrail(s, p);
 
   // 7. hits: one hit = death (fading projectiles are harmless); a FULL Knight guard absorbs one parryable hit
-  if (p.ability.kind === 'guard' && !isInvulnerable(s, p)) guardHits(s, p);
+  if (p.ability.kind === 'guard' && !isInvulnerable(s, p, true)) guardHits(s, p);
   else if (!isInvulnerable(s, p)) {
     for (const pr of s.projectiles) {
       if (isFading(s, pr) || t < pr.safeUntil) continue;
@@ -386,7 +392,8 @@ function runTrail(s: SimState, p: SimParams): void {
   const burnt = new Set<number>();
   for (const pr of s.projectiles) {
     if (s.trailKills >= A.maxKills) break;
-    if (!pr.parryable || pr.kind === 'orb_armored' || isFading(s, pr)) continue;
+    // never a split piece the pulse just burst (nor one still harmless): the pieces fly clear, as with the parry
+    if (!pr.parryable || pr.kind === 'orb_armored' || isFading(s, pr) || pr.crackedBy === s.hero.parryStart || t < pr.safeUntil) continue;
     const r = pr.radius + A.halfWidth;
     if (!s.trail.some((g) => segDist2(pr.x, pr.y, g.x0, g.y0, g.x1, g.y1) <= r * r)) continue;
     burnt.add(pr.id);
@@ -421,7 +428,7 @@ function guardHits(s: SimState, p: SimParams): void {
     const r = p.heroRadius + pr.radius;
     if (dx * dx + dy * dy >= r * r) continue;
     if (!pr.parryable) return die(s, pr.id);
-    parryHit ??= pr;
+    if (!isInvulnerable(s, p)) parryHit ??= pr; // guard i-frames: parryable hits pass harmlessly
   }
   if (sigilHits(s, p)) return die(s, -2);
   if (beamHits(s, p)) return die(s, -1);
