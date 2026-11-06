@@ -1,6 +1,6 @@
 /**
- * Hero mechanics, drawn (render-only, reads sim state): the parry zone outline (the Knight's shield arc around its aim,
- * the Wisp's ring), the faint aim indicator, the guard pips and the Wisp's ember trail. The zone outline is SAMPLED
+ * Hero mechanics, drawn (render-only, reads sim state): the Wisp's pulse ring, the guard pips and the Wisp's ember
+ * trail (the Knight's always-visible shield arc lives in src/render/knightArc.ts + GameScene). The zone outline is SAMPLED
  * from the sim's own zone function (inParryZone), so the drawing can never disagree with what the parry hits.
  */
 import type Phaser from 'phaser';
@@ -83,12 +83,9 @@ export function drawHeroFx(g: Phaser.GameObjects.Graphics, st: SimState, p: SimP
       g.strokePath();
     }
   };
-  const runs = zoneOutline(hx, hy, h.aimX, h.aimY, p);
-  if (parryActive) stroke(runs, p.parryFull ? 1 : 2, AMBER, p.parryFull ? 0.45 : 0.8);
-  else if (!p.parryFull && !dashing) {
-    // the faint aim indicator: where the shield would cover right now (12% opacity)
-    stroke(runs, 1, BONE, 0.12);
-  }
+  // a full ring (Wisp) flashes during the pulse; an ARC hero's shield is drawn by GameScene from src/render/knightArc.ts
+  // (always visible, centred on the sim position): nothing here
+  if (parryActive && p.parryFull) stroke(zoneOutline(hx, hy, h.aimX, h.aimY, p), 1, AMBER, 0.45);
   // guard pips above the hero: filled per charge; a slow pulse when full (constant with reduced flashes)
   if (p.ability.kind === 'guard') {
     const n = p.ability.charges;
@@ -98,7 +95,7 @@ export function drawHeroFx(g: Phaser.GameObjects.Graphics, st: SimState, p: SimP
     for (let i = 0; i < n; i++) {
       const on = i < h.guardCharges;
       const a = !on ? 0.3 : full && !reduced ? 0.7 + 0.3 * Math.sin(now / 180) : 1;
-      g.fillStyle(on ? (full ? GOLD : AMBER) : 0x3a4558, a);
+      g.fillStyle(on ? (full ? GOLD : BONE) : 0x3a4558, a); // bone, then gold: never the dash chevron's amber
       g.fillRect(x0 + i * 3, y, 2, 2);
     }
   }
