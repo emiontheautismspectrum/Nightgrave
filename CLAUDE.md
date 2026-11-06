@@ -45,8 +45,15 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   a whiff. Destroys at most 3 parryable projectiles per pulse (nearest first) while they are inside it during the active
   window; each scores as before.
 - Dash: rare. ~80 px over 0.2 s, invulnerable only for the first 0.12 s, cooldown 3 s. Needed against unparryable threats.
-- Multiplier: +0.25 per pulse, but only for a CLOSE parry (a kill within the inner 60% of the radius; a far parry scores
-  but neither steps nor resets it); cap x5; resets after 3 s without a successful parry. A hit kills the run.
+- Multiplier (fix-multiplier): +0.25 for every SUCCESSFUL pulse (at least one parryable destroyed; an armored crack
+  alone does not count), after its first kill has scored. A PERFECT parry (a destroyed projectile whose EDGE is within
+  parry.radius x closeFraction = 22 x 0.75 = 16.5 px of the hero; a ~0.16 s timing window on Medium) adds +0.25 more,
+  once per pulse, and shows "PERFECT". Cap x5; every destroyed projectile refreshes the 3 s reset timer; whiffs and
+  crack-only pulses neither step nor refresh. Scoring only: survival is unchanged. A hit kills the run.
+- Feedback (render-only): a floating "X1.50" / "PERFECT X2.00" label and a "+N" popup per tick, placed clear of the
+  hero and every projectile; HUD multiplier by tier (x1 white, x2+ amber, x4+ gold), a pulse on each step, a slow blink
+  in the last second before the reset and a dim on reset (no pulse or blink with reduced flashes). Double Score: gold
+  score with an X2 tag, a thin breathing gold outline of the arena, a gold ring on pickup, gold point popups.
 - Ember charge (boss drop): +0.01 s parry window per charge, cap +0.04 s (max window 0.14 s).
 - Score: survival 10 pts/s + parry 25 x multiplier + pickups + boss kill fixed 1000.
 
