@@ -56,7 +56,7 @@ offline.
 | `src/data/` | tuning and game data |
 | `server/` | Cloudflare Worker + D1 for the Hard daily board (`server/migrations/`, `server/wrangler.toml`) |
 | `tools/` | deterministic Python art pipeline and checks; `tools/verify/` is the replay verifier, `tools/bot/` the balance bots |
-| `assets/` | generated art (sprites, atlas, backgrounds, data) and audio, committed so the site build needs no Python |
+| `assets/` | generated art (sprites, atlas, backgrounds, data), committed so the site build needs no Python; `assets/audio/` takes the mp3 files (none yet: synthesized fallback) |
 | `public/` | static files served as-is (font, icons, manifest, `og-image.png`, `_headers`) |
 | `tests/`, `tests-e2e/` | Vitest suites and Playwright scripts |
 | `docs/` | deploy guide, art and audio specs, README screenshots |
