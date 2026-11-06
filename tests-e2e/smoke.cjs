@@ -181,12 +181,14 @@ async function desktop(browser) {
 }
 
 /** Is something already listening on the port (e.g. a stale vite preview serving an old build)? */
-const portBusy = (port) =>
+const busyOn = (port, host) =>
   new Promise((res) => {
-    const s = require('node:net').connect(port, '127.0.0.1');
+    const s = require('node:net').connect(port, host);
     s.once('connect', () => (s.destroy(), res(true)));
     s.once('error', () => res(false));
   });
+// vite may listen on IPv6 (::1) or IPv4 "localhost": check both
+const portBusy = async (port) => (await busyOn(port, '127.0.0.1')) || (await busyOn(port, '::1'));
 
 (async () => {
   if (await portBusy(PORT)) {
