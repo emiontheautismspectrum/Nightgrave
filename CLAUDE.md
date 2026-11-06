@@ -20,8 +20,8 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
     rules for the old golden numbers.
   - FACING (0.10.0, the author's rule: ONLY where the hero goes): `aimX/aimY` in the sim. For every input source
     (cursor, keys, gamepad, stick) the aim becomes this tick's movement intent direction (moveIntent ix, iy) when the
-    intended step is >= `aimMinStepFrac` (0.25) x the max step; below it the aim is kept. Anti-jitter: a turn of MORE
-    than 90 degrees needs `aimTurnTicks` (2) consecutive above-threshold ticks whose directions agree within 45 degrees.
+    intended step is >= `aimMinStepFrac` (0.25) x the max step; below it the aim is kept. Anti-jitter: a turn of 90
+    degrees or more needs `aimTurnTicks` (2) consecutive above-threshold ticks whose directions agree within 45 degrees.
     A dash never turns it (also with cursor input); initial aim (1, 0). Never a zero / NaN vector.
   - ONE parry zone function (`src/sim/parryZone.ts`): inside = distance <= radius + projectile radius and, below 360,
     angle to the aim <= arc/2 + asin(clamp(r/d, 0, 1)); closer than `overlapPx` (6) always counts. Used by the parry,

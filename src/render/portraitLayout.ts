@@ -61,8 +61,11 @@ export function portraitLayout(W: number, H: number, k: number, dpr: number, lef
   const xD = xP - (rP + pad) - (rD + pad) - 2;
   const yD = yB - Math.round(rP * 0.35);
   const mirror = (x: number) => (leftHanded ? W - x : x);
-  // the stick: the bottom corner opposite PARRY (left; right when left-handed), under the boss bar
-  const stick: TouchStick = { x: mirror(margin + rS), y: H - g(8) - rS - 2, r: rS, knob: g(STICK.knob / 2), zone: rS + g(STICK.zonePad) };
+  // the stick: the bottom corner opposite PARRY (left; right when left-handed), under the boss bar. On a very narrow
+  // screen it shrinks so its base never reaches DASH's hit circle (the buttons keep their sizes)
+  const rFit = Math.floor((xD - (rD + pad) - margin - 4) / 2);
+  const rStick = Math.max(8, Math.min(rS, rFit));
+  const stick: TouchStick = { x: mirror(margin + rStick), y: H - g(8) - rStick - 2, r: rStick, knob: Math.min(g(STICK.knob / 2), Math.round(rStick * 0.5)), zone: rStick + g(STICK.zonePad) };
   const buttons: Btn[] = [
     { id: 'parry', x: mirror(xP), y: yB, r: rP, hit: rP + pad },
     { id: 'dash', x: mirror(xD), y: yD, r: rD, hit: rD + pad },

@@ -4,7 +4,7 @@ exports[`golden replays > easy knight: golden bot run 1`] = `
 {
   "alive": true,
   "bosses": 1,
-  "score": 3197,
+  "score": 3250,
   "tick": 7200,
 }
 `;

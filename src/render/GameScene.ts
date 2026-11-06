@@ -463,6 +463,7 @@ export class GameScene extends Phaser.Scene {
   /** Focus loss, hidden tab, rotation: pause and open the pause menu so the player resumes deliberately. */
   private autoPause(r: PauseReason): void {
     if (!this.driver || !this.sim.state.alive) return;
+    this.input2.touch.releaseAll(); // hidden page / focus loss / rotation: no finger stays on the stick
     this.driver.pause(r);
     if (!this.menu.active) this.openPause();
   }

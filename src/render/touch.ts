@@ -126,6 +126,9 @@ export class TouchModel {
   stickLayout: TouchStick | null = null;
   private stickId: number | null = null;
   private knob = { x: 0, y: 0 };
+  /** The finger position that means "knob at the centre": the stick centre, or (after a re-layout while held) a point
+   * that is re-anchored whenever the knob clamps at the ring, so returning the finger always centres the knob. */
+  private anchor = { x: 0, y: 0 };
   private stickRelative = false;
 
   constructor(public opts: TouchOptions) {}
@@ -167,6 +170,12 @@ export class TouchModel {
     this.stickRelative = false;
   }
 
+  /** The knob for a finger at (x, y): clamped to the ring; a relative (re-laid-out) stick re-anchors on the clamp. */
+  private follow(x: number, y: number): void {
+    this.setKnob(x - this.anchor.x, y - this.anchor.y);
+    if (this.stickRelative) this.anchor = { x: x - this.knob.x, y: y - this.knob.y };
+  }
+
   /** A new run: the virtual cursor restarts at the hero on the next drag. */
   reset(): void {
     this.cursor = null;
@@ -194,11 +203,13 @@ export class TouchModel {
     else if (role === 'dash') this.pending |= BTN_DASH;
     else if (this.opts.stick) {
       // Stick mode: only the stick zone moves the hero; any other touch (not a button) does nothing
-      if (S && this.stickId === null && (x - S.x) ** 2 + (y - S.y) ** 2 <= S.zone ** 2) {
+      // a new touch in the zone always takes the stick over (a lost touchend can never leave it stuck)
+      if (S && (x - S.x) ** 2 + (y - S.y) ** 2 <= S.zone ** 2) {
         role = 'stick';
         this.stickId = id;
         this.stickRelative = false;
-        this.setKnob(x - S.x, y - S.y);
+        this.anchor = { x: S.x, y: S.y };
+        this.follow(x, y);
       } else role = 'none';
     } else if ([...this.touches.values()].some((o) => o.role === 'move')) role = 'tap';
     else {
@@ -217,7 +228,11 @@ export class TouchModel {
       t.jy = 0;
     }
     // a held stick keeps its deflection and turns relative until released (no jump to the new centre's offset)
-    if (this.stickId !== null) this.stickRelative = true;
+    if (this.stickId !== null) {
+      const tc = this.touches.get(this.stickId);
+      this.stickRelative = true;
+      if (tc) this.anchor = { x: tc.x - this.knob.x, y: tc.y - this.knob.y };
+    }
   }
 
   move(id: number, x: number, y: number): void {
@@ -228,6 +243,8 @@ export class TouchModel {
       tc.x = x;
       tc.y = y;
       tc.moved = TAP_PX; // never a tap after a re-layout
+      // the held stick: its "centre" finger position in the NEW screen space keeps the current deflection
+      if (id === this.stickId) this.anchor = { x: x - this.knob.x, y: y - this.knob.y };
       return;
     }
     const dx = x - tc.x;
@@ -236,11 +253,8 @@ export class TouchModel {
     tc.y = y;
     tc.moved = Math.max(tc.moved, Math.sqrt((x - tc.x0) ** 2 + (y - tc.y0) ** 2));
     if (tc.role === 'stick') {
-      // the finger keeps the stick even when it slides off the zone, until it is lifted
-      const S = this.stickLayout;
-      if (!S) return;
-      if (this.stickRelative) this.setKnob(this.knob.x + dx, this.knob.y + dy);
-      else this.setKnob(x - S.x, y - S.y);
+      // the finger keeps the stick even when it slides off the zone, until it is lifted (or another touch takes over)
+      if (id === this.stickId && this.stickLayout) this.follow(x, y);
       return;
     }
     if (tc.role !== 'move' || !this.cursor) return; // buttons and tap candidates never move the hero

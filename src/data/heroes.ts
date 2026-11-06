@@ -85,7 +85,7 @@ export const HERO_RULES = {
    * least this share of the hero's maximum step (any input: cursor, keys, gamepad, stick); below it the aim is kept.
    */
   aimMinStepFrac: 0.25,
-  /** A turn of MORE than 90 degrees needs this many consecutive ticks of a consistent direction (anti-jitter). */
+  /** A turn of 90 degrees or more needs this many consecutive ticks of a consistent direction (anti-jitter). */
   aimTurnTicks: 2,
   /** A projectile whose centre is closer than this always counts as inside the parry zone (no blind spot). */
   overlapPx: 6,

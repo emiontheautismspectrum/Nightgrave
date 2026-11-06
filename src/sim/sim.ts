@@ -369,7 +369,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
 /**
  * FACING = where the hero goes, for every input source: when this tick's intended step (`want`, moveIntent) is at
  * least aimMinStep, the aim becomes the intent direction (ix, iy, a unit vector); below it the aim is kept. Anti-jitter:
- * a turn of MORE than 90 degrees needs aimTurnTicks consecutive above-threshold ticks whose directions agree within 45
+ * a turn of 90 degrees or more needs aimTurnTicks consecutive above-threshold ticks whose directions agree within 45
  * degrees (a cursor flickering between two pixels never flips the arc). Called with the intent from BEFORE the move,
  * never during a dash. Never a zero / NaN vector (ix, iy is a unit vector whenever want > 0).
  */
@@ -378,7 +378,7 @@ function updateAim(h: Hero, ix: number, iy: number, want: number, p: SimParams):
     h.aimPendTicks = 0;
     return;
   }
-  if (ix * h.aimX + iy * h.aimY >= 0) {
+  if (ix * h.aimX + iy * h.aimY > 0) {
     h.aimX = ix;
     h.aimY = iy;
     h.aimPendTicks = 0;

@@ -71,9 +71,12 @@ describe('stick logic', () => {
     expect(t.take()).toBe(BTN_DASH);
     t.up(3, 60);
     expect(t.stickAxis()[1]).toBeCloseTo(-1, 9);
-    // a second finger in the stick zone does not steal it
-    expect(t.down(4, St.x + 2, St.y, 70, hero)).toBe('none');
-    expect(t.stickAxis()[1]).toBeCloseTo(-1, 9);
+    // a new touch in the stick zone takes it over (a lost touchend can never leave the stick stuck); the old finger's
+    // moves are then ignored
+    expect(t.down(4, St.x + 2, St.y, 70, hero)).toBe('stick');
+    expect(t.stickAxis()).toEqual([0, 0]); // 2 px: inside the dead zone
+    t.move(1, St.x, St.y + St.r);
+    expect(t.stickAxis()).toEqual([0, 0]);
   });
   it('touchcancel, focus loss and a mode switch release the stick (never stuck)', () => {
     const t = model();
@@ -98,6 +101,18 @@ describe('stick logic', () => {
     expect(t.stickAxis()[0]).toBeCloseTo(before, 9);
     t.move(1, S.x + 13, S.y); // it moves 3 px: the knob moves 3 px
     expect(t.knobOffset().x).toBeCloseTo(13, 9);
+  });
+  it('after a re-layout, a finger dragged past the ring and brought back centres the knob (re-anchored on the clamp)', () => {
+    const t = model();
+    t.down(1, S.x, S.y, 0, hero);
+    t.stickLayout = { ...S, x: S.x + 50 };
+    t.rebase();
+    t.move(1, S.x, S.y); // the first move after a re-layout only sets the baseline
+    t.move(1, S.x + 70, S.y); // far past the ring: clamped at +r
+    expect(t.knobOffset().x).toBeCloseTo(S.r, 9);
+    t.move(1, S.x + 70 - S.r, S.y); // back by r: the knob is centred again
+    expect(t.stickAxis()).toEqual([0, 0]);
+    expect(Math.abs(t.knobOffset().x)).toBeLessThan(1e-9);
   });
   it('Drag mode is unchanged: a drag anywhere moves the virtual cursor, the stick does nothing', () => {
     const t = model(false);
@@ -128,6 +143,15 @@ describe('stick layout', () => {
         if (lh) expect(St.x).toBeGreaterThan(w / 2);
         else expect(St.x).toBeLessThan(w / 2);
       });
+  for (const [vw, vh, dpr] of [[320, 548, 2], [280, 653, 3], [344, 882, 3]] as const)
+    it(`narrow portrait ${vw}x${vh}: the stick shrinks so its base never reaches the DASH / PARRY hit circles`, () => {
+      const { w, h, k } = portraitGameSize(vw, vh, dpr);
+      for (const lh of [false, true]) {
+        const L = portraitLayout(w, h, k, dpr, lh);
+        for (const b of L.buttons) expect(Math.hypot(b.x - L.stick.x, b.y - L.stick.y)).toBeGreaterThan(L.stick.r + b.hit);
+        expect(L.stick.x - L.stick.r).toBeGreaterThanOrEqual(0);
+      }
+    });
   it('landscape: in the corner opposite the buttons, never over a button, the pause button or the HUD band', () => {
     for (const cssPerPx of [1, 1.333, 2, 2.4])
       for (const lh of [false, true]) {

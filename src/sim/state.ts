@@ -183,7 +183,7 @@ export interface Hero {
   dashDirY: number;
   /**
    * FACING (unit vector): the direction of the hero's intended movement whenever the intended step is >= aimMinStep
-   * (any input), else unchanged; a turn of more than 90 degrees needs aimTurnTicks consistent ticks. A dash never changes
+   * (any input), else unchanged; a turn of 90 degrees or more needs aimTurnTicks consistent ticks. A dash never changes
    * it. The Knight's parry arc is centred on it.
    */
   aimX: number;

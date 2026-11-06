@@ -406,7 +406,9 @@ export class MenuView {
     const g = this.g;
     if (!p || !g) return;
     const footNow = p.foot?.() ?? [];
-    if ((g.touch && this.collapseKey() !== this.collapsed) || (this.footTexts.length > 0 && footNow.length !== this.footCount)) {
+    const merged = (p.lines?.() ?? []).length + (this.footTexts.length ? 0 : footNow.length ? footNow.length + 1 : 0);
+    // a row appeared / vanished, or the number of lines changed (e.g. the board loaded the champion block)
+    if ((g.touch && this.collapseKey() !== this.collapsed) || (this.footTexts.length > 0 && footNow.length !== this.footCount) || merged !== this.lineTexts.length) {
       // a row appeared or vanished (e.g. the difficulty changed): lay the page out again
       const fresh = this.fresh;
       this.show(p, this.focus);

@@ -112,6 +112,7 @@ describe('facing (aim)', () => {
     const sim = fresh('knight');
     const h = sim.state.hero;
     sim.step({ cursor: false, mx: 0, my: 100, buttons: 0 });
+    sim.step({ cursor: false, mx: 0, my: 100, buttons: 0 }); // a 90 degree turn: 2 consistent ticks
     expect(h.aimY).toBeCloseTo(1, 9);
     sim.step(idle());
     expect(h.aimY).toBeCloseTo(1, 9);

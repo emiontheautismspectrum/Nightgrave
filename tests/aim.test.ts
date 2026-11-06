@@ -1,6 +1,6 @@
 /**
  * Knight aim fix: FACING = where the hero goes, for every input source. The aim turns to this tick's movement intent
- * when the intended step is >= aimMinStep (HERO_RULES.aimMinStepFrac x the max step); a turn of more than 90 degrees
+ * when the intended step is >= aimMinStep (HERO_RULES.aimMinStepFrac x the max step); a turn of 90 degrees or more
  * needs aimTurnTicks consistent ticks (anti-jitter); a dash never turns it.
  */
 import { describe, expect, it } from 'vitest';
@@ -58,6 +58,22 @@ describe('aim follows the movement', () => {
     expect(Math.abs(h.aimX * aim[0]! + h.aimY * aim[1]!)).toBeGreaterThan(0.99);
   });
 
+  it('a cursor circling a 2x2 or 3-pixel cycle (hand tremor) never spins the arc', () => {
+    for (const cycle of [[[0, 0], [1, 0], [1, 1], [0, 1]], [[0, 0], [1, 0], [1, 1]]]) {
+      const sim = fresh();
+      const h = sim.state.hero;
+      walk(sim, 90, 6, 10); // aim down
+      const rest = [Math.round(h.x) + 3, Math.round(h.y) + 3];
+      for (let i = 0; i < 6; i++) sim.step({ cursor: true, mx: rest[0]!, my: rest[1]!, buttons: 0 });
+      const aim = [h.aimX, h.aimY];
+      for (let i = 0; i < 240; i++) {
+        const [dx, dy] = cycle[i % cycle.length]!;
+        sim.step({ cursor: true, mx: rest[0]! + dx!, my: rest[1]! + dy!, buttons: 0 });
+        expect(h.aimX * aim[0]! + h.aimY * aim[1]!).toBeGreaterThan(0.69); // never more than ~45 degrees off
+      }
+    }
+  });
+
   it('a step below aimMinStep never turns the aim (axis input below 25%)', () => {
     const sim = fresh();
     const h = sim.state.hero;
@@ -65,7 +81,8 @@ describe('aim follows the movement', () => {
     for (let i = 0; i < 30; i++) sim.step({ cursor: false, mx: 0, my: below, buttons: 0 });
     expect([h.aimX, h.aimY]).toEqual([1, 0]);
     sim.step({ cursor: false, mx: 0, my: below + 2, buttons: 0 });
-    expect(h.aimY).toBeCloseTo(1, 9); // a 90 degree turn: immediate
+    sim.step({ cursor: false, mx: 0, my: below + 2, buttons: 0 }); // a 90 degree turn: 2 consistent ticks
+    expect(h.aimY).toBeCloseTo(1, 9);
   });
 
   it('axis input: the movement direction (analog), a reversal needs 2 consistent ticks', () => {
