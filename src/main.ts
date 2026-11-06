@@ -174,6 +174,8 @@ async function boot(): Promise<void> {
   onRunChange(resize);
   initBoardOverlay();
   addEventListener('resize', resize);
+  // mobile browser bars showing / hiding change the visual viewport (not always the window): lay out again
+  window.visualViewport?.addEventListener('resize', resize);
   addEventListener('orientationchange', resize);
   document.addEventListener('fullscreenchange', resize);
   // devicePixelRatio changes (browser zoom, moving the window to another monitor): re-arm a resolution query each time

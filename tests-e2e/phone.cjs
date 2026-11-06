@@ -109,6 +109,13 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
       // portrait: the title uses the whole screen (the board is the BOARD overlay); landscape: no side panel either
       const fill = await s.page.evaluate(() => { const c = document.querySelector('#game canvas').getBoundingClientRect(); return { h: c.height / innerHeight, sw: document.documentElement.scrollWidth, vw: innerWidth }; });
       ok(!under && fill.sw <= fill.vw && (!portrait || fill.h >= 0.95), 'title: no side panel, no overflow, portrait fills >= 95% of the height', JSON.stringify(fill));
+      // mobile browser behaviour: the canvas never pans / zooms / selects; the page never scrolls; installable fullscreen
+      const mob = await s.page.evaluate(async () => {
+        const cs = getComputedStyle(document.querySelector('#game canvas'));
+        const m = await (await fetch(document.querySelector('link[rel=manifest]').href)).json();
+        return { ta: cs.touchAction, us: cs.userSelect || cs.webkitUserSelect, sh: document.documentElement.scrollHeight, ih: innerHeight, display: m.display, orientation: m.orientation, theme: m.theme_color };
+      });
+      ok(mob.ta === 'none' && mob.us === 'none' && mob.sh <= mob.ih + 1 && mob.display === 'fullscreen' && mob.orientation === 'any' && mob.theme === '#0b0d12', 'mobile: no pan / zoom / select, no page scroll, fullscreen manifest', JSON.stringify(mob));
       ok(await s.tapText('BOARD'), 'title: BOARD item tapped');
       await sleep(600);
       const ov = await s.page.evaluate(() => {

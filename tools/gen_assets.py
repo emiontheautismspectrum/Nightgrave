@@ -107,7 +107,7 @@ def boss_board(art, game):
 
 def write_web_manifest(title, game):
     """public/manifest.webmanifest + home-screen icons (the wisp on the night colour), so "Add to Home Screen" opens the
-    game fullscreen in landscape. Name comes from the TITLE constant."""
+    game fullscreen (any orientation: portrait has its own layout). Name comes from the TITLE constant."""
     pub = os.path.join(ROOT, "public")
     icons = os.path.join(pub, "icons")
     os.makedirs(icons, exist_ok=True)
@@ -153,7 +153,7 @@ def write_web_manifest(title, game):
         Image.fromarray(img, "RGBA").save(os.path.join(icons, f"{name}.png"), optimize=False)
     manifest = {
         "name": title, "short_name": title, "start_url": "./", "scope": "./", "display": "fullscreen",
-        "orientation": "landscape", "background_color": "#0b0d12", "theme_color": "#0b0d12",
+        "orientation": "any", "background_color": "#0b0d12", "theme_color": "#0b0d12",
         "icons": [{"src": f"icons/icon-{s_}.png", "sizes": f"{s_}x{s_}", "type": "image/png"} for s_ in (192, 512)],
     }
     with open(os.path.join(pub, "manifest.webmanifest"), "w", encoding="utf-8") as fp:
