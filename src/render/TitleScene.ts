@@ -6,6 +6,7 @@ import Phaser from 'phaser';
 import { TITLE, VIEW_HEIGHT, VIEW_WIDTH } from '../config';
 import { fetchBoard, getServerDate, online, type Board } from '../net/api';
 import { openBoardOverlay } from '../web/boardOverlay';
+import { onScreenChange } from '../web/screen';
 import { utcDateKey } from '../daily';
 import { addDays } from '../shared/daily';
 import { DIFFICULTIES, persist, save } from '../storage';
@@ -77,6 +78,9 @@ export class TitleScene extends Phaser.Scene {
     this.add.image(0, 0, bgKey('vignette_outer')).setOrigin(0).setDepth(801).setAlpha(al.vignette_outer ?? 1);
     this.add.image(0, 0, bgKey('forest_near')).setOrigin(0).setDepth(802);
     this.menu = new MenuView(this, 1000);
+    // the screen changed (rotation, browser bars, resize): lay the open page out again
+    const off = onScreenChange(() => this.menu.relayout());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, off);
     audio.setMusic('music_menu');
     audio.setAmbience(false);
     this.showMain();

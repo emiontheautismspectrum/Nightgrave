@@ -12,7 +12,7 @@ import { validateMessage, validateName, type TextError } from '../shared/text';
 import { CLIENT_VERSION, tuningFingerprint } from '../shared/version';
 import { persist, save } from '../storage';
 import type { InputFrame } from '../sim/input';
-import { C, FONT, onTap } from './ui';
+import { C, FONT, hitPad, onTap } from './ui';
 
 export interface RunResult {
   date: string;
@@ -101,9 +101,10 @@ export class SubmitPanel {
     if (this.wantsMessage) this.field('MESSAGE (OPTIONAL)', 40, '');
     const btn = (x: number, t: string, fn: () => void) => {
       const o = addText(s, x, y0 + 40, t, { color: C.bone }).setDepth(this.depth);
-      o.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-4, -3, o.width + 8, o.height + 6), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
-      onTap(o, fn);
-      this.rects.push([o.x - 4, o.y - 4, o.x + o.width + 4, o.y + o.height + 4]);
+      const pd = hitPad(o.width, o.height);
+      o.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-pd.x, -pd.y, o.width + 2 * pd.x, o.height + 2 * pd.y), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
+      onTap(o, fn, (down) => o.setAlpha(down ? 0.6 : 1));
+      this.rects.push([o.x - pd.x, o.y - pd.y, o.x + o.width + pd.x, o.y + o.height + pd.y]);
       this.objs.push(o);
     };
     btn(150, 'SUBMIT', () => void this.submit());

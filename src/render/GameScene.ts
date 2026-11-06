@@ -22,6 +22,7 @@ import { requestRelayout, setInRun } from '../web/runFlag';
 import { boardOverlayOpen, openBoardOverlay } from '../web/boardOverlay';
 import { PORTRAIT, portraitViewport } from '../data/view';
 import { FollowCam } from './camera';
+import { onScreenChange } from '../web/screen';
 import { edgeMarkers } from './edgeMarkers';
 import { decayAlpha, doubleActive, LABEL, LABEL_MS, labelSpot, multColor, type LabelBounds } from './multFeedback';
 import { emitAudioEvent } from './events';
@@ -30,7 +31,7 @@ import { settingsPage, type MenuCtx } from './menus';
 import { canRestart, isPortraitView, RunDriver, type PauseReason } from './runDriver';
 import { cardLines, ContextHints, getDevice, HINT_TEXT } from './hints';
 import { TouchModel } from './touch';
-import { C, MenuView, onTap, type MenuPage } from './ui';
+import { C, hitPad, MenuView, onTap, type MenuPage } from './ui';
 
 /** Frame time above this for PERF_WINDOW_MS lowers effects for the rest of the session (render only). */
 const PERF_SLOW_MS = 20;
@@ -205,6 +206,8 @@ export class GameScene extends Phaser.Scene {
       },
     });
     this.menu = new MenuView(this, D_HUD + 10, 0.7);
+    const offScreen = onScreenChange(() => this.menu.relayout());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, offScreen);
     this.buildPauseButton();
     this.touchGfx = this.add.graphics().setDepth(D_HUD);
     this.chevron = this.add.graphics();
@@ -250,10 +253,12 @@ export class GameScene extends Phaser.Scene {
     if (this.menu?.active || this.hint || this.submit?.hit(x, y)) return true;
     if (this.boardBtn && this.boardBtn.visible) {
       const r = this.boardBtn.getBounds();
-      if (x >= r.x - 4 && x <= r.right + 4 && y >= r.y - 4 && y <= r.bottom + 4) return true;
+      const pd = hitPad(r.width, r.height, 6);
+      if (x >= r.x - pd.x && x <= r.right + pd.x && y >= r.y - pd.y && y <= r.bottom + pd.y) return true;
     }
     const b = this.pauseRect;
-    return x >= b.x - 4 && x <= b.x + b.w + 4 && y >= b.y - 4 && y <= b.y + b.h + 4;
+    const pd = hitPad(b.w, b.h);
+    return x >= b.x - pd.x && x <= b.x + b.w + pd.x && y >= b.y - pd.y && y <= b.y + b.h + pd.y;
   }
 
   private buildPauseButton(): void {
@@ -261,8 +266,17 @@ export class GameScene extends Phaser.Scene {
     const bg = this.add.rectangle(0, 0, b.w, b.h, 0x0b0d12, 0.6).setOrigin(0).setStrokeStyle(1, 0x3a4558);
     const t = addText(this, b.w / 2 - 7, b.h / 2 - 4, 'II', { color: C.bone });
     this.pauseBtn = this.add.container(b.x, b.y, [bg, t]).setDepth(D_HUD + 1).setSize(b.w, b.h);
-    this.pauseBtn.setInteractive(new Phaser.Geom.Rectangle(-4, -4, b.w + 8, b.h + 8), Phaser.Geom.Rectangle.Contains);
+    this.setPauseHit();
     onTap(this.pauseBtn, () => this.togglePause());
+  }
+
+  /** The pause button's hit area: >= 44 CSS px on phones (the layout can change it: rotation, browser bars). */
+  private setPauseHit(): void {
+    const b = this.pauseRect;
+    const pd = hitPad(b.w, b.h);
+    const r = new Phaser.Geom.Rectangle(-pd.x, -pd.y, b.w + 2 * pd.x, b.h + 2 * pd.y);
+    if (this.pauseBtn.input) this.pauseBtn.input.hitArea = r;
+    else this.pauseBtn.setInteractive(r, Phaser.Geom.Rectangle.Contains);
   }
 
   private isPortrait(): boolean {
@@ -325,6 +339,7 @@ export class GameScene extends Phaser.Scene {
     this.banner.setPosition(z ? PORTRAIT.w / 2 : VIEW_WIDTH / 2, z ? 64 : 70);
     this.pauseRect = z ? PAUSE_BTN_Z : PAUSE_BTN;
     this.pauseBtn.setPosition(this.pauseRect.x, this.pauseRect.y);
+    this.setPauseHit();
     this.bossView.setLayout(z);
   }
 
@@ -831,8 +846,9 @@ export class GameScene extends Phaser.Scene {
     // phones: a Board button above the death panel opens the full-screen board overlay
     if (this.cfg.isTouch() && online()) {
       const b = snap(addText(this, VIEW_WIDTH / 2, VIEW_HEIGHT / 2 - 62, '[ BOARD ]', { color: C.gold }).setOrigin(0.5).setDepth(D_HUD + 6));
-      b.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-6, -6, b.width + 12, b.height + 12), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
-      onTap(b, () => openBoardOverlay());
+      const pd = hitPad(b.width, b.height, 6);
+      b.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-pd.x, -pd.y, b.width + 2 * pd.x, b.height + 2 * pd.y), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
+      onTap(b, () => openBoardOverlay(), (down) => b.setAlpha(down ? 0.6 : 1));
       this.boardBtn = b;
     }
     this.input2.takeConfirm(); // ignore the press that was in flight when we died

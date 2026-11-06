@@ -187,8 +187,22 @@ export function heroPage(back: () => void, onPick: () => void): MenuPage {
     })),
     lines: () => ['COSMETIC ONLY - SAME STATS'],
     linesTop: 186,
-    decorate: (scene: Phaser.Scene) => {
+    gap: 44, // phones: room for the name and the ability line in one row
+    decorate: (scene: Phaser.Scene, rowY: (i: number) => number, touch: boolean) => {
       const out: Phaser.GameObjects.GameObject[] = [];
+      if (touch) {
+        // phones: one row per hero: the sprite on the left, the name (the row), its abilities under it, SELECTED right
+        const W = scene.scale.width;
+        (['knight', 'wisp'] as const).forEach((h, i) => {
+          const y = rowY(i);
+          const sp = scene.add.sprite(Math.round(W * 0.14), Math.round(y - 2), ATLAS, frame(`${h}_idle`)).setScale(2);
+          if (scene.anims.exists(`${h}_idle`)) sp.play(`${h}_idle`);
+          out.push(sp);
+          out.push(snap(addText(scene, W / 2, Math.round(y + 13), HERO_LINES[h].join(' - '), { color: C.dim }).setOrigin(0.5)));
+          if (save().hero === h) out.push(snap(addText(scene, Math.round(W * 0.86), Math.round(y - 4), 'SELECTED', { color: C.gold }).setOrigin(0.5)));
+        });
+        return out;
+      }
       (['knight', 'wisp'] as const).forEach((h) => {
         const x = HERO_X[h];
         const sp = scene.add.sprite(x, 98, ATLAS, frame(`${h}_idle`)).setScale(3).setDepth(1001);

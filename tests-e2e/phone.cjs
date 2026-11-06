@@ -60,10 +60,29 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
     await sleep(120);
   };
   const tapText = async (text) => {
-    const L = await page.evaluate(() => window.__ngLayout);
-    const t = L && L.texts.find((x) => x.text.replace(/[<>]/g, '').trim() === text);
-    if (!t) return false;
-    await tapGame(t.box[0] + t.box[2] / 2, t.box[1] + t.box[3] / 2);
+    const find = async () => {
+      const L = await page.evaluate(() => window.__ngLayout);
+      const t = L && (L.targets || []).find((x) => x.kind === 'row' && x.label.replace(/[<>]/g, '').trim() === text);
+      const tt = L && L.texts.find((x) => x.text.replace(/[<>]/g, '').trim() === text);
+      return { L, box: t ? t.box : tt ? tt.box : null };
+    };
+    let { L, box } = await find();
+    if (!box) return false;
+    // touch layouts scroll: drag the list until the row is inside it (as a player would)
+    for (let k = 0; k < 6 && L.list && (box[1] < L.list[0] || box[1] + box[3] > L.list[1]); k++) {
+      const up = box[1] + box[3] > L.list[1];
+      const [x, y0] = await toCss(L.screen[0] / 2, (L.list[0] + L.list[1]) / 2);
+      const [, y1] = await toCss(L.screen[0] / 2, (L.list[0] + L.list[1]) / 2 + (up ? -1 : 1) * (L.list[1] - L.list[0]) * 0.4);
+      await touch('touchStart', [{ x, y: y0, id: 7 }]);
+      for (let i = 1; i <= 6; i++) {
+        await touch('touchMove', [{ x, y: y0 + ((y1 - y0) * i) / 6, id: 7 }]);
+        await sleep(20);
+      }
+      await touch('touchEnd', []);
+      await sleep(150);
+      ({ L, box } = await find());
+    }
+    await tapGame(box[0] + box[2] / 2, box[1] + box[3] / 2);
     return true;
   };
   return { ctx, page, errs, dbg, toCss, touch, tapGame, tapText };

@@ -14,6 +14,7 @@ import { BoardPanel } from './web/boardPanel';
 import { computeLayout } from './web/layout';
 import { initBoardOverlay } from './web/boardOverlay';
 import { isInRun, onRunChange, setRelayout } from './web/runFlag';
+import { portraitGameSize, setScreen } from './web/screen';
 
 document.title = TITLE;
 
@@ -88,6 +89,15 @@ function applyLayout(game: Phaser.Game): void {
     footer.hidden = phone;
   }
   game.scale.updateBounds(); // Phaser maps pointers with the canvas bounds: refresh them after moving the canvas
+  // what the scenes need: touch target sizes (CSS px per game px), the phone layouts, the portrait game size. The
+  // canvas already sits inside the safe area (notch, home indicator), so nothing inside the game needs an inset.
+  setScreen({
+    cssPerPx: L.game.w / base.w,
+    phone,
+    portrait: phone && vh > vw,
+    portraitSize: portraitGameSize(vw, vh, dpr),
+    safe: { t: 0, b: 0, l: 0, r: 0 },
+  });
 }
 
 async function boot(): Promise<void> {

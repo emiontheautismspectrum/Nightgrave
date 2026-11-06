@@ -80,7 +80,7 @@ body.phone .orn { display: none; }
 .bover[hidden] { display: none; }
 .bover-bar { display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid #262e3d; flex: none; }
 .bover-back { font: inherit; font-size: 8px; color: #d9d2c0; background: #12161d; border: 1px solid #3a4558;
-  padding: 10px 14px; min-height: 36px; cursor: pointer; }
+  padding: 10px 14px; min-height: 44px; min-width: 88px; cursor: pointer; }
 .bover-back:focus-visible { outline: 1px solid #ffd86b; }
 .bover-scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 10px; }
 .bover-scroll .bpanel { position: static; box-shadow: none; overflow: visible; padding: 4px 6px; max-width: 420px; margin: 0 auto; }

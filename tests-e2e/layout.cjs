@@ -13,7 +13,59 @@ const ROOT = path.join(__dirname, '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
 
+/**
+ * Phones (touch layout): the list may scroll. Every text inside the panel, no overlaps, every target inside the screen
+ * width and visible at SOME scroll position, at least 44 CSS px in both directions, targets never closer than 4 px.
+ */
+function checkTouch(name, L) {
+  const errs = [];
+  if (!L) errs.push('no layout');
+  else {
+    const [W] = L.screen;
+    const [top, bottom] = L.list;
+    const [dy, min] = L.scroll;
+    const [px, py, pw, ph] = L.panel;
+    for (const t of L.texts) {
+      const [x, y, w, h] = t.box;
+      if (x < px - 0.5 || y < py - 0.5 || x + w > px + pw + 0.5 || y + h > py + ph + 0.5) errs.push(`outside panel: "${t.text}"`);
+    }
+    for (let i = 0; i < L.texts.length; i++)
+      for (let j = i + 1; j < L.texts.length; j++) {
+        const [ax, ay, aw, ah] = L.texts[i].box;
+        const [bx, by, bw, bh] = L.texts[j].box;
+        if (ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah) errs.push(`overlap: "${L.texts[i].text}" / "${L.texts[j].text}"`);
+      }
+    if (px < -0.5 || px + pw > W + 0.5) errs.push('panel wider than the screen');
+    const k = L.cssPerPx;
+    for (const t of L.targets) {
+      const [x, y, w, h] = t.box;
+      if (w * k < 44 - 0.5 || h * k < 44 - 0.5) errs.push(`target under 44 CSS px: "${t.label}" (${(w * k).toFixed(0)}x${(h * k).toFixed(0)})`);
+      if (x < -0.5 || x + w > W + 0.5) errs.push(`target off screen: "${t.label}"`);
+      if (t.kind !== 'back') {
+        const yc = y - dy; // content coords
+        // visible at some scroll s in [min, 0]: top <= yc + s and yc + h + s <= bottom
+        const lo = Math.max(min, top - yc);
+        const hi = Math.min(0, bottom - h - yc);
+        if (lo > hi + 0.5) errs.push(`target never fully visible at any scroll: "${t.label}"`);
+      }
+    }
+    for (let i = 0; i < L.targets.length; i++)
+      for (let j = i + 1; j < L.targets.length; j++) {
+        const [ax, ay, aw, ah] = L.targets[i].box;
+        const [bx, by, bw, bh] = L.targets[j].box;
+        if (ax < bx + bw + 4 && bx < ax + aw + 4 && ay < by + bh + 4 && by < ay + ah + 4 && !(ax + aw <= bx || bx + bw <= ax) && !(ay + ah <= by || by + bh <= ay))
+          errs.push(`targets overlap: "${L.targets[i].label}" / "${L.targets[j].label}"`);
+        else if (Math.abs(ay - by) < 1 && Math.abs(ax - bx) > 0) continue; // the row and its arrows share a line
+        else if (ax < bx + bw && bx < ax + aw && ((ay + ah <= by && by - (ay + ah) < 4 - 0.01) || (by + bh <= ay && ay - (by + bh) < 4 - 0.01)))
+          errs.push(`targets closer than 4 px: "${L.targets[i].label}" / "${L.targets[j].label}"`);
+      }
+  }
+  if (errs.length) failed++;
+  console.log(`${errs.length ? 'FAIL' : 'ok  '} ${name}${errs.length ? ': ' + [...new Set(errs)].slice(0, 4).join('; ') : ''}`);
+}
+
 function check(name, L) {
+  if (L && L.touch) return checkTouch(name, L);
   const errs = [];
   if (!L) errs.push('no layout');
   else {
