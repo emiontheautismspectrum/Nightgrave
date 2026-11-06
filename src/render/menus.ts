@@ -201,10 +201,11 @@ export function heroPage(back: () => void, onPick: () => void): MenuPage {
         const W = scene.scale.width;
         (['knight', 'wisp'] as const).forEach((h, i) => {
           const y = rowY(i);
-          const sp = scene.add.sprite(Math.round(W * 0.14), Math.round(y - 2), ATLAS, frame(`${h}_idle`)).setScale(2);
+          // the sprite (y-22..y+10) sits above the ability line (y+11..y+19): the line can stay centred on any width
+          const sp = scene.add.sprite(24, Math.round(y - 6), ATLAS, frame(`${h}_idle`)).setScale(2);
           if (scene.anims.exists(`${h}_idle`)) sp.play(`${h}_idle`);
           out.push(sp);
-          out.push(snap(addText(scene, W / 2, Math.round(y + 13), HERO_LINES[h].join(' - '), { color: C.dim }).setOrigin(0.5)));
+          out.push(snap(addText(scene, W / 2, Math.round(y + 15), HERO_LINES[h].join(' - '), { color: C.dim }).setOrigin(0.5)));
           if (save().hero === h) out.push(snap(addText(scene, Math.round(W * 0.86), Math.round(y - 4), 'SELECTED', { color: C.gold }).setOrigin(0.5)));
         });
         return out;
