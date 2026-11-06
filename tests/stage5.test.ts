@@ -348,7 +348,7 @@ describe('audio logic (no real audio)', () => {
     expect(d.tick({ multiplier: 100, projectiles: [] }, [spawn(1, 'orb_small'), spawn(2, 'orb_small')], 0)).toEqual(['orb_spawn']);
     expect(d.tick({ multiplier: 100, projectiles: [] }, [spawn(3, 'orb_small')], 100)).toEqual([]);
     expect(d.tick({ multiplier: 100, projectiles: [] }, [spawn(4, 'orb_small')], 160)).toEqual(['orb_spawn']);
-    expect(d.tick({ multiplier: 125, projectiles: [] }, [{ type: 'parry_hit', id: 1, x: 0, y: 0, points: 1, multiplier: 1 }], 200)).toEqual(['parry', 'parry_chain']);
+    expect(d.tick({ multiplier: 125, projectiles: [] }, [{ type: 'parry_hit', id: 1, x: 0, y: 0, points: 1, multiplier: 1, perfect: false, multAfter: 1.25 }], 200)).toEqual(['parry', 'parry_chain']);
     expect(d.tick({ multiplier: 125, projectiles: [] }, [spawn(5, 'blade'), spawn(6, 'wraith'), spawn(7, 'rune_shard', 30), spawn(8, 'rune_shard', 30)], 400)).toEqual(['blade_whoosh', 'wraith_wail', 'rune_burst']);
   });
 

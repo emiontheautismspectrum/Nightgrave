@@ -6,6 +6,7 @@
  */
 import type { Difficulty } from '../../src/data/tuning';
 import type { InputFrame } from '../../src/sim/input';
+import { maxPossibleScore } from '../../src/shared/maxScore';
 import { Sim } from '../../src/sim/sim';
 import { botInput } from '../../tests/bot';
 import { SkilledBot } from '../../tests/skilled';
@@ -22,7 +23,7 @@ const BOTS: Bot[] = [
 let hash = 2166136261;
 for (const d of ['easy', 'medium', 'hard'] as Difficulty[]) {
   for (const bot of BOTS) {
-    let parries = 0, pulses = 0, steps = 0, perfect = 0, maxSum = 0, maxAll = 0, score = 0, surv = 0;
+    let parries = 0, pulses = 0, steps = 0, perfect = 0, maxSum = 0, maxAll = 0, score = 0, surv = 0, ratio = 0;
     for (let seed = 1; seed <= N; seed++) {
       const sim = new Sim(seed * 7919, d);
       const input = bot.make(seed);
@@ -44,13 +45,14 @@ for (const d of ['easy', 'medium', 'hard'] as Difficulty[]) {
       maxSum += runMax / 100;
       maxAll = Math.max(maxAll, runMax / 100);
       score += sim.score;
+      ratio = Math.max(ratio, sim.score / maxPossibleScore(s.tick));
       surv += s.survivalTicks / 60;
       hash = Math.imul(hash ^ s.survivalTicks, 16777619) >>> 0;
     }
     console.log(
       `${d.padEnd(6)} ${bot.name.padEnd(10)} parries/run ${(parries / N).toFixed(1).padStart(5)}  stepped ${(pulses ? (100 * steps) / pulses : 0).toFixed(0).padStart(3)}%` +
         `  perfect ${(pulses ? (100 * perfect) / pulses : 0).toFixed(0).padStart(3)}%  avg max x${(maxSum / N).toFixed(2)}  max x${maxAll.toFixed(2)}` +
-        `  score ${(score / N).toFixed(0).padStart(6)}  survival ${(surv / N).toFixed(1)}s`,
+        `  score ${(score / N).toFixed(0).padStart(6)}  survival ${(surv / N).toFixed(1)}s  score/bound max ${(ratio * 100).toFixed(1)}%`,
     );
   }
 }
