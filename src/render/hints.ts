@@ -12,16 +12,20 @@ export function setDevice(d: Device): void {
   device = d;
 }
 
-export function controlsLine(d: Device): string {
-  if (d === 'touch') return 'DRAG MOVE - PARRY - DASH';
+/** `stick`: the touch movement mode (the fixed joystick, default) or the drag trackpad. */
+export function controlsLine(d: Device, stick = true): string {
+  if (d === 'touch') return stick ? 'STICK MOVE - PARRY - DASH' : 'DRAG MOVE - PARRY - DASH';
   if (d === 'gamepad') return 'STICK MOVE - A PARRY - B/RT DASH';
   return 'MOUSE MOVE - LMB PARRY - RMB/SPACE DASH';
 }
 
-export function cardLines(d: Device, leftHanded: boolean): string[] {
+export function cardLines(d: Device, leftHanded: boolean, stick = true): string[] {
+  const side = leftHanded ? 'LEFT' : 'RIGHT';
   const how =
     d === 'touch'
-      ? ['DRAG ANYWHERE TO MOVE', `PARRY: BIG BUTTON (${leftHanded ? 'LEFT' : 'RIGHT'}), DASH ABOVE IT`, 'SECOND FINGER TAP = PARRY']
+      ? stick
+        ? [`STICK (${leftHanded ? 'RIGHT' : 'LEFT'}): MOVE`, `PARRY: BIG BUTTON (${side})`, 'DASH: THE SMALL ONE']
+        : ['DRAG ANYWHERE TO MOVE', `PARRY: BIG BUTTON (${side}), DASH ABOVE IT`, 'SECOND FINGER TAP = PARRY']
       : d === 'gamepad'
         ? ['LEFT STICK: MOVE', 'A: PARRY   B / RT: DASH', 'START: PAUSE']
         : ['MOUSE: MOVE   LEFT CLICK: PARRY', 'RIGHT CLICK / SPACE: DASH', 'KEYS: WASD MOVE, J PARRY, K DASH'];

@@ -5,6 +5,8 @@
  * it is a whole number of device px per world px (crisp). PARRY / DASH are sized in CSS px (thumb targets).
  */
 import { PORTRAIT } from '../data/view';
+import { STICK } from '../data/input';
+import type { TouchStick } from './touch';
 
 export interface Btn {
   id: 'parry' | 'dash';
@@ -24,6 +26,8 @@ export interface PortraitLayout {
   zoom: number;
   bar: { x: number; y: number; w: number };
   buttons: Btn[];
+  /** The fixed joystick (Stick mode): bottom corner of the strip opposite the buttons. */
+  stick: TouchStick;
   pause: { x: number; y: number; w: number; h: number };
 }
 
@@ -43,7 +47,9 @@ export function portraitLayout(W: number, H: number, k: number, dpr: number, lef
   const pad = g(BTN_CSS.hitPad);
   const margin = Math.max(6, g(10));
   const barH = 10;
-  const stripH = barH + 6 + 2 * (rP + pad) + 4;
+  // the fixed joystick: STICK.portrait CSS px across, the knob STICK.knob; the strip is tall enough for it too
+  const rS = g(STICK.portrait / 2);
+  const stripH = barH + 6 + Math.max(2 * (rP + pad), 2 * rS + 2 * g(8)) + 4;
   const view = { x: 0, y: hudH, w: W, h: Math.max(60, H - hudH - stripH) };
   // fill the window: no more than the world height (270) visible, whole device px per world px
   const worldH = 270;
@@ -55,6 +61,8 @@ export function portraitLayout(W: number, H: number, k: number, dpr: number, lef
   const xD = xP - (rP + pad) - (rD + pad) - 2;
   const yD = yB - Math.round(rP * 0.35);
   const mirror = (x: number) => (leftHanded ? W - x : x);
+  // the stick: the bottom corner opposite PARRY (left; right when left-handed), under the boss bar
+  const stick: TouchStick = { x: mirror(margin + rS), y: H - g(8) - rS - 2, r: rS, knob: g(STICK.knob / 2), zone: rS + g(STICK.zonePad) };
   const buttons: Btn[] = [
     { id: 'parry', x: mirror(xP), y: yB, r: rP, hit: rP + pad },
     { id: 'dash', x: mirror(xD), y: yD, r: rD, hit: rD + pad },
@@ -63,6 +71,7 @@ export function portraitLayout(W: number, H: number, k: number, dpr: number, lef
     W, H, hudH, view, zoom,
     bar: { x: margin, y: H - stripH + 4, w: W - 2 * margin },
     buttons,
+    stick,
     pause: { x: W - 4 - 19, y: 3, w: 19, h: 14 },
   };
 }

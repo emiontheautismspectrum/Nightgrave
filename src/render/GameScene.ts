@@ -35,7 +35,7 @@ import { InputCollector } from './input';
 import { settingsPage, type MenuCtx } from './menus';
 import { canRestart, isPortraitView, RunDriver, type PauseReason } from './runDriver';
 import { cardLines, ContextHints, getDevice, HINT_TEXT } from './hints';
-import { TouchModel } from './touch';
+import { TouchModel, touchStick, type TouchStick } from './touch';
 import { C, hitPad, MenuView, onTap, type MenuPage } from './ui';
 
 /** Frame time above this for PERF_WINDOW_MS lowers effects for the rest of the session (render only). */
@@ -203,7 +203,7 @@ export class GameScene extends Phaser.Scene {
     this.buildHud();
     this.bossView = new BossView(this, { ysort: D_YSORT, fog: D_FOG, hud: D_HUD }, this.vigOuter, this.banner, al.vignette_outer ?? 1);
     const st = save().settings;
-    const touch = new TouchModel({ sensitivity: st.dragSensitivity, leftHanded: st.leftHanded, secondFingerParry: st.secondFingerParry, smoothing: st.touchSmoothing });
+    const touch = new TouchModel(touchOpts(st));
     this.input2 = new InputCollector(this, touch, {
       uiHit: (x, y) => this.uiHit(x, y),
       hero: () => this.sim.state.hero,
@@ -386,6 +386,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.input2.touch.view = z ? 'zoomed' : 'full';
     this.input2.touch.zoomedButtons = z ? this.pl.buttons : null;
+    this.syncStick();
     this.input2.touch.rebase(); // a finger held across the switch must not jump by the change of screen space
     this.layoutHud();
     requestRelayout();
@@ -512,8 +513,11 @@ export class GameScene extends Phaser.Scene {
     const st = save().settings;
     const t = this.input2.touch;
     const mirrored = t.opts.leftHanded !== st.leftHanded;
-    t.opts = { sensitivity: st.dragSensitivity, leftHanded: st.leftHanded, secondFingerParry: st.secondFingerParry, smoothing: st.touchSmoothing };
-    if (mirrored && this.zoomed) this.setView(true); // the portrait buttons move to the other corner
+    const modeChanged = !!t.opts.stick !== (st.touchControls === 'stick');
+    t.opts = touchOpts(st);
+    if (modeChanged) t.releaseAll(); // switching Stick / Drag never leaves a finger holding the old control
+    if (mirrored && this.zoomed) this.setView(true); // the portrait buttons and the stick move to the other corner
+    this.syncStick();
     const low = st.effects === 'low' || this.fxLow;
     this.fog.setVisible(!low);
     this.mist?.setVisible(!low);
@@ -530,14 +534,14 @@ export class GameScene extends Phaser.Scene {
   private showTouchHint(): void {
     if (this.hint) return;
     this.driver.pause('hint');
-    const lines = cardLines(getDevice(), save().settings.leftHanded);
+    const lines = cardLines(getDevice(), save().settings.leftHanded, save().settings.touchControls !== 'drag');
     const W = this.scale.width;
     const H = this.scale.height;
     const bg = this.add.rectangle(0, 0, W, H, 0x0b0d12, 0.82).setOrigin(0);
     const t = addText(this, W / 2, H / 2, lines.join('\n'), { color: C.bone, align: 'center', lineSpacing: 5 }).setOrigin(0.5);
     if (t.width > W - 16) t.setMaxWidth(W - 16); // the narrow portrait screen: wrap
     snap(t);
-    this.hint = this.add.container(0, 0, [bg, t]).setDepth(D_HUD + 20);
+    this.hint = this.add.container(0, 0, [bg, t, ...this.controlLabels()]).setDepth(D_HUD + 20);
     const shownAt = this.time.now;
     const dismiss = (e?: KeyboardEvent) => {
       if (e?.repeat) return; // a key held from the title (auto-repeat) must not close the card unread
@@ -554,6 +558,28 @@ export class GameScene extends Phaser.Scene {
     this.hintPadArmed = false;
     bg.setInteractive().on('pointerup', dismiss);
     this.input.keyboard?.on('keydown', dismiss);
+  }
+
+  /**
+   * First-run card on a touch device: the stick and the two buttons drawn again on top of the card with short labels
+   * (MOVE / PARRY / DASH) next to them, so the player sees where to touch. Only while the card is shown.
+   */
+  private controlLabels(): Phaser.GameObjects.GameObject[] {
+    if (getDevice() !== 'touch') return [];
+    const out: Phaser.GameObjects.GameObject[] = [];
+    const g = this.add.graphics();
+    out.push(g);
+    const t = this.input2.touch;
+    if (!this.zoomed) this.syncStick();
+    const mark = (x: number, y: number, r: number, label: string) => {
+      g.lineStyle(1, 0xffd86b, 0.9).strokeCircle(x, y, r);
+      const above = y - r - 8 > 4;
+      out.push(snap(addText(this, x, above ? y - r - 7 : y + r + 7, label, { color: C.gold }).setOrigin(0.5)));
+    };
+    const S = t.stickLayout;
+    if (t.opts.stick && S) mark(S.x, S.y, S.r, 'MOVE');
+    for (const b of t.buttons()) mark(b.x, b.y, b.r, b.id === 'parry' ? 'PARRY' : 'DASH');
+    return out;
   }
 
   private hintDismiss: (() => void) | null = null;
@@ -1038,6 +1064,7 @@ export class GameScene extends Phaser.Scene {
       replay: () => JSON.stringify(this.sim.log),
       buttons: this.input2.touch.buttons().map((b) => ({ ...b })), pause: { ...this.pauseRect },
       submitStatus: this.submit?.statusText() ?? null,
+      stick: this.input2.touch.opts.stick && this.input2.touch.stickLayout ? { ...this.input2.touch.stickLayout } : null,
       mult: st.multiplier, guard: st.hero.guardCharges, aim: [st.hero.aimX, st.hero.aimY], trail: st.trail.length, dbl: st.tick < st.doubleUntil, pickup: st.pickup ? { x: st.pickup.x, y: st.pickup.y, kind: st.pickup.kind } : null,
       proj: st.projectiles.map((pr) => [pr.x, pr.y, pr.vx, pr.vy, pr.radius, pr.parryable ? 1 : 0]),
     };
@@ -1174,12 +1201,50 @@ export class GameScene extends Phaser.Scene {
       }
   }
 
+  /**
+   * Where the fixed joystick is on the current screen: the portrait strip, or the landscape side margin (its size
+   * follows the CSS scale). A held stick is re-anchored relatively (no jump) when the layout really changed.
+   */
+  private syncStick(): void {
+    const t = this.input2.touch;
+    const next: TouchStick = this.zoomed ? this.pl.stick : touchStick(save().settings.leftHanded);
+    const cur = t.stickLayout;
+    if (cur && cur.x === next.x && cur.y === next.y && cur.r === next.r && cur.zone === next.zone) return;
+    t.stickLayout = next;
+    if (cur && t.stickHeld()) t.rebase();
+  }
+
+  /**
+   * The fixed joystick (Stick mode): a thin translucent base ring with four ticks, a brighter knob; always shown in a
+   * run, dimmed while paused. Palette colours only (stone, dim blue, bone).
+   */
+  private drawStick(g: Phaser.GameObjects.Graphics): void {
+    const t = this.input2.touch;
+    const S = t.stickLayout;
+    if (!t.opts.stick || !S) return;
+    const dim = this.driver.paused ? 0.5 : 1;
+    g.fillStyle(0x12161d, 0.35 * dim).fillCircle(S.x, S.y, S.r);
+    g.lineStyle(1, 0x7f93b8, 0.55 * dim).strokeCircle(S.x, S.y, S.r);
+    const tick = Math.max(3, Math.round(S.r * 0.12));
+    g.lineStyle(1, 0x7f93b8, 0.6 * dim);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const)
+      g.lineBetween(S.x + dx * (S.r - tick - 2), S.y + dy * (S.r - tick - 2), S.x + dx * (S.r - 2), S.y + dy * (S.r - 2));
+    const k = t.knobOffset();
+    const held = t.stickHeld();
+    const kx = Math.round(S.x + k.x);
+    const ky = Math.round(S.y + k.y);
+    g.fillStyle(0xd9d2c0, (held ? 0.55 : 0.35) * dim).fillCircle(kx, ky, S.knob);
+    g.lineStyle(1, 0xd9d2c0, (held ? 0.9 : 0.6) * dim).strokeCircle(kx, ky, S.knob);
+  }
+
   /** Touch buttons in the side margin: semi-transparent circles with cooldown rings (replace the desktop icons). */
   private drawTouchButtons(touch: boolean): void {
     const g = this.touchGfx;
     g.clear();
     this.touchIcons.forEach((i) => i.setVisible(touch));
     if (!touch) return;
+    if (!this.zoomed) this.syncStick(); // the landscape stick follows the CSS scale (cheap compare)
+    this.drawStick(g);
     const st = this.sim.state;
     const p = this.sim.params;
     const t = this.input2.touch;
@@ -1315,4 +1380,9 @@ export class GameScene extends Phaser.Scene {
 function publishArc(g: ArcGeom | null, pulse = false, pixels = 0, alpha = 0): void {
   if (import.meta.env.DEV || import.meta.env.VITE_SMOKE === '1')
     (window as unknown as { __nightgrave?: { arc: object | null } }).__nightgrave = { arc: g ? { ...g, pulse, pixels, alpha } : null };
+}
+
+/** The touch model options from the saved settings (Stick is the default; Drag keeps its sensitivity / smoothing). */
+function touchOpts(st: ReturnType<typeof save>['settings']): ConstructorParameters<typeof TouchModel>[0] {
+  return { sensitivity: st.dragSensitivity, leftHanded: st.leftHanded, secondFingerParry: st.secondFingerParry, smoothing: st.touchSmoothing, stick: st.touchControls === 'stick' };
 }

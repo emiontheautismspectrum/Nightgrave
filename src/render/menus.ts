@@ -75,7 +75,16 @@ export function settingsPage(ctx: MenuCtx, back: () => void): MenuPage {
   const controlsAt = items.length;
   items.push({ label: () => 'CONTROLS', onActivate: () => ctx.menu.show(controlsPage(() => ctx.menu.show(settingsPage(ctx, back), controlsAt))) });
   if (ctx.isTouch()) {
-    items.push(
+    // the movement mode; in Stick mode the drag-only rows (sensitivity, smoothing, second-finger parry) are hidden
+    const at = items.length;
+    const flip = () => {
+      s().touchControls = s().touchControls === 'stick' ? 'drag' : 'stick';
+      changed();
+      ctx.menu.show(settingsPage(ctx, back), at); // the rows below change: lay the page out again
+    };
+    items.push({ label: () => `TOUCH CONTROLS ${s().touchControls === 'stick' ? 'STICK' : 'DRAG'}`, onLeft: flip, onRight: flip });
+    const drag = s().touchControls === 'drag';
+    if (drag) items.push(
       {
         label: () => `DRAG SENSITIVITY ${s().dragSensitivity.toFixed(2)}`,
         onLeft: () => ((s().dragSensitivity = clampSensitivity(Math.max(0.5, s().dragSensitivity - 0.25))), changed()),
@@ -86,10 +95,10 @@ export function settingsPage(ctx: MenuCtx, back: () => void): MenuPage {
         onLeft: () => ((s().touchSmoothing = SMOOTH[(SMOOTH.indexOf(s().touchSmoothing) + 2) % 3]!), changed()),
         onRight: () => ((s().touchSmoothing = SMOOTH[(SMOOTH.indexOf(s().touchSmoothing) + 1) % 3]!), changed()),
       },
-      toggle('LEFT-HANDED BUTTONS', 'leftHanded'),
-      toggle('SECOND-FINGER PARRY', 'secondFingerParry'),
-      toggle('HAPTICS', 'haptics'),
     );
+    items.push(toggle('LEFT-HANDED CONTROLS', 'leftHanded'));
+    if (drag) items.push(toggle('SECOND-FINGER PARRY', 'secondFingerParry'));
+    items.push(toggle('HAPTICS', 'haptics'));
   }
   items.push({ label: () => 'SHOW TIPS AGAIN', onActivate: () => ((s().touchHintSeen = false), (s().hintsDone = false), (s().hintParrySeen = false), (s().hintDashSeen = false), persist(), ctx.onShowTouchHint?.()) });
   return { title: 'SETTINGS', items, onBack: back, top: 52, gap: 13 };

@@ -286,7 +286,7 @@ export class TitleScene extends Phaser.Scene {
       ],
       // the controls hint for the active device and the champion block: the footer (pinned at the bottom in portrait)
       lines: () => [],
-      foot: () => [controlsLine(getDevice()), '', ...this.boardLines()],
+      foot: () => [controlsLine(getDevice(), save().settings.touchControls !== 'drag'), '', ...this.boardLines()],
     };
     this.menu.show(page, focus);
   }
