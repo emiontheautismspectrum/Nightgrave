@@ -20,8 +20,10 @@ import { online } from '../net/api';
 import { SubmitPanel } from './SubmitPanel';
 import { requestRelayout, setInRun } from '../web/runFlag';
 import { boardOverlayOpen, openBoardOverlay } from '../web/boardOverlay';
-import { PORTRAIT, portraitViewport } from '../data/view';
+import { PORTRAIT } from '../data/view';
+import { portraitLayout, type PortraitLayout } from './portraitLayout';
 import { FollowCam } from './camera';
+import { getScreen, onScreenChange } from '../web/screen';
 import { edgeMarkers } from './edgeMarkers';
 import { decayAlpha, doubleActive, LABEL, LABEL_MS, labelSpot, multColor, type LabelBounds } from './multFeedback';
 import { emitAudioEvent } from './events';
@@ -30,7 +32,7 @@ import { settingsPage, type MenuCtx } from './menus';
 import { canRestart, isPortraitView, RunDriver, type PauseReason } from './runDriver';
 import { cardLines, ContextHints, getDevice, HINT_TEXT } from './hints';
 import { TouchModel } from './touch';
-import { C, MenuView, onTap, type MenuPage } from './ui';
+import { C, hitPad, MenuView, onTap, type MenuPage } from './ui';
 
 /** Frame time above this for PERF_WINDOW_MS lowers effects for the rest of the session (render only). */
 const PERF_SLOW_MS = 20;
@@ -38,8 +40,7 @@ const PERF_WINDOW_MS = 3000;
 /** Top HUD band inside the arena width (x 48..432): score, multiplier, wave, ember, pickup timers, daily label, pause. */
 const PAUSE_BTN = { x: 410, y: 5, w: 20, h: 16 };
 const HUD_X = { score: 52, mult: 124, wave: 172, daily: 304 };
-/** Zoomed phone-portrait HUD (216 px wide band, two rows): pause button top right. */
-const PAUSE_BTN_Z = { x: 194, y: 3, w: 19, h: 14 };
+/** Zoomed phone-portrait HUD (two rows; the pause button top right comes from the portrait layout). */
 const HUD_Z = { score: [4, 5], mult: [72, 5], wave: [120, 5], daily: [4, 18] } as const;
 const FADE_MS = 120;
 // draw order (CLAUDE.md "Arena"): ground < ground telegraphs < y-sorted world < fog/vignette/overhang < HUD
@@ -138,10 +139,9 @@ export class GameScene extends Phaser.Scene {
   private portrait = false;
   /** Any tick of this run played with the zoomed view (replay / board metadata only). */
   private runZoomed = false;
-  private follow = new FollowCam({
-    viewW: portraitViewport().w / PORTRAIT.zoom, viewH: portraitViewport().h / PORTRAIT.zoom, worldW: VIEW_WIDTH, worldH: VIEW_HEIGHT,
-    deadZone: PORTRAIT.deadZone, lead: PORTRAIT.lead, follow: PORTRAIT.follow, followReduced: PORTRAIT.followReduced,
-  });
+  /** The portrait layout for the real screen (recomputed on a screen change or a left-handed switch). */
+  private pl: PortraitLayout = this.portraitLayoutNow();
+  private follow = this.makeFollow();
   private camLast = { x: 0, y: 0 };
   private uiCam: Phaser.Cameras.Scene2D.Camera | null = null;
   private markGfx!: Phaser.GameObjects.Graphics;
@@ -168,7 +168,7 @@ export class GameScene extends Phaser.Scene {
     this.uiCam = null; // the camera manager destroyed the old one on shutdown (a scene restart reuses this instance)
     this.zoomed = false;
     // the world / HUD camera split is assigned right before every render (objects created anywhere this frame too)
-    this.events.on(Phaser.Scenes.Events.PRE_RENDER, () => this.filterCameras());
+    this.events.on(Phaser.Scenes.Events.PRE_RENDER, this.filterCameras, this);
     this.buildArena();
     // y-sorted world: props, casters, hero, projectiles and effects all use depth = Y_SORT + base y
     this.shadow = this.add.image(0, 0, ATLAS, frame('hero_shadow'));
@@ -191,7 +191,7 @@ export class GameScene extends Phaser.Scene {
     this.buildHud();
     this.bossView = new BossView(this, { ysort: D_YSORT, fog: D_FOG, hud: D_HUD }, this.vigOuter, this.banner, al.vignette_outer ?? 1);
     const st = save().settings;
-    const touch = new TouchModel({ sensitivity: st.dragSensitivity, leftHanded: st.leftHanded, secondFingerParry: st.secondFingerParry });
+    const touch = new TouchModel({ sensitivity: st.dragSensitivity, leftHanded: st.leftHanded, secondFingerParry: st.secondFingerParry, smoothing: st.touchSmoothing });
     this.input2 = new InputCollector(this, touch, {
       uiHit: (x, y) => this.uiHit(x, y),
       hero: () => this.sim.state.hero,
@@ -205,6 +205,10 @@ export class GameScene extends Phaser.Scene {
       },
     });
     this.menu = new MenuView(this, D_HUD + 10, 0.7);
+    // the screen changed (rotation, browser bars, resize): the portrait layout, then the open menu
+    // the screen changed (rotation, browser bars, resize): one path for the orientation, the layout and the panels
+    const offScreen = onScreenChange(() => this.onResize());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, offScreen);
     this.buildPauseButton();
     this.touchGfx = this.add.graphics().setDepth(D_HUD);
     this.chevron = this.add.graphics();
@@ -230,11 +234,15 @@ export class GameScene extends Phaser.Scene {
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('resize', onOrient);
+      this.events.off(Phaser.Scenes.Events.PRE_RENDER, this.filterCameras, this); // the scene is reused on the next run
       if (this.zoomed) {
-        // back to the full 480x270 game for the title screen
         this.zoomed = false;
-        this.scale.resize(VIEW_WIDTH, VIEW_HEIGHT);
-        requestRelayout();
+        // back to the full 480x270 game for a landscape title (a portrait title sets its own size: no flicker of the
+        // board panel and no extra board fetch in between)
+        if (!getScreen().portrait) {
+          this.scale.resize(VIEW_WIDTH, VIEW_HEIGHT);
+          requestRelayout();
+        }
       }
     });
     audio.setAmbience(true);
@@ -250,10 +258,26 @@ export class GameScene extends Phaser.Scene {
     if (this.menu?.active || this.hint || this.submit?.hit(x, y)) return true;
     if (this.boardBtn && this.boardBtn.visible) {
       const r = this.boardBtn.getBounds();
-      if (x >= r.x - 4 && x <= r.right + 4 && y >= r.y - 4 && y <= r.bottom + 4) return true;
+      const pd = hitPad(r.width, r.height, 6);
+      if (x >= r.x - pd.x && x <= r.right + pd.x && y >= r.y - pd.y && y <= r.bottom + pd.y) return true;
     }
+    const r = this.pauseHitRect();
+    return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  }
+
+  /**
+   * The pause button's touch target (game px, screen space): >= 44 CSS px on phones, grown upwards (off the top edge)
+   * and sideways into the right margin, never down into the playfield. The same rect for Phaser and uiHit.
+   */
+  private pauseHitRect(): { x: number; y: number; w: number; h: number } {
     const b = this.pauseRect;
-    return x >= b.x - 4 && x <= b.x + b.w + 4 && y >= b.y - 4 && y <= b.y + b.h + 4;
+    const pd = hitPad(b.w, b.h);
+    const w = b.w + 2 * pd.x;
+    const h = b.h + 2 * pd.y;
+    const playTop = this.zoomed ? this.pl.view.y : 27;
+    const bottom = Math.max(b.y + b.h, Math.min(b.y + b.h + pd.y, playTop - 1));
+    const right = Math.min(this.scale.width, b.x + b.w + Math.max(pd.x, w - b.w - pd.x));
+    return { x: right - w, y: bottom - h, w, h };
   }
 
   private buildPauseButton(): void {
@@ -261,12 +285,26 @@ export class GameScene extends Phaser.Scene {
     const bg = this.add.rectangle(0, 0, b.w, b.h, 0x0b0d12, 0.6).setOrigin(0).setStrokeStyle(1, 0x3a4558);
     const t = addText(this, b.w / 2 - 7, b.h / 2 - 4, 'II', { color: C.bone });
     this.pauseBtn = this.add.container(b.x, b.y, [bg, t]).setDepth(D_HUD + 1).setSize(b.w, b.h);
-    this.pauseBtn.setInteractive(new Phaser.Geom.Rectangle(-4, -4, b.w + 8, b.h + 8), Phaser.Geom.Rectangle.Contains);
-    onTap(this.pauseBtn, () => this.togglePause());
+    // a separate invisible zone takes the taps (origin top-left: no container display-origin offset)
+    this.pauseZone = this.add.zone(0, 0, 1, 1).setOrigin(0).setDepth(D_HUD + 1);
+    this.setPauseHit();
+    onTap(this.pauseZone, () => this.togglePause(), (down) => this.pauseBtn.setAlpha(down ? 0.6 : 1));
+  }
+  private pauseZone!: Phaser.GameObjects.Zone;
+
+  /** The pause button's hit area: >= 44 CSS px on phones (the layout can change it: rotation, browser bars). */
+  private setPauseHit(): void {
+    const r = this.pauseHitRect();
+    this.pauseZone.setPosition(r.x, r.y).setSize(r.w, r.h);
+    const area = new Phaser.Geom.Rectangle(0, 0, r.w, r.h);
+    if (this.pauseZone.input) this.pauseZone.input.hitArea = area;
+    else this.pauseZone.setInteractive(area, Phaser.Geom.Rectangle.Contains);
   }
 
+  /** The same portrait test as the page layout (safe-area-reduced viewport, phone). */
   private isPortrait(): boolean {
-    return isPortraitView(window.innerWidth, window.innerHeight, this.cfg.isTouch());
+    const sc = getScreen();
+    return sc.phone ? sc.portrait : isPortraitView(window.innerWidth, window.innerHeight, this.cfg.isTouch());
   }
 
   /** Rotating mid-run re-lays out and pauses: the player resumes deliberately (RESUME). */
@@ -277,23 +315,45 @@ export class GameScene extends Phaser.Scene {
       if (this.driver && this.sim.state.alive && !this.hint) this.autoPause('rotate');
     }
     this.syncView();
+    // a new portrait size (browser bars, keyboard): lay out again only when the layout really changed (the follow
+    // camera keeps its state otherwise)
+    if (this.zoomed && JSON.stringify(this.portraitLayoutNow()) !== JSON.stringify(this.pl)) this.setView(true);
+    this.menu.relayout();
+    this.submit?.relayout();
   }
 
-  /** The zoomed view is on only while a phone in portrait plays (pause menu, cards, death panel: the full arena). */
+  /** A phone in portrait always uses the portrait screen (run, pause menu, cards, death panel); landscape the arena. */
   private syncView(): void {
-    const z = this.portrait && !!this.sim && this.sim.state.alive && !this.menu.active && !this.hint;
+    const z = this.portrait;
     if (z !== this.zoomed) this.setView(z);
+  }
+
+  private portraitLayoutNow(): PortraitLayout {
+    const ps = getScreen().portraitSize;
+    return portraitLayout(ps.w, ps.h, ps.k, window.devicePixelRatio || 1, save().settings.leftHanded);
+  }
+
+  private makeFollow(): FollowCam {
+    const v = this.pl.view;
+    return new FollowCam({
+      viewW: v.w / this.pl.zoom, viewH: v.h / this.pl.zoom, worldW: VIEW_WIDTH, worldH: VIEW_HEIGHT,
+      deadZone: PORTRAIT.deadZone, lead: PORTRAIT.lead, follow: PORTRAIT.follow, followReduced: PORTRAIT.followReduced,
+    });
   }
 
   private setView(z: boolean): void {
     this.zoomed = z;
-    const W = z ? PORTRAIT.w : VIEW_WIDTH;
-    const H = z ? PORTRAIT.h : VIEW_HEIGHT;
+    if (z) {
+      this.pl = this.portraitLayoutNow();
+      this.follow = this.makeFollow();
+    }
+    const W = z ? this.pl.W : VIEW_WIDTH;
+    const H = z ? this.pl.H : VIEW_HEIGHT;
     if (this.scale.width !== W || this.scale.height !== H) this.scale.resize(W, H);
     const cam = this.cameras.main;
     if (z) {
-      const vp = portraitViewport();
-      cam.setViewport(vp.x, vp.y, vp.w, vp.h).setZoom(PORTRAIT.zoom);
+      const vp = this.pl.view;
+      cam.setViewport(vp.x, vp.y, vp.w, vp.h).setZoom(this.pl.zoom);
       if (!this.uiCam) this.uiCam = this.cameras.add(0, 0, W, H, false, 'ui');
       this.uiCam.setViewport(0, 0, W, H).setScroll(0, 0).setVisible(true);
       const h = this.sim.state.hero;
@@ -307,6 +367,7 @@ export class GameScene extends Phaser.Scene {
       this.markGfx.clear();
     }
     this.input2.touch.view = z ? 'zoomed' : 'full';
+    this.input2.touch.zoomedButtons = z ? this.pl.buttons : null;
     this.input2.touch.rebase(); // a finger held across the switch must not jump by the change of screen space
     this.layoutHud();
     requestRelayout();
@@ -315,17 +376,21 @@ export class GameScene extends Phaser.Scene {
   /** HUD, pause button, boss bar and banner for the current view (screen game px). */
   private layoutHud(): void {
     const z = this.zoomed;
-    if (z) this.hudBand.setPosition(0, 0).setSize(PORTRAIT.w, PORTRAIT.hudH);
+    if (z) this.hudBand.setPosition(0, 0).setSize(this.pl.W, this.pl.hudH);
     else this.hudBand.setPosition(48, 4).setSize(384, 18);
     const pos = (o: UIText, full: [number, number], zz: readonly [number, number]) => o.setPosition(...(z ? zz : full));
     pos(this.hudScore, [HUD_X.score, 9], HUD_Z.score);
     pos(this.hudMult, [HUD_X.mult, 9], HUD_Z.mult);
     pos(this.hudWave, [HUD_X.wave, 9], HUD_Z.wave);
     pos(this.hudDaily, [HUD_X.daily, 9], HUD_Z.daily);
-    this.banner.setPosition(z ? PORTRAIT.w / 2 : VIEW_WIDTH / 2, z ? 64 : 70);
-    this.pauseRect = z ? PAUSE_BTN_Z : PAUSE_BTN;
+    this.banner.setPosition(z ? this.pl.W / 2 : VIEW_WIDTH / 2, z ? this.pl.hudH + 34 : 70);
+    this.pauseRect = z ? this.pl.pause : PAUSE_BTN;
+    // the death panel and its BOARD button: centred on whichever screen is shown
+    this.panel.setPosition(this.scale.width / 2, this.scale.height / 2);
+    this.boardBtn?.setPosition(this.scale.width / 2, this.scale.height / 2 - 62);
     this.pauseBtn.setPosition(this.pauseRect.x, this.pauseRect.y);
-    this.bossView.setLayout(z);
+    this.setPauseHit();
+    this.bossView.setLayout(z, z ? this.pl.bar : undefined);
   }
 
   /** Centre the Phaser camera on the follow camera (whole world px: crisp). */
@@ -428,7 +493,9 @@ export class GameScene extends Phaser.Scene {
   private applySettings(): void {
     const st = save().settings;
     const t = this.input2.touch;
-    t.opts = { sensitivity: st.dragSensitivity, leftHanded: st.leftHanded, secondFingerParry: st.secondFingerParry };
+    const mirrored = t.opts.leftHanded !== st.leftHanded;
+    t.opts = { sensitivity: st.dragSensitivity, leftHanded: st.leftHanded, secondFingerParry: st.secondFingerParry, smoothing: st.touchSmoothing };
+    if (mirrored && this.zoomed) this.setView(true); // the portrait buttons move to the other corner
     const low = st.effects === 'low' || this.fxLow;
     this.fog.setVisible(!low);
     this.mist?.setVisible(!low);
@@ -446,8 +513,12 @@ export class GameScene extends Phaser.Scene {
     if (this.hint) return;
     this.driver.pause('hint');
     const lines = cardLines(getDevice(), save().settings.leftHanded);
-    const bg = this.add.rectangle(0, 0, VIEW_WIDTH, VIEW_HEIGHT, 0x0b0d12, 0.82).setOrigin(0);
-    const t = snap(addText(this, VIEW_WIDTH / 2, VIEW_HEIGHT / 2, lines.join('\n'), { color: C.bone, align: 'center', lineSpacing: 5 }).setOrigin(0.5));
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const bg = this.add.rectangle(0, 0, W, H, 0x0b0d12, 0.82).setOrigin(0);
+    const t = addText(this, W / 2, H / 2, lines.join('\n'), { color: C.bone, align: 'center', lineSpacing: 5 }).setOrigin(0.5);
+    if (t.width > W - 16) t.setMaxWidth(W - 16); // the narrow portrait screen: wrap
+    snap(t);
     this.hint = this.add.container(0, 0, [bg, t]).setDepth(D_HUD + 20);
     const shownAt = this.time.now;
     const dismiss = (e?: KeyboardEvent) => {
@@ -482,9 +553,10 @@ export class GameScene extends Phaser.Scene {
       let y = this.sim.state.hero.y < 135 ? 222 : 36;
       if (this.zoomed) {
         // screen space of the portrait view: the far half of the world window
-        const sy = portraitViewport().y + (this.sim.state.hero.y - this.follow.rect().y0) * PORTRAIT.zoom;
-        x = PORTRAIT.w / 2;
-        y = sy < portraitViewport().y + portraitViewport().h / 2 ? portraitViewport().y + portraitViewport().h - 16 : portraitViewport().y + 16;
+        const v = this.pl.view;
+        const sy = v.y + (this.sim.state.hero.y - this.follow.rect().y0) * this.pl.zoom;
+        x = this.pl.W / 2;
+        y = sy < v.y + v.h / 2 ? v.y + v.h - 16 : v.y + 16;
       }
       const t = snap(addText(this, x, y, HINT_TEXT[k], { color: k === 'parry' ? C.violet : '#d12b3a' }).setOrigin(0.5).setDepth(D_HUD));
       this.ctxText = t;
@@ -830,9 +902,10 @@ export class GameScene extends Phaser.Scene {
     this.panel.setVisible(true);
     // phones: a Board button above the death panel opens the full-screen board overlay
     if (this.cfg.isTouch() && online()) {
-      const b = snap(addText(this, VIEW_WIDTH / 2, VIEW_HEIGHT / 2 - 62, '[ BOARD ]', { color: C.gold }).setOrigin(0.5).setDepth(D_HUD + 6));
-      b.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-6, -6, b.width + 12, b.height + 12), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
-      onTap(b, () => openBoardOverlay());
+      const b = snap(addText(this, this.scale.width / 2, this.scale.height / 2 - 62, '[ BOARD ]', { color: C.gold }).setOrigin(0.5).setDepth(D_HUD + 6));
+      const pd = hitPad(b.width, b.height, 6);
+      b.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-pd.x, -pd.y, b.width + 2 * pd.x, b.height + 2 * pd.y), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
+      onTap(b, () => openBoardOverlay(), (down) => b.setAlpha(down ? 0.6 : 1));
       this.boardBtn = b;
     }
     this.input2.takeConfirm(); // ignore the press that was in flight when we died
@@ -929,6 +1002,7 @@ export class GameScene extends Phaser.Scene {
         for (let i = 0; i < n; i++) this.driver.advance(1000 / TICK_RATE, () => this.input2.sample(), this.onTick);
       },
       replay: () => JSON.stringify(this.sim.log),
+      buttons: this.input2.touch.buttons().map((b) => ({ ...b })), pause: { ...this.pauseRect },
       mult: st.multiplier, dbl: st.tick < st.doubleUntil, pickup: st.pickup ? { x: st.pickup.x, y: st.pickup.y, kind: st.pickup.kind } : null,
       proj: st.projectiles.map((pr) => [pr.x, pr.y, pr.vx, pr.vy, pr.radius, pr.parryable ? 1 : 0]),
     };
@@ -1050,7 +1124,7 @@ export class GameScene extends Phaser.Scene {
         g.arc(b.x, b.y, b.r - 2, -Math.PI / 2, -Math.PI / 2 + (1 - cd) * Math.PI * 2, false);
         g.strokePath();
       }
-      this.touchIcons[i]?.setPosition(b.x, b.y).setFrame(frame(b.id === 'parry' ? 'icon_parry' : 'icon_dash', cd > 0 ? 1 : 0)).setAlpha(0.85);
+      this.touchIcons[i]?.setScale(b.r >= 24 ? 2 : 1).setPosition(b.x, b.y).setFrame(frame(b.id === 'parry' ? 'icon_parry' : 'icon_dash', cd > 0 ? 1 : 0)).setAlpha(0.85);
     });
   }
 

@@ -6,6 +6,8 @@ import Phaser from 'phaser';
 import { TITLE, VIEW_HEIGHT, VIEW_WIDTH } from '../config';
 import { fetchBoard, getServerDate, online, type Board } from '../net/api';
 import { openBoardOverlay } from '../web/boardOverlay';
+import { getScreen, onScreenChange } from '../web/screen';
+import { requestRelayout } from '../web/runFlag';
 import { utcDateKey } from '../daily';
 import { addDays } from '../shared/daily';
 import { DIFFICULTIES, persist, save } from '../storage';
@@ -76,7 +78,18 @@ export class TitleScene extends Phaser.Scene {
     this.add.image(0, 0, bgKey('vignette')).setOrigin(0).setDepth(801).setAlpha(al.vignette ?? 1);
     this.add.image(0, 0, bgKey('vignette_outer')).setOrigin(0).setDepth(801).setAlpha(al.vignette_outer ?? 1);
     this.add.image(0, 0, bgKey('forest_near')).setOrigin(0).setDepth(802);
+    // phones in portrait: the arena stays as a dimmed background, cropped to fill the tall screen
+    this.bgDim = this.add.rectangle(0, 0, VIEW_WIDTH, VIEW_HEIGHT, 0x0b0d12, 0.45).setOrigin(0).setDepth(950).setVisible(false);
     this.menu = new MenuView(this, 1000);
+    // the screen changed (rotation, browser bars, resize): the canvas size, then the open page
+    const off = onScreenChange(() => this.applyView());
+    this.events.on(Phaser.Scenes.Events.PRE_RENDER, this.filterCameras, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      off();
+      this.events.off(Phaser.Scenes.Events.PRE_RENDER, this.filterCameras, this); // the scene is reused
+      this.uiCam = null;
+    });
+    this.applyView();
     audio.setMusic('music_menu');
     audio.setAmbience(false);
     this.showMain();
@@ -93,22 +106,26 @@ export class TitleScene extends Phaser.Scene {
     this.menu.active = false; // the menu ignores keys / pad while the intro runs
     const calm = save().settings.reducedFlashes;
     const objs: Phaser.GameObjects.GameObject[] = [];
-    const cover = this.add.rectangle(0, 0, VIEW_WIDTH, VIEW_HEIGHT, 0x0b0d12, 0.92).setOrigin(0).setDepth(1100).setInteractive();
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const cy = Math.round(H * 0.43); // the classic screen: 116
+    const cover = this.add.rectangle(0, 0, W, H, 0x0b0d12, 0.92).setOrigin(0).setDepth(1100).setInteractive();
+    this.introCover = cover;
     objs.push(cover);
     const word = TITLE.toUpperCase();
-    const x0 = VIEW_WIDTH / 2 - (word.length * 16) / 2;
+    const x0 = W / 2 - (word.length * 16) / 2;
     [...word].forEach((ch, i) => {
-      const t = addText(this, x0 + i * 16, 128, ch, { size: 16, color: C.bone }).setDepth(1102).setAlpha(0);
-      this.tweens.add({ targets: t, y: 108, alpha: 1, delay: 120 + i * 110, duration: 520, ease: 'Sine.easeOut' });
+      const t = addText(this, x0 + i * 16, cy + 12, ch, { size: 16, color: C.bone }).setDepth(1102).setAlpha(0);
+      this.tweens.add({ targets: t, y: cy - 8, alpha: 1, delay: 120 + i * 110, duration: 520, ease: 'Sine.easeOut' });
       objs.push(t);
     });
     if (!calm) {
-      const ring = this.add.circle(VIEW_WIDTH / 2, 116, 4, 0x9b6bff, 0).setStrokeStyle(1, 0x9b6bff, 0.8).setDepth(1101);
+      const ring = this.add.circle(W / 2, cy, 4, 0x9b6bff, 0).setStrokeStyle(1, 0x9b6bff, 0.8).setDepth(1101);
       this.tweens.add({ targets: ring, radius: 70, alpha: 0, duration: 1400, delay: 500 });
       objs.push(ring);
       for (let k = 0; k < 10; k++) {
-        const sp = this.add.sprite(x0 + ((k * 37) % (word.length * 16)), 140, ATLAS, frame('ember_particle')).setDepth(1103);
-        this.tweens.add({ targets: sp, y: 70 + (k % 4) * 8, alpha: 0, delay: 300 + k * 140, duration: 1100 });
+        const sp = this.add.sprite(x0 + ((k * 37) % (word.length * 16)), cy + 24, ATLAS, frame('ember_particle')).setDepth(1103);
+        this.tweens.add({ targets: sp, y: cy - 46 + (k % 4) * 8, alpha: 0, delay: 300 + k * 140, duration: 1100 });
         objs.push(sp);
       }
       emitAudioEvent('rune_charge');
@@ -129,6 +146,49 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private introSkip: (() => void) | null = null;
+  private uiCam: Phaser.Cameras.Scene2D.Camera | null = null;
+  private bgDim: Phaser.GameObjects.Rectangle | null = null;
+  private introCover: Phaser.GameObjects.Rectangle | null = null;
+
+  /**
+   * A phone in portrait: the canvas takes the real screen aspect (src/web/screen.ts), the arena art is a dimmed
+   * background cropped to fill (main camera, zoomed), the menu sits on a fixed UI camera at 1:1 (crisp, large rows).
+   * Everything else: the classic 480x270 screen.
+   */
+  private applyView(): void {
+    const sc = getScreen();
+    const portrait = sc.phone && sc.portrait;
+    const W = portrait ? sc.portraitSize.w : VIEW_WIDTH;
+    const H = portrait ? sc.portraitSize.h : VIEW_HEIGHT;
+    if (this.scale.width !== W || this.scale.height !== H) this.scale.resize(W, H);
+    const cam = this.cameras.main;
+    cam.setViewport(0, 0, W, H);
+    if (portrait) {
+      cam.setZoom(Math.max(W / VIEW_WIDTH, H / VIEW_HEIGHT)).centerOn(VIEW_WIDTH / 2, VIEW_HEIGHT / 2);
+      if (!this.uiCam) this.uiCam = this.cameras.add(0, 0, W, H, false, 'ui');
+      this.uiCam.setViewport(0, 0, W, H).setScroll(0, 0).setVisible(true);
+    } else {
+      cam.setZoom(1).setScroll(0, 0);
+      this.uiCam?.setVisible(false);
+      for (const o of this.children.list) o.cameraFilter = 0;
+    }
+    this.bgDim?.setVisible(portrait);
+    if (this.introCover?.active) {
+      // an intro still running covers the new size (and still takes the skip tap everywhere)
+      this.introCover.setSize(W, H);
+      (this.introCover.input?.hitArea as Phaser.Geom.Rectangle | undefined)?.setTo(0, 0, W, H);
+    }
+    requestRelayout();
+    this.menu.relayout();
+  }
+
+  /** Portrait: menus and the intro (depth >= 1000) only on the UI camera, the arena only on the zoomed one. */
+  private filterCameras(): void {
+    const ui = this.uiCam;
+    if (!ui || !ui.visible) return;
+    const mainId = this.cameras.main.id;
+    for (const o of this.children.list) o.cameraFilter = (o as unknown as { depth: number }).depth >= 1000 ? mainId : ui.id;
+  }
 
   private async loadBoard(): Promise<void> {
     if (!online()) return;

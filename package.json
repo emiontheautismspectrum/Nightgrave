@@ -24,7 +24,8 @@
     "e2e:crisp": "node tests-e2e/crisp.cjs",
     "e2e:layout": "node tests-e2e/layout.cjs",
     "e2e:phone": "node tests-e2e/phone.cjs",
-    "e2e:pages": "node tests-e2e/pages.cjs"
+    "e2e:pages": "node tests-e2e/pages.cjs",
+    "e2e:phone-menus": "node tests-e2e/phone_menus.cjs"
   },
   "dependencies": {
     "@fontsource/press-start-2p": "5.2.7",

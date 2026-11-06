@@ -60,10 +60,29 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
     await sleep(120);
   };
   const tapText = async (text) => {
-    const L = await page.evaluate(() => window.__ngLayout);
-    const t = L && L.texts.find((x) => x.text.replace(/[<>]/g, '').trim() === text);
-    if (!t) return false;
-    await tapGame(t.box[0] + t.box[2] / 2, t.box[1] + t.box[3] / 2);
+    const find = async () => {
+      const L = await page.evaluate(() => window.__ngLayout);
+      const t = L && (L.targets || []).find((x) => x.kind === 'row' && x.label.replace(/[<>]/g, '').trim() === text);
+      const tt = L && L.texts.find((x) => x.text.replace(/[<>]/g, '').trim() === text);
+      return { L, box: t ? t.box : tt ? tt.box : null };
+    };
+    let { L, box } = await find();
+    if (!box) return false;
+    // touch layouts scroll: drag the list until the row is inside it (as a player would)
+    for (let k = 0; k < 6 && L.list && (box[1] < L.list[0] || box[1] + box[3] > L.list[1]); k++) {
+      const up = box[1] + box[3] > L.list[1];
+      const [x, y0] = await toCss(L.screen[0] / 2, (L.list[0] + L.list[1]) / 2);
+      const [, y1] = await toCss(L.screen[0] / 2, (L.list[0] + L.list[1]) / 2 + (up ? -1 : 1) * (L.list[1] - L.list[0]) * 0.4);
+      await touch('touchStart', [{ x, y: y0, id: 7 }]);
+      for (let i = 1; i <= 6; i++) {
+        await touch('touchMove', [{ x, y: y0 + ((y1 - y0) * i) / 6, id: 7 }]);
+        await sleep(20);
+      }
+      await touch('touchEnd', []);
+      await sleep(150);
+      ({ L, box } = await find());
+    }
+    await tapGame(box[0] + box[2] / 2, box[1] + box[3] / 2);
     return true;
   };
   return { ctx, page, errs, dbg, toCss, touch, tapGame, tapText };
@@ -87,8 +106,16 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
         const r = p.getBoundingClientRect();
         return { below: r.top >= g.bottom - 0.5, inside: r.bottom <= innerHeight + 0.5 && r.right <= innerWidth + 0.5, sw: document.documentElement.scrollWidth, vw: innerWidth };
       });
-      if (portrait) ok(under && under.below && under.inside && under.sw <= under.vw, 'title: board under the canvas, no overflow', JSON.stringify(under));
-      else ok(!under, 'title (landscape): no side panel');
+      // portrait: the title uses the whole screen (the board is the BOARD overlay); landscape: no side panel either
+      const fill = await s.page.evaluate(() => { const c = document.querySelector('#game canvas').getBoundingClientRect(); return { h: c.height / innerHeight, sw: document.documentElement.scrollWidth, vw: innerWidth }; });
+      ok(!under && fill.sw <= fill.vw && (!portrait || fill.h >= 0.95), 'title: no side panel, no overflow, portrait fills >= 95% of the height', JSON.stringify(fill));
+      // mobile browser behaviour: the canvas never pans / zooms / selects; the page never scrolls; installable fullscreen
+      const mob = await s.page.evaluate(async () => {
+        const cs = getComputedStyle(document.querySelector('#game canvas'));
+        const m = await (await fetch(document.querySelector('link[rel=manifest]').href)).json();
+        return { ta: cs.touchAction, us: cs.userSelect || cs.webkitUserSelect, sh: document.documentElement.scrollHeight, ih: innerHeight, display: m.display, orientation: m.orientation, theme: m.theme_color };
+      });
+      ok(mob.ta === 'none' && mob.us === 'none' && mob.sh <= mob.ih + 1 && mob.display === 'fullscreen' && mob.orientation === 'any' && mob.theme === '#0b0d12', 'mobile: no pan / zoom / select, no page scroll, fullscreen manifest', JSON.stringify(mob));
       ok(await s.tapText('BOARD'), 'title: BOARD item tapped');
       await sleep(600);
       const ov = await s.page.evaluate(() => {
@@ -114,9 +141,11 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
         await sleep(80);
       };
       let d = await s.dbg();
-      ok(d && d.zoomed === portrait && d.game[0] === (portrait ? 216 : 480), 'run view', d && `zoomed ${d.zoomed} game ${d.game}`);
-      const PARRY = portrait ? [188, 358] : [456, 222];
-      const DASH = portrait ? [148, 361] : [456, 182];
+      ok(d && d.zoomed === portrait && (portrait ? d.game[1] > d.game[0] : d.game[0] === 480), 'run view', d && `zoomed ${d.zoomed} game ${d.game}`);
+      const btn = (id) => { const b = d.buttons.find((x) => x.id === id); return [b.x, b.y]; };
+      const PARRY = btn('parry');
+      const DASH = btn('dash');
+      const PAUSE = [d.pause.x + d.pause.w / 2, d.pause.y + d.pause.h / 2];
       const p0 = d.parryStart;
       await s.tapGame(...PARRY);
       await stepN(2);
@@ -149,7 +178,7 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
       await s.page.setViewportSize({ width: vp.height, height: vp.width });
       await sleep(700);
       d = await s.dbg();
-      ok(d.paused && d.menu && !d.zoomed, 'rotation pauses (pause menu, full arena)');
+      ok(d.paused && d.menu && d.zoomed === !portrait, 'rotation pauses (pause menu on the new layout)');
       ok(await s.tapText('RESUME'), 'RESUME tapped');
       await sleep(400);
       d = await s.dbg();
@@ -160,15 +189,61 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
       await sleep(300);
       if (portrait) {
         // quit to the title and play again: the HUD camera must be rebuilt (the old one died with the scene)
-        await s.tapGame(203, 10); // pause button (zoomed HUD)
+        await s.tapGame(...PAUSE); // pause button (zoomed HUD)
         ok(await s.tapText('QUIT TO TITLE'), 'QUIT TO TITLE tapped');
         await sleep(700);
         ok(await s.tapText('PLAY'), 'PLAY tapped again');
         await sleep(900);
         d = await s.dbg();
-        ok(d && d.zoomed && d.uiCam && d.game[0] === 216, 'after quit + play: zoomed view with a live HUD camera', d && `uiCam ${d.uiCam}`);
+        ok(d && d.zoomed && d.uiCam && d.game[1] > d.game[0], 'after quit + play: zoomed view with a live HUD camera', d && `uiCam ${d.uiCam}`);
       }
       ok(s.errs.length === 0, 'run: no page errors', s.errs.join(' | '));
+      await s.ctx.close();
+
+      // multi-touch in a fresh run (no cooldowns from the checks above)
+      s = await open(b, dev, { manual: true, url: `${URL0}?play=1` });
+      {
+        const stepN = async (n) => {
+          await s.page.evaluate((m) => window.__ngDebug.step(m), n);
+          await sleep(80);
+        };
+        const d = await s.dbg();
+        const btn = (id) => { const bb = d.buttons.find((x) => x.id === id); return [bb.x, bb.y]; };
+        const PARRY = btn('parry');
+        const DASH = btn('dash');
+        // multi-touch: one finger drags (movement) while a second finger presses PARRY, then DASH; the drag continues
+        {
+          const [mx, my, k] = await s.toCss(portrait ? d.game[0] * 0.3 : 200, portrait ? d.game[1] * 0.45 : 150);
+          const [pX, pY] = await s.toCss(...PARRY);
+          const [dX, dY] = await s.toCss(...DASH);
+          let e = await s.dbg();
+          const x0 = e.x;
+          const dir = x0 > 240 ? -1 : 1; // towards the middle of the arena (the hero may stand at an edge)
+          const pz0 = e.parryStart;
+          await s.touch('touchStart', [{ x: mx, y: my, id: 1 }]);
+          await stepN(2);
+          await s.touch('touchMove', [{ x: mx + dir * 20 * k, y: my, id: 1 }]);
+          await stepN(4);
+          await s.touch('touchStart', [{ x: mx + dir * 20 * k, y: my, id: 1 }, { x: pX, y: pY, id: 2 }]); // PARRY with finger 2
+          await stepN(2);
+          await s.touch('touchEnd', [{ x: mx + dir * 20 * k, y: my, id: 1 }]); // finger 2 lifts, finger 1 stays
+          e = await s.dbg();
+          const parried = e.parryStart !== pz0;
+          const dz0 = e.dashStart;
+          await s.touch('touchMove', [{ x: mx + dir * 40 * k, y: my, id: 1 }]);
+          await stepN(4);
+          await s.touch('touchStart', [{ x: mx + dir * 40 * k, y: my, id: 1 }, { x: dX, y: dY, id: 3 }]); // DASH with a second finger
+          await stepN(2);
+          await s.touch('touchEnd', [{ x: mx + dir * 40 * k, y: my, id: 1 }]);
+          e = await s.dbg();
+          const dashed = e.dashStart !== dz0;
+          await s.touch('touchMove', [{ x: mx + dir * 60 * k, y: my, id: 1 }]); // the movement finger still steers
+          await stepN(30);
+          e = await s.dbg();
+          await s.touch('touchEnd', []);
+          ok(parried && dashed && Math.abs(e.x - x0) > 30, 'multi-touch: drag + PARRY + DASH with a second finger, movement kept', `parried ${parried} dashed ${dashed} x ${x0.toFixed(0)} -> ${e.x.toFixed(0)}`);
+        }
+      }
       await s.ctx.close();
 
       // later waves: edge markers in portrait; screenshots

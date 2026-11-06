@@ -6,7 +6,8 @@ Sentinel, Lich Mage), two pickups, three difficulties and an online daily board 
 verified by re-simulating its replay. Static HTML5 (TypeScript, Phaser 3, Vite); the title lives in one constant,
 `TITLE` in `src/config.ts`.
 
-**Play:** [nightgrave.pages.dev][play]
+**Play:** [nightgrave.pages.dev][play]. On a phone, "Add to Home Screen" (Safari: Share -> Add to Home Screen;
+Chrome: menu -> Add to Home screen / Install app) opens the game fullscreen without the browser bars.
 
 | | |
 | --- | --- |

@@ -18,23 +18,35 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Keyboard: WASD/arrows move, J or Z = Parry, K or Shift = Dash.
 - Gamepad: left stick move, A = Parry, B or RT = Dash.
 - Never require the mouse button to move.
-- Touch (phones/tablets, landscape): relative drag anywhere moves a virtual cursor from the hero (sensitivity 0.5-3.0,
-  default 1.5; lifting keeps it, the next drag continues); the hero follows it like the mouse. PARRY = large round button
+- Touch (phones/tablets): relative drag anywhere moves a virtual cursor from the hero (sensitivity 0.5-3.0,
+  default 1.0; lifting keeps it, the next drag continues); the hero follows it like the mouse. Touch smoothing
+  (Off / Low / High, default Low; src/data/input.ts, not TUNING): an exponential low-pass on the recorded cursor plus a
+  ~2 px jitter dead zone, applied in the input layer BEFORE the per-tick cursor is recorded (replays stay exact). PARRY = large round button
   in the bottom of the right margin (~36 px), DASH = smaller button above it (~28 px); "Left-handed" mirrors them to the
   left margin; buttons never overlap the arena (x 48..432). A tap with a second finger on the arena = PARRY (setting, on
   by default); a single tap of the only finger does nothing. Touch becomes the same per-tick cursor input as the mouse
   (replays identical); the input source is replay metadata only. Pause button at the right end of the top HUD band.
-- Phones (Polish 3): landscape plays the full arena. Portrait plays a ZOOMED CAMERA (render-only, `src/data/view.ts`,
-  `src/render/camera.ts`): a 216x384 (9:16) game screen, HUD band on top (two rows), a world window of 216x292 world
-  px at zoom 1 (tunable), the boss bar and PARRY/DASH in the bottom strip; smooth follow with a dead zone and a lead
-  (reduced motion or reduced flashes: snappier, no lead); shake follows the setting. Pause menu, cards and the death
-  panel switch back to the full 480x270 arena. FAIRNESS EDGE MARKERS (`src/render/edgeMarkers.ts`) on the window edge:
+- Phones (Polish 3 + phone UX pass): landscape plays the full arena. Portrait plays a ZOOMED CAMERA (render-only,
+  `src/render/portraitLayout.ts`, `src/render/camera.ts`) on a game screen with the REAL viewport aspect
+  (`src/web/screen.ts`: ~280 game px wide at an integer device-px scale, inside the safe area, >= 95% of the height):
+  HUD band on top (two rows), the world window in the middle (camera zoom raised until it shows at most the world
+  height, crisp; `PORTRAIT.zoom` in `src/data/view.ts` is the floor), the boss bar and the control strip at the bottom
+  with PARRY >= 88 and DASH >= 64 CSS px (hit areas +12 CSS px, mirrored by Left-handed, never over the playfield);
+  smooth follow with a dead zone and a lead (reduced motion or reduced flashes: snappier, no lead); shake follows the
+  setting. The pause menu, cards and the death panel stay on the portrait screen. Multi-touch: one finger moves while
+  another presses PARRY / DASH. FAIRNESS EDGE MARKERS (`src/render/edgeMarkers.ts`) on the window edge:
   every off-view projectile that can reach the hero within 90 ticks (violet / red, bigger = sooner) and every off-view
   telegraph (runes, casters, sigils, the boss and its wind-up points, beams) for its whole telegraph time; tested:
   every threat first appearing off-view is marked >= 15 ticks before it can hit. Rotating mid-run re-lays out and
   auto-pauses until RESUME (no rotate overlay). Replay / board metadata `view: "full" | "zoomed"` (never affects the
   sim or the verifier; the board shows a phone icon).
 - Pause: Esc, P, gamepad Start or the pause button; auto-pause on focus loss / hidden tab.
+- Menus by touch (`MenuView`, src/render/ui.ts): every item on every page is tappable; a tap fires on pointer-up over the
+  item it went down on, shows a pressed state, and a drag over 10 CSS px cancels it (scrolling never activates).
+  Phones get full-width rows >= 44 CSS px (48 in portrait) with the 16 px font, tappable < > arrows on value rows (tap =
+  next value, a horizontal drag steps it), a 44 px BACK and lists that scroll by dragging; portrait menus fill the real
+  screen (one column, the arena as a dimmed background). Desktop menus keep their geometry; keyboard, mouse and gamepad
+  work as before. A menu tap never reaches the run (the press ends before the run reads input) and vice versa.
 - Hints (render-only, never in the sim or the replay): one controls line under PLAY for the active device; on the first
   run per device a card with the controls and "Violet: parry it. Red: dodge or dash." (any input after 250 ms closes it,
   without acting); two one-time contextual hints ("Parry!", "Can't parry - dash!") away from the hero; "Show tips again"
@@ -142,7 +154,9 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   00:00 UTC; refresh every 60 s, never during a run); narrow windows put the panel under the canvas
   (`src/web/layout.ts`). A short intro plays once per session.
 - Phones: no side panel. "BOARD" on the title and the death panel opens a full-screen board overlay (back button, drag
-  scroll, Esc / B close it, never during a run); in portrait the title shows the board under the canvas.
+  scroll, Esc / B close it, never during a run). The canvas never pans, zooms, selects or shows callouts (CSS), the
+  page uses 100dvh and follows visualViewport resizes; the web manifest is fullscreen in any orientation ("Add to Home
+  Screen" removes the browser bars).
 - Footer (static HTML, built from `src/legal.ts`): "(c) 2026 <SITE_DOMAIN or The <TITLE> Authors>. Code: MIT. Art and
   audio: all rights reserved." + Privacy, Rules, Credits, License, Source, Contact (hidden while CONTACT_EMAIL is
   empty). Hidden on phones; the in-game Credits screen has the same links.

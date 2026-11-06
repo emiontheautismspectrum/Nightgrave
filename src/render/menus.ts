@@ -25,6 +25,7 @@ export interface MenuCtx {
 export const DIFF_LABEL = (d: Difficulty): string => d.toUpperCase();
 
 const onOff = (b: boolean): string => (b ? 'ON' : 'OFF');
+const SMOOTH = ['off', 'low', 'high'] as const;
 const step10 = (v: number, d: number): number => Math.max(0, Math.min(100, v + d * 10));
 
 export function settingsPage(ctx: MenuCtx, back: () => void): MenuPage {
@@ -78,6 +79,11 @@ export function settingsPage(ctx: MenuCtx, back: () => void): MenuPage {
         label: () => `DRAG SENSITIVITY ${s().dragSensitivity.toFixed(2)}`,
         onLeft: () => ((s().dragSensitivity = clampSensitivity(Math.max(0.5, s().dragSensitivity - 0.25))), changed()),
         onRight: () => ((s().dragSensitivity = clampSensitivity(Math.min(3, s().dragSensitivity + 0.25))), changed()),
+      },
+      {
+        label: () => `TOUCH SMOOTHING ${s().touchSmoothing.toUpperCase()}`,
+        onLeft: () => ((s().touchSmoothing = SMOOTH[(SMOOTH.indexOf(s().touchSmoothing) + 2) % 3]!), changed()),
+        onRight: () => ((s().touchSmoothing = SMOOTH[(SMOOTH.indexOf(s().touchSmoothing) + 1) % 3]!), changed()),
       },
       toggle('LEFT-HANDED BUTTONS', 'leftHanded'),
       toggle('SECOND-FINGER PARRY', 'secondFingerParry'),
@@ -187,8 +193,23 @@ export function heroPage(back: () => void, onPick: () => void): MenuPage {
     })),
     lines: () => ['COSMETIC ONLY - SAME STATS'],
     linesTop: 186,
-    decorate: (scene: Phaser.Scene) => {
+    gap: 44, // phones: room for the name and the ability line in one row
+    decorate: (scene: Phaser.Scene, rowY: (i: number) => number, touch: boolean) => {
       const out: Phaser.GameObjects.GameObject[] = [];
+      if (touch) {
+        // phones: one row per hero: the sprite on the left, the name (the row), its abilities under it, SELECTED right
+        const W = scene.scale.width;
+        (['knight', 'wisp'] as const).forEach((h, i) => {
+          const y = rowY(i);
+          // the sprite (y-22..y+10) sits above the ability line (y+11..y+19): the line can stay centred on any width
+          const sp = scene.add.sprite(24, Math.round(y - 6), ATLAS, frame(`${h}_idle`)).setScale(2);
+          if (scene.anims.exists(`${h}_idle`)) sp.play(`${h}_idle`);
+          out.push(sp);
+          out.push(snap(addText(scene, W / 2, Math.round(y + 15), HERO_LINES[h].join(' - '), { color: C.dim }).setOrigin(0.5)));
+          if (save().hero === h) out.push(snap(addText(scene, Math.round(W * 0.86), Math.round(y - 4), 'SELECTED', { color: C.gold }).setOrigin(0.5)));
+        });
+        return out;
+      }
       (['knight', 'wisp'] as const).forEach((h) => {
         const x = HERO_X[h];
         const sp = scene.add.sprite(x, 98, ATLAS, frame(`${h}_idle`)).setScale(3).setDepth(1001);

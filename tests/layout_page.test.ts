@@ -54,3 +54,21 @@ describe('page layout', () => {
     expect(L.game.w).toBeLessThanOrEqual(915);
   });
 });
+
+import { portraitGameSize } from '../src/web/screen';
+import { computeLayout as layoutFor } from '../src/web/layout';
+
+describe('portrait game size from the real viewport', () => {
+  it('crisp (integer device px per game px), ~250-300 px wide, fills >= 95% of the viewport height', () => {
+    for (const [w, h, dpr] of [[390, 844, 3], [412, 915, 2.625], [360, 800, 3], [375, 667, 2], [360, 800, 2]] as [number, number, number][]) {
+      const P = portraitGameSize(w, h, dpr);
+      expect(P.w).toBeGreaterThanOrEqual(240);
+      expect(P.w).toBeLessThanOrEqual(330);
+      const L = layoutFor(w, h, dpr, true, { w: P.w, h: P.h });
+      expect(L.exact).toBe(true);
+      expect(L.device).toBe(P.k);
+      expect(L.game.h / h).toBeGreaterThanOrEqual(0.95);
+      expect(L.game.w).toBeLessThanOrEqual(w + 1e-6);
+    }
+  });
+});

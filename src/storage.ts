@@ -4,6 +4,7 @@
  * The game fully works with storage blocked (private mode): the in-memory copy is used and writes are dropped.
  * Pure TypeScript, no Phaser and no sim imports (render-side helper).
  */
+import { TOUCH_INPUT, type TouchSmoothing } from './data/input';
 export const STORAGE_KEY = 'nightgrave.v1';
 export const BEST_PER_DIFFICULTY = 5;
 export const DAILY_DAYS = 7;
@@ -23,6 +24,8 @@ export interface Settings {
   reducedFlashes: boolean;
   effects: Effects;
   dragSensitivity: number; // 0.5..3.0, steps of 0.25
+  /** Touch cursor smoothing (src/data/input.ts). */
+  touchSmoothing: TouchSmoothing;
   leftHanded: boolean;
   secondFingerParry: boolean;
   haptics: boolean;
@@ -74,7 +77,8 @@ export const DEFAULT_SETTINGS: Settings = {
   shake: true,
   reducedFlashes: false,
   effects: 'high',
-  dragSensitivity: 1.5,
+  dragSensitivity: TOUCH_INPUT.defaultSensitivity,
+  touchSmoothing: 'low',
   leftHanded: false,
   secondFingerParry: true,
   haptics: false,
@@ -129,7 +133,10 @@ export function validateSave(raw: unknown): SaveData {
     shake: bool(s.shake, d.shake),
     reducedFlashes: bool(s.reducedFlashes, d.reducedFlashes),
     effects: oneOf(s.effects, ['high', 'low'], d.effects),
-    dragSensitivity: clampSensitivity(s.dragSensitivity),
+    // a save from before the touch-smoothing setting that holds 1.5 (the old default) moves to the new default 1.0;
+    // other values are kept. A player who had deliberately picked exactly 1.5 is moved too (indistinguishable)
+    dragSensitivity: s.touchSmoothing === undefined && s.dragSensitivity === 1.5 ? d.dragSensitivity : clampSensitivity(s.dragSensitivity),
+    touchSmoothing: oneOf(s.touchSmoothing, ['off', 'low', 'high'], d.touchSmoothing),
     leftHanded: bool(s.leftHanded, d.leftHanded),
     secondFingerParry: bool(s.secondFingerParry, d.secondFingerParry),
     haptics: bool(s.haptics, d.haptics),

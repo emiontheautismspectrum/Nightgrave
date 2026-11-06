@@ -12,7 +12,7 @@ import { validateMessage, validateName, type TextError } from '../shared/text';
 import { CLIENT_VERSION, tuningFingerprint } from '../shared/version';
 import { persist, save } from '../storage';
 import type { InputFrame } from '../sim/input';
-import { C, FONT, onTap } from './ui';
+import { C, FONT, hitPad, onTap } from './ui';
 
 export interface RunResult {
   date: string;
@@ -87,29 +87,74 @@ export class SubmitPanel {
   private run!: RunResult;
   private wantsMessage = false;
 
+  /**
+   * Where everything goes (game px). The classic 480x270 screen: under the death panel, fields side by side. The
+   * narrow phone-portrait screen: full-width fields stacked under the death panel.
+   */
+  private geo(): { x: number; w: number; y0: number; fields: [number, number, number][]; btnY: number; btnX: [number, number]; h: number } {
+    const W = this.scene.scale.width;
+    const H = this.scale();
+    if (H <= W) return { x: 96, w: 300, y0: 186, fields: [[96, 196, 140], [242, 196, 142]], btnY: 226, btnX: [150, 270], h: 58 };
+    const y0 = Math.round(H / 2 + 56);
+    const fw = W - 16;
+    const msg = this.wantsMessage ? 18 : 0;
+    return { x: 8, w: W - 8, y0, fields: [[8, y0 + 12, fw], [8, y0 + 30, fw]], btnY: y0 + 34 + msg, btnX: [Math.round(W * 0.2), Math.round(W * 0.62)], h: 78 + msg };
+  }
+  private scale(): number {
+    return this.scene.scale.height;
+  }
+
+  private rank = 0;
+
+  /** The screen changed (rotation, keyboard, browser bars): rebuild at the new size, keeping what was typed. */
+  relayout(): void {
+    if (!this.objs.length || !this.run) return;
+    const vals = this.inputs.map((el) => el.value);
+    const status = this.status?.text ?? '';
+    const note = this.note?.text ?? '';
+    const done = this.done;
+    window.removeEventListener('resize', this.onResize);
+    for (const el of this.inputs) el.remove();
+    for (const o of this.objs) o.destroy();
+    this.inputs = [];
+    this.objs = [];
+    this.rects = [];
+    this.build(this.run, this.rank);
+    this.inputs.forEach((el, i) => {
+      el.value = vals[i] ?? el.value;
+      el.disabled = done;
+    });
+    if (status) setTextValue(this.status, status);
+    if (note) this.note?.setText(note);
+  }
+
   private build(run: RunResult, rank: number): void {
     this.run = run;
+    this.rank = rank;
     this.wantsMessage = rank === 1;
     const s = this.scene;
-    const y0 = 186;
+    const G = this.geo();
+    const y0 = G.y0;
     const label = (x: number, y: number, t: string, col: string = C.dim) =>
       addText(s, x, y, t, { color: col }).setDepth(this.depth);
-    this.objs.push(s.add.rectangle(240, y0 + 26, 300, 58, 0x0b0d12, 0.92).setStrokeStyle(1, 0x3a4558).setDepth(this.depth - 1));
+    this.objs.push(s.add.rectangle(s.scale.width / 2, y0 - 6 + G.h / 2, G.w, G.h, 0x0b0d12, 0.92).setStrokeStyle(1, 0x3a4558).setDepth(this.depth - 1));
     // rank 1 is a new high score of the day and the only one that may leave a message (shown on the title and board)
-    this.objs.push(label(96, y0, rank === 1 ? 'NEW HIGH SCORE! YOUR MESSAGE:' : `TODAY'S TOP 10: RANK ${rank}`, C.gold));
+    this.objs.push(label(G.x, y0, rank === 1 ? 'NEW HIGH SCORE! YOUR MESSAGE:' : `TODAY'S TOP 10: RANK ${rank}`, C.gold));
     this.field('NAME', 16, save().boardName);
     if (this.wantsMessage) this.field('MESSAGE (OPTIONAL)', 40, '');
     const btn = (x: number, t: string, fn: () => void) => {
-      const o = addText(s, x, y0 + 40, t, { color: C.bone }).setDepth(this.depth);
-      o.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-4, -3, o.width + 8, o.height + 6), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
-      onTap(o, fn);
-      this.rects.push([o.x - 4, o.y - 4, o.x + o.width + 4, o.y + o.height + 4]);
+      const o = addText(s, x, G.btnY, t, { color: C.bone }).setDepth(this.depth);
+      const pd = hitPad(o.width, o.height);
+      o.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-pd.x, -pd.y, o.width + 2 * pd.x, o.height + 2 * pd.y), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
+      onTap(o, fn, (down) => o.setAlpha(down ? 0.6 : 1));
+      this.rects.push([o.x - pd.x, o.y - pd.y, o.x + o.width + pd.x, o.y + o.height + pd.y]);
       this.objs.push(o);
     };
-    btn(150, 'SUBMIT', () => void this.submit());
-    btn(270, 'SKIP', () => this.close());
-    this.status = label(96, y0 + 54, '');
-    this.note = label(96, y0 + 64, '', C.gold);
+    btn(G.btnX[0], 'SUBMIT', () => void this.submit());
+    btn(G.btnX[1], 'SKIP', () => this.close());
+    this.status = label(G.x, G.btnY + 14, '');
+    this.note = label(G.x, G.btnY + 24, '', C.gold);
+    if (this.scale() > s.scale.width) for (const t of [this.status, this.note]) t.setMaxWidth(G.w - 8); // narrow portrait screen
     this.objs.push(this.status, this.note);
     this.place();
     window.addEventListener('resize', this.onResize);
@@ -120,12 +165,12 @@ export class SubmitPanel {
   private place(): void {
     const c = this.scene.game.canvas.getBoundingClientRect();
     const k = c.width / this.scene.scale.width;
-    // name on the left, the optional rank-1 message on the right (game px; the DOM fields sit above the canvas)
-    const boxes: [number, number][] = [[96, 140], [242, 142]];
+    // name and the optional rank-1 message (game px; the DOM fields sit above the canvas)
+    const boxes = this.geo().fields;
     this.inputs.forEach((el, i) => {
-      const [gx, gw] = boxes[i] ?? [96, 140];
+      const [gx, gy, gw] = boxes[i] ?? boxes[0]!;
       el.style.left = `${c.left + gx * k}px`;
-      el.style.top = `${c.top + 196 * k}px`;
+      el.style.top = `${c.top + gy * k}px`;
       el.style.width = `${gw * k}px`;
       el.style.height = `${14 * k}px`;
       el.style.fontSize = `${Math.max(8, Math.round(8 * k))}px`;

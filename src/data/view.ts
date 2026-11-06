@@ -1,7 +1,8 @@
 /**
- * Phone-portrait view (render-only, never read by the simulation). The screen is PORTRAIT.w x PORTRAIT.h game px
- * (9:16): a HUD band on top, the zoomed world window in the middle and a strip for the boss bar and the touch buttons
- * at the bottom. At zoom 1 the world window shows 216 x 292 world px: the whole arena height and ~56% of its width.
+ * Phone-portrait view (render-only, never read by the simulation). The real screen size comes from the viewport
+ * (src/web/screen.ts) and src/render/portraitLayout.ts places the HUD band, the world window and the control strip;
+ * w / h below are only a fallback (tests, a missing layout). The camera zoom is raised above `zoom` (the floor,
+ * tunable) until the window shows at most the world height, at a whole number of device px per world px.
  */
 export const PORTRAIT = {
   w: 216,
@@ -19,11 +20,3 @@ export const PORTRAIT = {
   /** Off-view threats get an edge marker when they can reach the hero within this many ticks. */
   horizonTicks: 90,
 } as const;
-
-/** The world window on the portrait screen (game px). */
-export const portraitViewport = (): { x: number; y: number; w: number; h: number } => ({
-  x: 0,
-  y: PORTRAIT.hudH,
-  w: PORTRAIT.w,
-  h: PORTRAIT.h - PORTRAIT.hudH - PORTRAIT.bottomH,
-});
