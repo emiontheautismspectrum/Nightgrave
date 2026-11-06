@@ -10,6 +10,8 @@ import { utcDateKey } from '../daily';
 import { encodeReplay, type Replay } from '../sim/replay';
 import { dashCooldownLeft, dashDirection, isDashing, isFading, isInvulnerable, isParryActive, parryCooldownLeft, parryCooldownOf, Sim } from '../sim/sim';
 import { drawHeroFx } from './heroView';
+import { arcGeom, arcPixels, type ArcGeom } from './knightArc';
+import { heroDef } from '../data/heroes';
 import { HOLLOWS, RUNES } from '../data/arena';
 import type { SimEvent } from '../sim/state';
 import { bestScore, mergeFromDisk, persist, recordRun, save, shouldSaveRun } from '../storage';
@@ -101,6 +103,10 @@ export class GameScene extends Phaser.Scene {
   private chevron!: Phaser.GameObjects.Graphics;
   /** Parry zone (shield arc / ring), aim indicator, guard pips, ember trail (src/render/heroView.ts). */
   private heroFx!: Phaser.GameObjects.Graphics;
+  /** The Knight's always-visible shield arc (one reused Graphics, redrawn only when it changes). */
+  private arcGfx!: Phaser.GameObjects.Graphics;
+  private arcPx: number[] = [];
+  private arcKey = { x: NaN, y: NaN, ax: NaN, ay: NaN, pulse: false, reduced: false, on: false };
   private touchIcons: Phaser.GameObjects.Image[] = [];
   private fxLow = false;
   private slowFor = 0;
@@ -219,6 +225,10 @@ export class GameScene extends Phaser.Scene {
     this.touchGfx = this.add.graphics().setDepth(D_HUD);
     this.chevron = this.add.graphics();
     this.heroFx = this.add.graphics();
+    this.arcGfx = this.add.graphics();
+    this.arcKey.on = false;
+    this.arcKey.x = NaN;
+    publishArc(null);
     this.touchIcons = [this.add.image(0, 0, ATLAS, frame('icon_parry')), this.add.image(0, 0, ATLAS, frame('icon_dash'))];
     for (const i of this.touchIcons) i.setDepth(D_HUD + 1);
     // auto-pause when the tab loses focus or becomes hidden, or the device rotates
@@ -235,6 +245,7 @@ export class GameScene extends Phaser.Scene {
     window.addEventListener('resize', onOrient);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       setInRun(false);
+      publishArc(null); // no run: no arc (title, menus)
       this.submit?.close();
       this.uiCam = null;
       document.removeEventListener('visibilitychange', onVis);
@@ -757,12 +768,9 @@ export class GameScene extends Phaser.Scene {
     this.bossView.onEvent(e, this.sim.state);
     switch (e.type) {
       case 'parry_start': {
-        if (this.cfg.hero === 'knight') {
-          // Knight: shield bash toward the aim (the arc the parry covers; metallic sparks)
-          const b = this.add.sprite(Math.round(h.x + h.aimX * 9), Math.round(h.y - 2 + h.aimY * 9), ATLAS, frame('knight_bash')).setFlipX(h.aimX < 0).setAlpha(0.9);
-          b.setDepth(D_YSORT + h.y + 4.1).play('knight_bash').once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => b.destroy());
-        } else {
-          // Wisp: round flare pulse
+        // Knight: the pulse flash IS the shield arc (drawKnightArc: brighter and thicker while active, centred on the hero,
+        // rotated to the aim); the Wisp gets its round flare pulse
+        if (this.sim.params.parryFull) {
           const scale = Math.max(1, Math.round(this.sim.params.parryRadius / 12));
           this.pulse.setVisible(true).setScale(scale).play('parry_pulse');
           this.pulse.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => this.pulse.setVisible(false));
@@ -954,6 +962,7 @@ export class GameScene extends Phaser.Scene {
     this.drawSigils();
     this.bossView.draw(st, p);
     this.drawChevron();
+    this.drawKnightArc();
     if (st.alive) {
       const anim = this.hero.anims.currentAnim?.key ?? '';
       const busy = this.hero.anims.isPlaying && (anim.endsWith('_parry') || anim.endsWith('_pulse'));
@@ -1072,7 +1081,8 @@ export class GameScene extends Phaser.Scene {
     fx.clear().setDepth(D_YSORT + st.hero.y + 4.2);
     drawHeroFx(fx, st, p, isParryActive(st, p), isDashing(st, p), this.time.now, this.reducedFx());
     this.dust(st);
-    if (!st.alive || isDashing(st, p)) return;
+    // an arc hero (Knight) has no chevron: its always-visible shield arc shows the aim instead
+    if (!st.alive || isDashing(st, p) || !p.parryFull) return;
     const h = st.hero;
     const [dx, dy] = dashDirection(h, this.input2.peek(), p);
     const cx = h.x + dx * 10;
@@ -1087,6 +1097,42 @@ export class GameScene extends Phaser.Scene {
     g.fillTriangle(r(cx + dx * 3), r(cy + dy * 3), r(cx - dx * 2 + px * 3), r(cy - dy * 2 + py * 3), r(cx - dx * 2 - px * 3), r(cy - dy * 2 - py * 3));
     g.fillStyle(0x0b0d12, ready ? 1 : 0.35);
     g.fillTriangle(r(cx), r(cy), r(cx - dx * 3 + px * 2), r(cy - dy * 3 + py * 2), r(cx - dx * 3 - px * 2), r(cy - dy * 3 - py * 2));
+  }
+
+  /**
+   * The Knight's shield arc, ALWAYS visible while the hero is alive in a run (also during dashes; frozen while paused):
+   * the nominal sim parry zone (src/render/knightArc.ts), 1 px crisp violet pixels, faint while idle with brighter end
+   * pixels so the width reads; brighter and 2 px thick during the pulse (less bright with reduced flashes). It is drawn
+   * above the props, below the fog, and redrawn only when the position, the aim or the pulse state changes.
+   */
+  private drawKnightArc(): void {
+    const st = this.sim.state;
+    const p = this.sim.params;
+    const h = st.hero;
+    const geom = st.alive ? arcGeom(heroDef(st.heroId), h.x, h.y, h.aimX, h.aimY) : null;
+    const pulse = !!geom && isParryActive(st, p);
+    const reduced = this.reducedFx();
+    const k = this.arcKey;
+    const on = !!geom;
+    if (on === k.on && (!on || (k.x === h.x && k.y === h.y && k.ax === h.aimX && k.ay === h.aimY && k.pulse === pulse && k.reduced === reduced))) return;
+    Object.assign(k, { x: h.x, y: h.y, ax: h.aimX, ay: h.aimY, pulse, reduced, on });
+    const g = this.arcGfx;
+    g.clear();
+    if (!geom) return publishArc(null);
+    // above every y-sorted prop (a prop never hides part of the shield), below the fog; the 24 px arc never overlaps
+    // the 16 px hero sprite
+    g.setDepth(D_FOG - 0.5);
+    const px = this.arcPx;
+    const outer = arcPixels(geom, 0, px);
+    const len = pulse ? arcPixels(geom, 1, px, outer) : outer;
+    const VIOLET = 0x9b6bff;
+    const body = pulse ? (reduced ? 0.6 : 0.9) : 0.3;
+    const ends = pulse ? (reduced ? 0.75 : 1) : 0.6;
+    for (let i = 0; i < len; i += 2) {
+      const end = i === 0 || i === outer - 2;
+      g.fillStyle(VIOLET, end ? ends : body).fillRect(px[i]!, px[i + 1]!, 1, 1);
+    }
+    publishArc(geom, pulse, len / 2, body);
   }
 
   private lastDir = { x: 1, y: 0, at: 0 };
@@ -1259,4 +1305,13 @@ export class GameScene extends Phaser.Scene {
     return Math.abs(h.x - last.x) + Math.abs(h.y - last.y) > 0.3;
   }
   private lastPos = { x: 0, y: 0 };
+}
+
+/**
+ * Test hook (dev and smoke builds only, never in production): the arc as drawn right now, read-only copy, or null when
+ * none is shown (title, menus, death, Wisp). e2e checks compare it with the sim's aim and position.
+ */
+function publishArc(g: ArcGeom | null, pulse = false, pixels = 0, alpha = 0): void {
+  if (import.meta.env.DEV || import.meta.env.VITE_SMOKE === '1')
+    (window as unknown as { __nightgrave?: { arc: object | null } }).__nightgrave = { arc: g ? { ...g, pulse, pixels, alpha } : null };
 }

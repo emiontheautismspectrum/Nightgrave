@@ -17,6 +17,7 @@ describe('production bundle', () => {
       expect(js.length).toBeGreaterThan(1000);
       expect(js).not.toContain('__ngDebug');
       expect(js).not.toContain('__ngManual');
+      expect(js).not.toContain('__nightgrave'); // the drawn-arc test hook
       expect(js).not.toMatch(/get\("play"\)|get\('play'\)/);
       expect(js).not.toMatch(/get\("wave"\)|get\('wave'\)/);
       expect(js).not.toMatch(/get\("hero"\)|get\('hero'\)/); // the dev-only ?hero= helper

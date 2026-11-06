@@ -76,12 +76,17 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Hints (render-only, never in the sim or the replay): one controls line under PLAY for the active device; on the first
   run per device a card with the controls and "Violet: parry it. Red: dodge or dash." (any input after 250 ms closes it,
   without acting); two one-time contextual hints ("Parry!", "Can't parry - dash!") away from the hero; "Show tips again"
-  in Settings. A small amber chevron next to the hero shows where a dash would go.
-- Hero visuals (render-only, `src/render/heroView.ts`): Knight = the shield ARC around the aim during a parry plus a
-  faint aim indicator (12% opacity) the rest of the time; Wisp = a ring. Guard pips above the Knight (a slow pulse when
+  in Settings. A small amber chevron next to the hero shows where a dash would go (not for the Knight: its arc does).
+- Hero visuals (render-only, `src/render/heroView.ts`, `src/render/knightArc.ts`): Knight = a thin always-visible
+  shield arc shows the aim: the nominal sim parry zone (centre = the hero's SIM position, radius and arc from HeroDef,
+  aim +- arc/2), 1 px crisp violet pixels at ~30% with brighter end pixels, brighter and 2 px thick during the pulse
+  (the pulse flash IS the arc), shown while the Knight is alive in a run (also in dashes, frozen while paused); the
+  Knight has no dash chevron. Wisp = a ring during the pulse and the dash chevron. Test hook (dev / smoke builds only):
+  `window.__nightgrave.arc`. Guard pips above the Knight (a slow pulse when
   full, steady with reduced flashes); guard i-frames blink the hero (steady and dimmed with reduced flashes). Wisp
   ember-trail particles. Sounds `guard_gain`, `guard_ready`, `guard_break`, `trail` (synthesized until files exist).
   Hero select: two stat lines per hero from HeroDef. Dev only: `?hero=knight|wisp` (import.meta.env.DEV).
+  The real hit zone is a little more forgiving than the drawn arc (+ projectile radius and the asin(r/d) edge).
 
 ## Core mechanics (all values live in `src/data/tuning.ts`, tunable)
 - Parry (a skill, Polish 2): pulse radius and arc per hero (see Heroes), active 0.10 s, cooldown 0.9 s after a successful parry and 1.4 s after
