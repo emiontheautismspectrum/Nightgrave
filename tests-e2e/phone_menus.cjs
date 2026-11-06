@@ -37,6 +37,8 @@ const DEVICES = [
   ['iPhone 14 landscape', devices['iPhone 14 landscape']],
   ['360x800 portrait', phone(360, 800, 3)],
   ['360x800 landscape', phone(800, 360, 3)],
+  ['375x667 portrait', phone(375, 667, 3)],
+  ['375x667 landscape', phone(667, 375, 3)],
 ];
 
 async function session(b, dev, url = URL0, manual = false) {

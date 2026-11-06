@@ -46,7 +46,17 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Keyboard: WASD/arrows move, J or Z = Parry, K or Shift = Dash.
 - Gamepad: left stick move, A = Parry, B or RT = Dash.
 - Never require the mouse button to move.
-- Touch (phones/tablets): relative drag anywhere moves a virtual cursor from the hero (sensitivity 0.5-3.0,
+- Touch (phones/tablets), mobile UI pass 2: a FIXED on-screen joystick by default ("TOUCH CONTROLS STICK / DRAG" in
+  Settings, saved; old saves = Stick; desktop never uses it; src/render/touch.ts, STICK in src/data/input.ts). Portrait:
+  base 120 CSS px, knob 56 CSS px, bottom-left of the control strip; landscape: the side margin's bottom corner, 100 CSS
+  px when the margin holds it, else 88 (then a little over the arena's corner, translucent); Left-handed mirrors stick
+  and buttons. A touch starting in the base + 20 CSS px grabs it (the finger keeps it off the zone until lifted;
+  release = centre); 12% dead zone, then the output rises from 0; it is the EXISTING axis input (cursor: false,
+  -100..100: replays are plain axis frames, meta.input 'touch'). In Stick mode other touches (not a button) do nothing
+  and the drag-only rows (sensitivity, smoothing, second-finger parry) are hidden. touchcancel / focus loss / a mode
+  switch release it; a re-layout while held re-anchors it relatively. First run: the card draws the stick and the
+  buttons with MOVE / PARRY / DASH labels.
+- Touch, Drag mode (the old default): relative drag anywhere moves a virtual cursor from the hero (sensitivity 0.5-3.0,
   default 1.0; lifting keeps it, the next drag continues); the hero follows it like the mouse. Touch smoothing
   (Off / Low / High, default Low; src/data/input.ts, not TUNING): an exponential low-pass on the recorded cursor plus a
   ~2 px jitter dead zone, applied in the input layer BEFORE the per-tick cursor is recorded (replays stay exact). PARRY = large round button
@@ -54,12 +64,13 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   left margin; buttons never overlap the arena (x 48..432). A tap with a second finger on the arena = PARRY (setting, on
   by default); a single tap of the only finger does nothing. Touch becomes the same per-tick cursor input as the mouse
   (replays identical); the input source is replay metadata only. Pause button at the right end of the top HUD band.
-- Phones (Polish 3 + phone UX pass): landscape plays the full arena. Portrait plays a ZOOMED CAMERA (render-only,
+- Phones (Polish 3 + phone UX pass; mobile UI pass 2): landscape plays the full arena. Portrait plays a ZOOMED CAMERA (render-only,
   `src/render/portraitLayout.ts`, `src/render/camera.ts`) on a game screen with the REAL viewport aspect
   (`src/web/screen.ts`: ~280 game px wide at an integer device-px scale, inside the safe area, >= 95% of the height):
   HUD band on top (two rows), the world window in the middle (camera zoom raised until it shows at most the world
   height, crisp; `PORTRAIT.zoom` in `src/data/view.ts` is the floor), the boss bar and the control strip at the bottom
-  with PARRY >= 88 and DASH >= 64 CSS px (hit areas +12 CSS px, mirrored by Left-handed, never over the playfield);
+  with PARRY >= 88 and DASH >= 64 CSS px (hit areas +12 CSS px, mirrored by Left-handed, never over the playfield) and
+  the stick (the strip is tall enough for its 120 CSS px base);
   smooth follow with a dead zone and a lead (reduced motion or reduced flashes: snappier, no lead); shake follows the
   setting. The pause menu, cards and the death panel stay on the portrait screen. Multi-touch: one finger moves while
   another presses PARRY / DASH. FAIRNESS EDGE MARKERS (`src/render/edgeMarkers.ts`) on the window edge:
@@ -71,6 +82,9 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Pause: Esc, P, gamepad Start or the pause button; auto-pause on focus loss / hidden tab.
 - Menus by touch (`MenuView`, src/render/ui.ts): every item on every page is tappable; a tap fires on pointer-up over the
   item it went down on, shows a pressed state, and a drag over 10 CSS px cancels it (scrolling never activates).
+  Phones in portrait: three bands from the real visible area: the title in the top ~18%, the rows centred in the middle
+  band (row spacing grows up to 1.6x the 48 CSS px minimum; info rows take 0.6), a pinned footer panel (controls hint +
+  champion block, message <= 2 lines with "...") above the home indicator; a symmetric ~10 CSS px gutter.
   Phones get full-width rows >= 44 CSS px (48 in portrait) with the 16 px font, tappable < > arrows on value rows (tap =
   next value, a horizontal drag steps it), a 44 px BACK and lists that scroll by dragging; portrait menus fill the real
   screen (one column, the arena as a dimmed background). Desktop menus keep their geometry; keyboard, mouse and gamepad
@@ -192,6 +206,12 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   best": champion + message, ranks 2-10 with hero / phone icons, your standing via POST /api/daily/me, countdown to
   00:00 UTC; refresh every 60 s, never during a run); narrow windows put the panel under the canvas
   (`src/web/layout.ts`). A short intro plays once per session.
+- Installed web app (standalone): apple-mobile-web-app-status-bar-style black-translucent (the page covers the screen,
+  env(safe-area-inset-*) keeps canvas, menus and HUD clear of the status bar and the home indicator). The layout is
+  measured again on pageshow, visualViewport resize / scroll, orientationchange, 100 / 500 ms after boot and by a 1 s
+  watch (iOS may settle the viewport without an event). The portrait game size is also EXACT on the browser's 1/64 CSS
+  px grid (exactSize in src/web/screen.ts): an iPhone 14 (DPR 3) otherwise got a canvas of 389.333 CSS px stretched by
+  a non-integer factor (soft pixels). tests-e2e/crisp.cjs checks CSS width x DPR = game width x k on phones.
 - Phones: no side panel. "BOARD" on the title and the death panel opens a full-screen board overlay (back button, drag
   scroll, Esc / B close it, never during a run). The canvas never pans, zooms, selects or shows callouts (CSS), the
   page uses 100dvh and follows visualViewport resizes; the web manifest is fullscreen in any orientation ("Add to Home
