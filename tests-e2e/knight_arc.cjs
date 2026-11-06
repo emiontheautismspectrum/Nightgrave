@@ -63,7 +63,7 @@ async function desktop(browser) {
   for (const [name, dx, dy] of [['right', 1, 0], ['left', -1, 0], ['up', 0, -1], ['down', 0, 1]]) {
     d = await dbg();
     await mouse(d.x + dx * 60, d.y + dy * 60);
-    await step(1);
+    await step(2); // a turn of more than 90 degrees takes 2 consistent ticks (the 0.10.0 aim rule)
     d = await dbg();
     const a = await arc();
     const aim = Math.atan2(d.aim[1], d.aim[0]);

@@ -49,7 +49,8 @@ export function onScreenChange(f: () => void): () => void {
 
 /**
  * The game size of a phone in portrait for a viewport of vw x vh CSS px (after the safe insets): about 280 game px
- * wide at an INTEGER number of device px per game px (crisp pixels), as tall as the viewport allows. The 16 px menu font
+ * wide at an INTEGER number of device px per game px (crisp pixels), as tall as the viewport allows, and a size whose
+ * CSS size is exact on the browser's 1/64 px grid (exactSize). The 16 px menu font
  * then fits ~16 characters per row and is ~20 CSS px tall.
  */
 export function portraitGameSize(vw: number, vh: number, dprIn: number): { w: number; h: number; k: number } {
@@ -57,5 +58,20 @@ export function portraitGameSize(vw: number, vh: number, dprIn: number): { w: nu
   const devW = Math.floor(vw * dpr);
   const devH = Math.floor(vh * dpr);
   const k = Math.max(1, Math.round(devW / 280));
-  return { w: Math.floor(devW / k), h: Math.floor(devH / k), k };
+  return { w: exactSize(Math.floor(devW / k), k, dpr), h: exactSize(Math.floor(devH / k), k, dpr), k };
+}
+
+/**
+ * The largest game size <= n (at most 24 px less) whose CSS size n * k / dpr lies exactly on the browser's 1/64 CSS px
+ * layout grid. Without it the browser rounds the canvas CSS size and stretches it by a NON-integer factor (soft
+ * pixels): e.g. an iPhone 14 (390 CSS px, DPR 3) gave 292 x 4 / 3 = 389.333 CSS px -> 1167.98 device px instead of
+ * 1168 (k = 3.9999). 291 x 4 / 3 = 388 is exact. The device px left over are margin.
+ */
+export function exactSize(n: number, k: number, dpr: number): number {
+  const on = (m: number) => {
+    const v = (m * k * 64) / dpr;
+    return Math.abs(v - Math.round(v)) < 1e-6;
+  };
+  for (let m = n; m > 0 && n - m <= 24; m--) if (on(m)) return m;
+  return n;
 }

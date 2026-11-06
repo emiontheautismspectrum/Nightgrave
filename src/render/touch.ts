@@ -6,9 +6,13 @@
  * Each touch is classified once at touchstart: on a button = that button; elsewhere = movement, or (if another finger
  * is already moving) a candidate parry tap. A tap = down and up within TAP_MS with < TAP_PX of movement. A single tap
  * of the only finger does nothing; a tap by a second finger parries when that setting is on.
+ *
+ * Stick mode (the default on touch): a FIXED joystick instead of the drag trackpad. A touch that starts inside the stick
+ * zone grabs it (the knob follows the finger, clamped to the ring; release = centre) and its deflection is the AXIS
+ * input (stickAxis, the same frames as keys / a gamepad); touches elsewhere (not on a button) do nothing.
  */
 import { BTN_DASH, BTN_PARRY } from '../sim/input';
-import { TOUCH_INPUT, type TouchSmoothing } from '../data/input';
+import { STICK, TOUCH_INPUT, type TouchSmoothing } from '../data/input';
 import { getScreen } from '../web/screen';
 import { PORTRAIT } from '../data/view';
 
@@ -52,7 +56,30 @@ export function touchButtons(leftHanded: boolean, view: 'full' | 'zoomed' = 'ful
   ];
 }
 
-type Role = 'parry' | 'dash' | 'move' | 'tap';
+/** The fixed joystick (game px, screen space): base ring radius, knob radius, grab zone radius. */
+export interface TouchStick {
+  x: number;
+  y: number;
+  r: number;
+  knob: number;
+  zone: number;
+}
+
+/**
+ * The landscape (full arena) stick: bottom corner of the side margin opposite the buttons (left; right when
+ * left-handed). The base is STICK.landscape CSS px across when the 48 px margin holds it, else STICK.landscapeMin
+ * (then it reaches a little over the arena's bottom corner; the arena is never blocked: it is drawn translucent).
+ */
+export function touchStick(leftHanded: boolean, cssPerPx = getScreen().cssPerPx): TouchStick {
+  const css = Math.max(0.1, cssPerPx);
+  const g = (c: number) => Math.ceil(c / css);
+  const margin = ARENA.x0; // 48 game px
+  const r = g(STICK.landscape) <= margin - 4 ? g(STICK.landscape / 2) : g(STICK.landscapeMin / 2);
+  const x = leftHanded ? VIEW_W - 2 - r : 2 + r;
+  return { x, y: 270 - 2 - r, r, knob: g(STICK.knob / 2), zone: r + g(STICK.zonePad) };
+}
+
+type Role = 'parry' | 'dash' | 'move' | 'tap' | 'stick' | 'none';
 interface Touch {
   role: Role;
   x0: number;
@@ -74,6 +101,8 @@ export interface TouchOptions {
   secondFingerParry: boolean;
   /** Per-tick cursor smoothing (default 'off' when absent: the cursor follows the finger exactly). */
   smoothing?: TouchSmoothing;
+  /** Stick mode: the fixed joystick moves the hero (axis frames); default false = the drag trackpad. */
+  stick?: boolean;
 }
 
 export class TouchModel {
@@ -91,8 +120,61 @@ export class TouchModel {
   /** The zoomed portrait view's buttons, sized for the real screen (src/render/portraitLayout.ts). */
   zoomedButtons: TouchButton[] | null = null;
   private touches = new Map<number, Touch>();
+  /** Stick mode: where the stick is on the current screen (set by the scene for each view), the finger holding it and
+   * the knob offset from the centre (game px, clamped to the ring). After a re-layout the held stick turns RELATIVE
+   * (the knob moves by the finger's movement) until released: a moved stick never jumps to full deflection. */
+  stickLayout: TouchStick | null = null;
+  private stickId: number | null = null;
+  private knob = { x: 0, y: 0 };
+  /** The finger position that means "knob at the centre": the stick centre, or (after a re-layout while held) a point
+   * that is re-anchored whenever the knob clamps at the ring, so returning the finger always centres the knob. */
+  private anchor = { x: 0, y: 0 };
+  private stickRelative = false;
 
   constructor(public opts: TouchOptions) {}
+
+  /** The knob offset from the stick centre (game px), for drawing. */
+  knobOffset(): { x: number; y: number } {
+    return { ...this.knob };
+  }
+
+  stickHeld(): boolean {
+    return this.stickId !== null;
+  }
+
+  /**
+   * The stick's output in -1..1 (x, y): the deflection past the dead zone, rescaled so it starts from 0 at the dead-zone
+   * edge and reaches 1 at the ring. [0, 0] when released or in Drag mode.
+   */
+  stickAxis(): [number, number] {
+    const S = this.stickLayout;
+    if (!this.opts.stick || !S || this.stickId === null) return [0, 0];
+    const d = Math.hypot(this.knob.x, this.knob.y);
+    const m = d / S.r;
+    if (m <= STICK.deadZone || d === 0) return [0, 0];
+    const out = Math.min(1, (m - STICK.deadZone) / (1 - STICK.deadZone));
+    return [(this.knob.x / d) * out, (this.knob.y / d) * out];
+  }
+
+  private setKnob(x: number, y: number): void {
+    const S = this.stickLayout;
+    if (!S) return;
+    const d = Math.hypot(x, y);
+    const k = d > S.r ? S.r / d : 1;
+    this.knob = { x: x * k, y: y * k };
+  }
+
+  private releaseStick(): void {
+    this.stickId = null;
+    this.knob = { x: 0, y: 0 };
+    this.stickRelative = false;
+  }
+
+  /** The knob for a finger at (x, y): clamped to the ring; a relative (re-laid-out) stick re-anchors on the clamp. */
+  private follow(x: number, y: number): void {
+    this.setKnob(x - this.anchor.x, y - this.anchor.y);
+    if (this.stickRelative) this.anchor = { x: x - this.knob.x, y: y - this.knob.y };
+  }
 
   /** A new run: the virtual cursor restarts at the hero on the next drag. */
   reset(): void {
@@ -100,6 +182,7 @@ export class TouchModel {
     this.target = null;
     this.pending = 0;
     this.touches.clear();
+    this.releaseStick();
   }
 
   buttons(): TouchButton[] {
@@ -115,9 +198,20 @@ export class TouchModel {
   down(id: number, x: number, y: number, t: number, hero: { x: number; y: number }): Role {
     let role: Role = 'move';
     for (const b of this.buttons()) if ((x - b.x) ** 2 + (y - b.y) ** 2 <= (b.hit ?? b.r + 2) ** 2) role = b.id;
+    const S = this.stickLayout;
     if (role === 'parry') this.pending |= BTN_PARRY;
     else if (role === 'dash') this.pending |= BTN_DASH;
-    else if ([...this.touches.values()].some((o) => o.role === 'move')) role = 'tap';
+    else if (this.opts.stick) {
+      // Stick mode: only the stick zone moves the hero; any other touch (not a button) does nothing
+      // a new touch in the zone always takes the stick over (a lost touchend can never leave it stuck)
+      if (S && (x - S.x) ** 2 + (y - S.y) ** 2 <= S.zone ** 2) {
+        role = 'stick';
+        this.stickId = id;
+        this.stickRelative = false;
+        this.anchor = { x: S.x, y: S.y };
+        this.follow(x, y);
+      } else role = 'none';
+    } else if ([...this.touches.values()].some((o) => o.role === 'move')) role = 'tap';
     else {
       this.cursor ??= { x: hero.x, y: hero.y };
       this.target ??= { ...this.cursor };
@@ -133,6 +227,12 @@ export class TouchModel {
       t.jx = 0;
       t.jy = 0;
     }
+    // a held stick keeps its deflection and turns relative until released (no jump to the new centre's offset)
+    if (this.stickId !== null) {
+      const tc = this.touches.get(this.stickId);
+      this.stickRelative = true;
+      if (tc) this.anchor = { x: tc.x - this.knob.x, y: tc.y - this.knob.y };
+    }
   }
 
   move(id: number, x: number, y: number): void {
@@ -143,6 +243,8 @@ export class TouchModel {
       tc.x = x;
       tc.y = y;
       tc.moved = TAP_PX; // never a tap after a re-layout
+      // the held stick: its "centre" finger position in the NEW screen space keeps the current deflection
+      if (id === this.stickId) this.anchor = { x: x - this.knob.x, y: y - this.knob.y };
       return;
     }
     const dx = x - tc.x;
@@ -150,6 +252,11 @@ export class TouchModel {
     tc.x = x;
     tc.y = y;
     tc.moved = Math.max(tc.moved, Math.sqrt((x - tc.x0) ** 2 + (y - tc.y0) ** 2));
+    if (tc.role === 'stick') {
+      // the finger keeps the stick even when it slides off the zone, until it is lifted (or another touch takes over)
+      if (id === this.stickId && this.stickLayout) this.follow(x, y);
+      return;
+    }
     if (tc.role !== 'move' || !this.cursor) return; // buttons and tap candidates never move the hero
     this.target ??= { ...this.cursor };
     // finger jitter: movement below the dead zone is held back until it adds up (smoothing on only)
@@ -187,11 +294,19 @@ export class TouchModel {
     const tc = this.touches.get(id);
     if (!tc) return;
     this.touches.delete(id);
+    if (id === this.stickId) this.releaseStick(); // spring back to the centre
     if (tc.role === 'tap' && this.opts.secondFingerParry && t - tc.t0 <= TAP_MS && tc.moved < TAP_PX) this.pending |= BTN_PARRY;
   }
 
   cancel(id: number): void {
     this.touches.delete(id);
+    if (id === this.stickId) this.releaseStick();
+  }
+
+  /** Every finger is gone (app switch, focus loss, a new layout): nothing stays held. */
+  releaseAll(): void {
+    this.touches.clear();
+    this.releaseStick();
   }
 
   /** Consume latched button presses for one tick. */

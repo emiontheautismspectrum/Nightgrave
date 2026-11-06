@@ -1,7 +1,8 @@
 /**
  * Collects mouse / pen / touch (one Pointer Events path), keyboard and gamepad input and turns it into one sanitized
  * InputFrame per sim tick. Presses are latched until the next sampled tick so a click between two ticks is never lost.
- * Touch is converted by the TouchModel into the SAME cursor-target frame the mouse produces, before it reaches the sim.
+ * Touch is converted by the TouchModel into the SAME cursor-target frame the mouse produces (Drag mode) or into the
+ * SAME axis frame keys and a gamepad stick produce (Stick mode, the fixed joystick), before it reaches the sim.
  */
 import Phaser from 'phaser';
 import { AXIS_MAX, BTN_DASH, BTN_PARRY, sanitizeInput, type InputFrame } from '../sim/input';
@@ -89,7 +90,8 @@ export class InputCollector {
         } catch {
           /* not capturable */
         }
-        this.touch.down(e.pointerId, x, y, e.timeStamp, this.hooks.hero());
+        const role = this.touch.down(e.pointerId, x, y, e.timeStamp, this.hooks.hero());
+        if (role === 'move') this.mode = 'cursor'; // Drag mode: the trackpad takes over from keys / the stick
         return;
       }
       this.use('mouse');
@@ -145,7 +147,11 @@ export class InputCollector {
     const up = (e: KeyboardEvent) => this.held.delete(e.code);
     kb?.on('keydown', down);
     kb?.on('keyup', up);
-    const blur = () => this.held.clear(); // losing focus must not leave keys stuck "held"
+    // losing focus (an app switch, a call) must not leave keys or the stick stuck "held"
+    const blur = () => {
+      this.held.clear();
+      this.touch.releaseAll();
+    };
     scene.game.events.on(Phaser.Core.Events.BLUR, blur);
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       for (const [type, fn] of this.dom) canvas.removeEventListener(type, fn as EventListener);
@@ -205,6 +211,13 @@ export class InputCollector {
         x += m[0];
         y += m[1];
       }
+    }
+    // the fixed touch joystick (Stick mode): the same analog axis as a gamepad stick
+    const [tx, ty] = this.touch.stickAxis();
+    if (tx !== 0 || ty !== 0) {
+      x += tx;
+      y += ty;
+      this.use('touch');
     }
     const pad = this.pad();
     if (pad) {

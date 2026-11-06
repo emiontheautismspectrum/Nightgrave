@@ -38,6 +38,17 @@ function safeInsets(): { l: number; r: number; t: number; b: number } {
 let board: BoardPanel | null = null;
 
 /**
+ * Everything the layout depends on, as one string. iOS (above all an installed web app) can report a stale viewport on
+ * the first frames and then change it WITHOUT a resize event: the layout is redone whenever this changes.
+ */
+let lastMeasure = '';
+function measureKey(): string {
+  const ins = isTouch() ? safeInsets() : { l: 0, r: 0, t: 0, b: 0 };
+  const vv = window.visualViewport;
+  return [innerWidth, innerHeight, window.devicePixelRatio, ins.l, ins.r, ins.t, ins.b, vv ? Math.round(vv.width) : 0, vv ? Math.round(vv.height) : 0].join(',');
+}
+
+/**
  * Lay out the page: the framed game (crisp integer device-pixel scaling, Polish 1) with the board panel next to it
  * (desktop), the panel under it on narrow windows, the whole screen on phones (no side panel, no footer). The game
  * size is 480x270, or the 9:16 zoomed view while a phone in portrait plays; a phone in portrait outside a run shows
@@ -90,6 +101,9 @@ function applyLayout(game: Phaser.Game): void {
     footer.hidden = phone;
   }
   game.scale.updateBounds(); // Phaser maps pointers with the canvas bounds: refresh them after moving the canvas
+  lastMeasure = measureKey();
+  // dev / smoke builds: what the layout was computed from (the crispness checks compare it with the real canvas)
+  if (DEV_PARAMS) (window as unknown as { __ngScreen?: object }).__ngScreen = { vw, vh, dpr, ins, device: L.device, exact: L.exact, zoom: L.zoom, base, portraitSize: portraitGameSize(vw, vh, dpr) };
   // what the scenes need: touch target sizes (CSS px per game px), the phone layouts, the portrait game size. The
   // canvas already sits inside the safe area (notch, home indicator), so nothing inside the game needs an inset.
   setScreen({
@@ -185,7 +199,17 @@ async function boot(): Promise<void> {
   addEventListener('resize', resize);
   // mobile browser bars showing / hiding change the visual viewport (not always the window): lay out again
   window.visualViewport?.addEventListener('resize', resize);
+  window.visualViewport?.addEventListener('scroll', resize);
   addEventListener('orientationchange', resize);
+  // back from the bfcache / an installed web app brought to the front: measure again
+  addEventListener('pageshow', resize);
+  // iOS can settle the viewport after the first frames without any event: measure again shortly after boot, and keep a
+  // cheap watch (a string compare once a second; the layout only runs when a measurement really changed)
+  setTimeout(resize, 100);
+  setTimeout(resize, 500);
+  setInterval(() => {
+    if (measureKey() !== lastMeasure) resize();
+  }, 1000);
   document.addEventListener('fullscreenchange', resize);
   // devicePixelRatio changes (browser zoom, moving the window to another monitor): re-arm a resolution query each time
   const watchDpr = () => {

@@ -50,6 +50,9 @@ export function createState(seed: number, difficulty: Difficulty, hero: AnyHeroI
       // the hero spawns at the arena centre: the initial aim is to the right (the sprite faces right)
       aimX: 1,
       aimY: 0,
+      aimPendX: 1,
+      aimPendY: 0,
+      aimPendTicks: 0,
       guardCharges: 0,
       guardInvulnUntil: -1,
     },
@@ -228,7 +231,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   [h.x, h.y] = clampToArena(h.x + mx, h.y + my, p);
   if (mx > 0.01) h.facing = 1;
   else if (mx < -0.01) h.facing = -1;
-  updateAim(h, input, ix, iy, want, p);
+  if (!isDashing(s, p)) updateAim(h, ix, iy, want, p); // a dash never turns the aim
   // the Wisp's dash lays a burning line along its path
   if (p.ability.kind === 'trail' && isDashing(s, p) && (h.x !== px0 || h.y !== py0))
     s.trail.push({ x0: px0, y0: py0, x1: h.x, y1: h.y, until: t + p.ability.ticks });
@@ -364,22 +367,31 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
 }
 
 /**
- * FACING: with cursor input the aim points to the (arena-clamped) cursor when it is farther than aimDeadzone, else it
- * keeps its value; with axis input it is the movement direction while the axis is non-zero. Never a zero / NaN vector.
+ * FACING = where the hero goes, for every input source: when this tick's intended step (`want`, moveIntent) is at
+ * least aimMinStep, the aim becomes the intent direction (ix, iy, a unit vector); below it the aim is kept. Anti-jitter:
+ * a turn of 90 degrees or more needs aimTurnTicks consecutive above-threshold ticks whose directions agree within 45
+ * degrees (a cursor flickering between two pixels never flips the arc). Called with the intent from BEFORE the move,
+ * never during a dash. Never a zero / NaN vector (ix, iy is a unit vector whenever want > 0).
  */
-function updateAim(h: Hero, input: InputFrame, ix: number, iy: number, want: number, p: SimParams): void {
-  if (input.cursor) {
-    const [tx, ty] = clampToArena(input.mx, input.my, p);
-    const ax = tx - h.x;
-    const ay = ty - h.y;
-    const d = Math.sqrt(ax * ax + ay * ay);
-    if (d > p.aimDeadzone) {
-      h.aimX = ax / d;
-      h.aimY = ay / d;
-    }
-  } else if (want > 0) {
+function updateAim(h: Hero, ix: number, iy: number, want: number, p: SimParams): void {
+  if (want < p.aimMinStep || want <= 0) {
+    h.aimPendTicks = 0;
+    return;
+  }
+  if (ix * h.aimX + iy * h.aimY > 0) {
     h.aimX = ix;
     h.aimY = iy;
+    h.aimPendTicks = 0;
+    return;
+  }
+  // a big turn: count consistent ticks (within 45 degrees of the pending direction: cos 45 = sqrt(0.5))
+  h.aimPendTicks = h.aimPendTicks > 0 && ix * h.aimPendX + iy * h.aimPendY >= Math.SQRT1_2 ? h.aimPendTicks + 1 : 1;
+  h.aimPendX = ix;
+  h.aimPendY = iy;
+  if (h.aimPendTicks >= p.aimTurnTicks) {
+    h.aimX = ix;
+    h.aimY = iy;
+    h.aimPendTicks = 0;
   }
 }
 

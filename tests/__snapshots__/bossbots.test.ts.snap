@@ -4,7 +4,7 @@ exports[`golden replays > easy knight: golden bot run 1`] = `
 {
   "alive": true,
   "bosses": 1,
-  "score": 3077,
+  "score": 3250,
   "tick": 7200,
 }
 `;
@@ -22,7 +22,7 @@ exports[`golden replays > hard knight: golden bot run 1`] = `
 {
   "alive": true,
   "bosses": 1,
-  "score": 5390,
+  "score": 5558,
   "tick": 7200,
 }
 `;
@@ -40,7 +40,7 @@ exports[`golden replays > medium knight: golden bot run 1`] = `
 {
   "alive": true,
   "bosses": 1,
-  "score": 4007,
+  "score": 3847,
   "tick": 7200,
 }
 `;

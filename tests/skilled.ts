@@ -5,7 +5,8 @@
  * - parry timing error: it presses parry for an incoming violet threat at the ideal tick +-2 ticks (seeded);
  * - dodges red threats and dashes through them when they are about to hit; walks to pickups when it is quiet;
  * - an ARC hero (Knight) turns to the threat it is about to parry like a human would: for a few ticks around the
- *   press it puts the cursor a few px from the hero toward the threat (it walks a little toward it: the honest cost).
+ *   press it puts the cursor one step from the hero toward the threat: the aim follows the hero's movement, so it
+ *   walks a little toward the threat (the honest cost).
  * Movement and dashing reuse the heuristic bot (tests/bot.ts) restricted to what it perceives.
  */
 import { BTN_DASH, BTN_PARRY, type InputFrame } from '../src/sim/input';
@@ -102,7 +103,8 @@ export class SkilledBot {
       const rx = tgt.x - h.x;
       const ry = tgt.y - h.y;
       const d = Math.hypot(rx, ry) || 1;
-      const k = p.aimDeadzone + p.heroSpeed + 1; // after this tick's step the cursor is still beyond the dead zone
+      // the aim follows where the hero goes: a full step toward the threat turns it (the honest cost: walking toward it)
+      const k = p.heroSpeed;
       f = { cursor: true, mx: Math.round(h.x + (rx / d) * k), my: Math.round(h.y + (ry / d) * k), buttons };
     }
     if ((f.buttons & BTN_DASH) && dashCooldownLeft(s, p) > 0) buttons &= ~BTN_DASH;

@@ -75,7 +75,16 @@ export function settingsPage(ctx: MenuCtx, back: () => void): MenuPage {
   const controlsAt = items.length;
   items.push({ label: () => 'CONTROLS', onActivate: () => ctx.menu.show(controlsPage(() => ctx.menu.show(settingsPage(ctx, back), controlsAt))) });
   if (ctx.isTouch()) {
-    items.push(
+    // the movement mode; in Stick mode the drag-only rows (sensitivity, smoothing, second-finger parry) are hidden
+    const at = items.length;
+    const flip = () => {
+      s().touchControls = s().touchControls === 'stick' ? 'drag' : 'stick';
+      changed();
+      ctx.menu.show(settingsPage(ctx, back), at); // the rows below change: lay the page out again
+    };
+    items.push({ label: () => `TOUCH CONTROLS ${s().touchControls === 'stick' ? 'STICK' : 'DRAG'}`, onLeft: flip, onRight: flip });
+    const drag = s().touchControls === 'drag';
+    if (drag) items.push(
       {
         label: () => `DRAG SENSITIVITY ${s().dragSensitivity.toFixed(2)}`,
         onLeft: () => ((s().dragSensitivity = clampSensitivity(Math.max(0.5, s().dragSensitivity - 0.25))), changed()),
@@ -86,10 +95,10 @@ export function settingsPage(ctx: MenuCtx, back: () => void): MenuPage {
         onLeft: () => ((s().touchSmoothing = SMOOTH[(SMOOTH.indexOf(s().touchSmoothing) + 2) % 3]!), changed()),
         onRight: () => ((s().touchSmoothing = SMOOTH[(SMOOTH.indexOf(s().touchSmoothing) + 1) % 3]!), changed()),
       },
-      toggle('LEFT-HANDED BUTTONS', 'leftHanded'),
-      toggle('SECOND-FINGER PARRY', 'secondFingerParry'),
-      toggle('HAPTICS', 'haptics'),
     );
+    items.push(toggle('LEFT-HANDED CONTROLS', 'leftHanded'));
+    if (drag) items.push(toggle('SECOND-FINGER PARRY', 'secondFingerParry'));
+    items.push(toggle('HAPTICS', 'haptics'));
   }
   items.push({ label: () => 'SHOW TIPS AGAIN', onActivate: () => ((s().touchHintSeen = false), (s().hintsDone = false), (s().hintParrySeen = false), (s().hintDashSeen = false), persist(), ctx.onShowTouchHint?.()) });
   return { title: 'SETTINGS', items, onBack: back, top: 52, gap: 13 };
@@ -195,7 +204,7 @@ export function heroPage(back: () => void, onPick: () => void): MenuPage {
     })),
     lines: () => ['THE SHIELD FACES WHERE YOU MOVE'],
     linesTop: 186,
-    gap: 44, // phones: room for the name and the ability line in one row
+    gap: 60, // phones: room for SELECTED above the name and the two stat lines under it in one row
     decorate: (scene: Phaser.Scene, rowY: (i: number) => number, touch: boolean) => {
       const out: Phaser.GameObjects.GameObject[] = [];
       if (touch) {
@@ -204,11 +213,11 @@ export function heroPage(back: () => void, onPick: () => void): MenuPage {
         HERO_IDS.forEach((h, i) => {
           const y = rowY(i);
           // the sprite (y-22..y+10) sits above the ability line (y+11..y+19): the line can stay centred on any width
-          const sp = scene.add.sprite(24, Math.round(y - 6), ATLAS, frame(`${h}_idle`)).setScale(2);
+          const sp = scene.add.sprite(40, Math.round(y - 6), ATLAS, frame(`${h}_idle`)).setScale(2); // clear of the frame
           if (scene.anims.exists(`${h}_idle`)) sp.play(`${h}_idle`);
           out.push(sp);
           HERO_LINES(h).forEach((l, k) => out.push(snap(addText(scene, W / 2, Math.round(y + 12 + k * 9), l, { color: C.dim }).setOrigin(0.5))));
-          if (save().hero === h) out.push(snap(addText(scene, Math.round(W * 0.86), Math.round(y - 4), 'SELECTED', { color: C.gold }).setOrigin(0.5)));
+          if (save().hero === h) out.push(snap(addText(scene, W - 20 - 32, Math.round(y - 14), 'SELECTED', { color: C.gold }).setOrigin(0.5))); // top-right of the row, inside the frame
         });
         return out;
       }

@@ -78,19 +78,21 @@ async function phone(browser) {
   await sleep(300);
   d = await dbg(page);
   ok(d && !d.paused, 'phone: overlay dismissed, run is live');
-  // drag on the arena: the hero follows the virtual cursor
+  // the fixed joystick (Stick mode, the default): pushing the knob right moves the hero right
   const x0 = d.x;
-  const a = await toPage(page, 200, 200);
-  await touch(cdp, 'touchStart', [a]);
-  for (let k = 1; k <= 10; k++) {
-    await touch(cdp, 'touchMove', [{ x: a.x + k * 8, y: a.y }]);
+  ok(d && d.stick, 'phone: the fixed joystick is there (Stick mode by default)');
+  const sc = await toPage(page, d.stick.x, d.stick.y);
+  const se = await toPage(page, d.stick.x + d.stick.r, d.stick.y);
+  await touch(cdp, 'touchStart', [sc]);
+  for (let k = 1; k <= 6; k++) {
+    await touch(cdp, 'touchMove', [{ x: sc.x + ((se.x - sc.x) * k) / 6, y: sc.y }]);
     await sleep(30);
   }
   await step(page, 40);
   await touch(cdp, 'touchEnd', []);
   await sleep(100);
   d = await dbg(page);
-  ok(d && d.x > x0 + 20, `phone: drag moves the hero (${x0.toFixed(0)} -> ${d && d.x.toFixed(0)})`);
+  ok(d && d.x > x0 + 20, `phone: the stick moves the hero (${x0.toFixed(0)} -> ${d && d.x.toFixed(0)})`);
   const ps = d.parryStart;
   await tap(456, 222); // PARRY button (right margin)
   await step(page, 2);

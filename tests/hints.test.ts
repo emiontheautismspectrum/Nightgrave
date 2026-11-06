@@ -6,7 +6,7 @@ import { createState, spawnProjectile } from '../src/sim/sim';
 describe('controls explanation', () => {
   it('one line per device and a card with the colour rule', () => {
     expect(controlsLine('desktop')).toBe('MOUSE MOVE - LMB PARRY - RMB/SPACE DASH');
-    expect(controlsLine('touch')).toBe('DRAG MOVE - PARRY - DASH');
+    expect(controlsLine('touch')).toBe('STICK MOVE - PARRY - DASH');
     expect(controlsLine('gamepad')).toBe('STICK MOVE - A PARRY - B/RT DASH');
     for (const d of ['desktop', 'touch', 'gamepad'] as const) {
       const c = cardLines(d, false).join(' ');

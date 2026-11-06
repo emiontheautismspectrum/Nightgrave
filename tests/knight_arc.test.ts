@@ -92,8 +92,8 @@ describe('knight arc geometry', () => {
 });
 
 describe('render-only change', () => {
-  it('the tuning fingerprint and CLIENT_VERSION are unchanged (no coordinated Worker deploy needed)', () => {
-    expect(tuningFingerprint()).toBe('6cf2873f');
-    expect(CLIENT_VERSION).toBe('0.9.0');
+  it('the tuning fingerprint and CLIENT_VERSION are pinned (a change needs a coordinated Worker + Pages deploy)', () => {
+    expect(tuningFingerprint()).toBe('f0214eba');
+    expect(CLIENT_VERSION).toBe('0.10.0');
   });
 });

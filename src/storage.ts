@@ -4,7 +4,7 @@
  * The game fully works with storage blocked (private mode): the in-memory copy is used and writes are dropped.
  * Pure TypeScript, no Phaser and no sim imports (render-side helper).
  */
-import { TOUCH_INPUT, type TouchSmoothing } from './data/input';
+import { TOUCH_INPUT, type TouchControls, type TouchSmoothing } from './data/input';
 import { HERO_IDS, isHeroId, type HeroId } from './data/heroes';
 export const STORAGE_KEY = 'nightgrave.v1';
 export const BEST_PER_DIFFICULTY = 5;
@@ -27,6 +27,8 @@ export interface Settings {
   dragSensitivity: number; // 0.5..3.0, steps of 0.25
   /** Touch cursor smoothing (src/data/input.ts). */
   touchSmoothing: TouchSmoothing;
+  /** Touch movement: the fixed joystick (default) or the drag trackpad. Old saves without it: the stick. */
+  touchControls: TouchControls;
   leftHanded: boolean;
   secondFingerParry: boolean;
   haptics: boolean;
@@ -80,6 +82,7 @@ export const DEFAULT_SETTINGS: Settings = {
   effects: 'high',
   dragSensitivity: TOUCH_INPUT.defaultSensitivity,
   touchSmoothing: 'low',
+  touchControls: 'stick',
   leftHanded: false,
   secondFingerParry: true,
   haptics: false,
@@ -138,6 +141,7 @@ export function validateSave(raw: unknown): SaveData {
     // other values are kept. A player who had deliberately picked exactly 1.5 is moved too (indistinguishable)
     dragSensitivity: s.touchSmoothing === undefined && s.dragSensitivity === 1.5 ? d.dragSensitivity : clampSensitivity(s.dragSensitivity),
     touchSmoothing: oneOf(s.touchSmoothing, ['off', 'low', 'high'], d.touchSmoothing),
+    touchControls: oneOf(s.touchControls, ['stick', 'drag'], d.touchControls),
     leftHanded: bool(s.leftHanded, d.leftHanded),
     secondFingerParry: bool(s.secondFingerParry, d.secondFingerParry),
     haptics: bool(s.haptics, d.haptics),

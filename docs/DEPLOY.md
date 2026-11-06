@@ -246,6 +246,15 @@ new Worker / verifier refuse old-format logs. So the steps above are mandatory, 
 drain the queue with the OLD code, merge, deploy the Worker and Pages together (no new D1 migration), enable the
 verifier. Today's board keeps its already verified entries; both heroes share one daily board.
 
+Mobile UI pass 2 (version 0.10.0) is such an update too: the Knight's aim rule changed in the sim (the aim follows the
+movement), so the tuning fingerprint and `CLIENT_VERSION` changed. Same order: pause the verifier, drain the queue with
+the OLD code, merge, deploy the Worker and Pages together, enable the verifier. No D1 migration.
+
+iOS caches an installed web app (Add to Home Screen): after a deploy the app picks up the new build only after it is
+fully closed (swiped away) and opened again; the icon, the name and the manifest (display mode, status bar style) are
+read when the app is added, so a player may need to remove it and add it to the Home Screen again to get the new
+status bar style.
+
 Preview without Cloudflare (nothing is deployed): `npm install`, then `npm run dev` and open
 `http://localhost:5173/?hero=knight` or `?hero=wisp` (dev-only override, never saved, absent from production
 builds). For the board flow locally: `npx wrangler dev --port 8787 --local` in `server/` and `npm run e2e:board`.

@@ -28,10 +28,10 @@ More: [Lich Mage](docs/screenshots/boss_lich.png), [phone in portrait](docs/scre
 | Mouse | the hero follows the cursor | left click | right click | Esc or P |
 | Keyboard | WASD / arrows | J or Z | K, Shift or Space | Esc or P |
 | Gamepad | left stick | A | B or RT | Start |
-| Touch | drag anywhere (a virtual cursor) | PARRY button, or a second-finger tap | DASH button | pause button |
+| Touch | the fixed joystick (Stick, default), or drag anywhere (Drag, in Settings) | PARRY button (Drag: also a second-finger tap) | DASH button | pause button |
 
 On phones, landscape shows the whole arena; portrait plays with a zoomed camera and edge markers for threats outside
-the view. "Left-handed" in Settings mirrors the touch buttons.
+the view. "Left-handed" in Settings mirrors the joystick and the touch buttons.
 
 ## Run it
 

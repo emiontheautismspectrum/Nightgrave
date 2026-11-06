@@ -17,6 +17,7 @@ import { bestPage, creditsPage, DIFF_LABEL, heroPage, settingsPage, type MenuCtx
 import { controlsLine, getDevice } from './hints';
 import { C, FONT, MenuView, type MenuPage } from './ui';
 import { addText } from './text';
+import { clampLines } from './textFit';
 import { emitAudioEvent } from './events';
 
 /** The intro plays once per browser session (sessionStorage; blocked storage = play it, never crash). */
@@ -210,14 +211,18 @@ export class TitleScene extends Phaser.Scene {
     else this.menu.refresh();
   }
 
-  /** Always 3 lines (the menu re-renders a fixed number of lines); never wider than the panel. */
+  /**
+   * The champion block: a label, the name, the message (untrusted text, rendered only as BitmapText) on at most two
+   * lines with a clean "..." (portrait phones: as wide as the screen allows; desktop: one 40-char line fits).
+   */
   private boardLines(): string[] {
-    if (this.boardState === 'offline') return ['ONLINE BOARD: OFFLINE', '', ''];
-    if (this.boardState === 'loading') return ['ONLINE BOARD: LOADING', '', ''];
-    if (this.boardState === 'error') return ['BOARD UNAVAILABLE', '', ''];
+    if (this.boardState === 'offline') return ['ONLINE BOARD: OFFLINE'];
+    if (this.boardState === 'loading') return ['ONLINE BOARD: LOADING'];
+    if (this.boardState === 'error') return ['BOARD UNAVAILABLE'];
     const c = this.champion;
-    if (!c) return ['NO CHAMPION YET TODAY', '', ''];
-    return [c.label, c.name, c.message ? `"${c.message}"` : ''];
+    if (!c) return ['NO CHAMPION YET TODAY'];
+    const chars = Math.floor((this.scale.width - 48) / 8);
+    return [c.label, ...clampLines(c.name, chars, 1), ...(c.message ? clampLines(`"${c.message}"`, chars, 2) : [])];
   }
 
   private showBoard(): void {
@@ -263,7 +268,15 @@ export class TitleScene extends Phaser.Scene {
           onRight: () => ((sv.difficulty = DIFFICULTIES[(DIFFICULTIES.indexOf(sv.difficulty) + 1) % 3]!), persist()),
         },
         // only for Hard: a dim second line with the daily seed date (not focusable)
-        { label: () => (sv.difficulty === 'hard' ? `DAILY SEED ${getServerDate() ?? utcDateKey(new Date())} - ONLINE BOARD` : ''), disabled: true },
+        // phones: two deliberate centred lines; desktop: one line (it fits the 480 px screen)
+        {
+          label: () => {
+            if (sv.difficulty !== 'hard') return '';
+            const d = getServerDate() ?? utcDateKey(new Date());
+            return this.cfg.isTouch() ? `DAILY SEED ${d}\nONLINE BOARD` : `DAILY SEED ${d} - ONLINE BOARD`;
+          },
+          disabled: true,
+        },
         { label: () => `HERO ${sv.hero.toUpperCase()}`, onActivate: () => this.menu.show(heroPage(() => this.showMain(3), () => this.showMain(3))) },
         { label: () => 'SETTINGS', onActivate: () => this.menu.show(settingsPage(this.ctx(), () => this.showMain(4))) },
         { label: () => 'BEST SCORES', onActivate: () => this.showBest() },
@@ -271,8 +284,9 @@ export class TitleScene extends Phaser.Scene {
         { label: () => (this.cfg.isTouch() ? 'BOARD' : "TODAY'S BEST"), onActivate: () => (this.cfg.isTouch() ? openBoardOverlay() : this.showBoard()) },
         { label: () => 'CREDITS', onActivate: () => this.menu.show(creditsPage(() => this.showMain(7))) },
       ],
-      // the controls hint for the active device sits below the menu block, above the online-board lines
-      lines: () => ['', controlsLine(getDevice()), '', ...this.boardLines()],
+      // the controls hint for the active device and the champion block: the footer (pinned at the bottom in portrait)
+      lines: () => [],
+      foot: () => [controlsLine(getDevice(), save().settings.touchControls !== 'drag'), '', ...this.boardLines()],
     };
     this.menu.show(page, focus);
   }
