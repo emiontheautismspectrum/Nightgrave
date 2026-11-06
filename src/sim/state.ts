@@ -182,11 +182,16 @@ export interface Hero {
   dashDirX: number;
   dashDirY: number;
   /**
-   * FACING (unit vector): toward the cursor when it is farther than aimDeadzone, else unchanged; with axis input the
-   * movement direction while the axis is non-zero. A dash never changes it. The Knight's parry arc is centred on it.
+   * FACING (unit vector): the direction of the hero's intended movement whenever the intended step is >= aimMinStep
+   * (any input), else unchanged; a turn of more than 90 degrees needs aimTurnTicks consistent ticks. A dash never changes
+   * it. The Knight's parry arc is centred on it.
    */
   aimX: number;
   aimY: number;
+  /** Anti-jitter: a pending >= 90 degree turn (direction, consecutive ticks; 0 = none). */
+  aimPendX: number;
+  aimPendY: number;
+  aimPendTicks: number;
   /** Knight guard charges (0..max); reset only by a guard break (or the end of the run). */
   guardCharges: number;
   /** Guard break invulnerability lasts until this tick (exclusive); -1 = none. */

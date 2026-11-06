@@ -41,14 +41,16 @@ export interface HeroDef {
  * FROZEN after the balance pass (tools/bot/balance.ts, skilled bot, Hard): the start values were Knight radius 28 /
  * guard 3 and Wisp radius 20 / trail 5 pts x 4; the Knight was far ahead (survival x1.36, score x1.9 on 150 seeds).
  * Knight radius 24 / arc 120 and Wisp radius 22 / trail 10 pts x 5 put both heroes' Hard median survival and score
- * within +-12% of each other on seeds 1-50 and on seeds 1-150.
+ * within +-12% of each other on seeds 1-50 and on seeds 1-150. Aim fix (0.10.0, the aim follows the movement): the
+ * Knight got stronger (Hard score x1.3), so its radius went 24 -> 23 (Hard: survival x1.07 / x1.09, score x1.09 /
+ * x1.00 vs the Wisp on seeds 1-50 / 1-150).
  */
 export const HEROES: Record<HeroId, HeroDef> = {
   knight: {
     id: 'knight',
     name: 'KNIGHT',
     lines: ['FRONT SHIELD ARC', '3 PARRIES = 1 GUARD'],
-    parry: { radius: 24, arcDegrees: 120, maxKillsPerPulse: 3 },
+    parry: { radius: 23, arcDegrees: 120, maxKillsPerPulse: 3 },
     dashDistance: 80,
     ability: { kind: 'guard', charges: 3, invulnSeconds: 0.6 },
   },
@@ -78,8 +80,13 @@ export const heroDef = (id: AnyHeroId): HeroDef => (id === 'classic' ? TEST_HERO
 
 /** Facing and parry-zone rules shared by every hero. */
 export const HERO_RULES = {
-  /** The aim follows the cursor only when it is farther than this from the hero (px). */
-  aimDeadzonePx: 3,
+  /**
+   * FACING = where the hero goes. The aim turns to this tick's movement intent direction when the intended step is at
+   * least this share of the hero's maximum step (any input: cursor, keys, gamepad, stick); below it the aim is kept.
+   */
+  aimMinStepFrac: 0.25,
+  /** A turn of MORE than 90 degrees needs this many consecutive ticks of a consistent direction (anti-jitter). */
+  aimTurnTicks: 2,
   /** A projectile whose centre is closer than this always counts as inside the parry zone (no blind spot). */
   overlapPx: 6,
 };

@@ -9,7 +9,7 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Hero is a small pixel character. 2 heroes with DIFFERENT mechanics (the heroes pass; this replaced the old
   "cosmetic only" rule). All hero numbers live in `src/data/heroes.ts` (HeroDef: parry radius / arc / kills, dash
   distance, a typed `ability`); the sim dispatches on `ability.kind`, never on a hero name:
-  - Knight: shield ARC 120 degrees around the aim, radius 24; ability GUARD: +1 charge per successful pulse (max 3); a
+  - Knight: shield ARC 120 degrees around the aim, radius 23 (24 before the 0.10.0 aim fix); ability GUARD: +1 charge per successful pulse (max 3); a
     FULL guard absorbs one lethal PARRYABLE hit (charges -> 0, the projectile is destroyed, 0.6 s guard i-frames against
     parryable hits only, no points); unparryables (blades, sigils, beams) always kill, also during guard i-frames; no decay. Dash 80 px.
   - Wisp (ember spirit): full ring, radius 22; dash 100 px; ability EMBER TRAIL: the dash leaves a 0.8 s burning line
@@ -18,9 +18,11 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   - Frozen by the balance pass (`npx vite-node tools/bot/balance.ts 50`): on Hard the median survival and median score
     of the two heroes are within +-12%. A test-only `classic` hero (full circle 22, dash 80, no ability) keeps the old
     rules for the old golden numbers.
-  - FACING: `aimX/aimY` in the sim. Cursor input aims at the (arena-clamped) cursor when it is farther than
-    `aimDeadzonePx` (3), else keeps the aim; axis input aims along the movement while the axis is non-zero; a dash does
-    not turn it; initial aim (1, 0). The Knight's shield therefore faces where you move (a design choice).
+  - FACING (0.10.0, the author's rule: ONLY where the hero goes): `aimX/aimY` in the sim. For every input source
+    (cursor, keys, gamepad, stick) the aim becomes this tick's movement intent direction (moveIntent ix, iy) when the
+    intended step is >= `aimMinStepFrac` (0.25) x the max step; below it the aim is kept. Anti-jitter: a turn of MORE
+    than 90 degrees needs `aimTurnTicks` (2) consecutive above-threshold ticks whose directions agree within 45 degrees.
+    A dash never turns it (also with cursor input); initial aim (1, 0). Never a zero / NaN vector.
   - ONE parry zone function (`src/sim/parryZone.ts`): inside = distance <= radius + projectile radius and, below 360,
     angle to the aim <= arc/2 + asin(clamp(r/d, 0, 1)); closer than `overlapPx` (6) always counts. Used by the parry,
     the boss reflect, the PERFECT measure and the renderer (the drawn arc is sampled from it). `isInvulnerable` (dash

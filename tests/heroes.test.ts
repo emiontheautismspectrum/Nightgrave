@@ -97,14 +97,15 @@ describe('hero code never touches the PRNG', () => {
 });
 
 describe('facing (aim)', () => {
-  it('starts toward the arena centre direction and follows the cursor beyond the dead zone only', () => {
+  it('starts at (1, 0); a cursor on the hero (no movement) keeps it; walking turns it', () => {
     const sim = fresh('knight');
     const h = sim.state.hero;
     expect(Math.hypot(h.aimX, h.aimY)).toBeCloseTo(1, 9);
-    // a cursor inside the dead zone keeps the previous aim
-    sim.step({ cursor: true, mx: h.x, my: h.y - HERO_RULES.aimDeadzonePx + 1, buttons: 0 });
+    sim.step({ cursor: true, mx: h.x, my: h.y, buttons: 0 });
     expect([h.aimX, h.aimY]).toEqual([1, 0]);
+    expect(HERO_RULES.aimMinStepFrac).toBeGreaterThan(0);
     sim.step({ cursor: true, mx: h.x - 50, my: h.y, buttons: 0 });
+    sim.step({ cursor: true, mx: h.x - 50, my: h.y, buttons: 0 }); // a reversal: 2 consistent ticks
     expect(h.aimX).toBeLessThan(-0.99);
   });
   it('axis input aims along the movement and keeps it when the axis is released; a dash does not turn it', () => {

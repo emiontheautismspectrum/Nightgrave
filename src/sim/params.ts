@@ -31,7 +31,9 @@ export interface SimParams {
   parryHalfSin: number;
   /** A projectile centre closer than this is always inside the zone (no blind spot). */
   parryOverlap: number;
-  aimDeadzone: number;
+  /** Facing: the smallest intended step (px / tick) that turns the aim, and the ticks a >= 90 degree turn needs. */
+  aimMinStep: number;
+  aimTurnTicks: number;
   ability: AbilityParams;
   parryActive: number; // ticks
   parryCooldown: number; // ticks, measured from activation, after a parry that hit
@@ -137,7 +139,8 @@ export function makeParams(difficulty: Difficulty, hero: AnyHeroId = 'classic'):
     parryHalfCos: dcos(half),
     parryHalfSin: dsin(half),
     parryOverlap: HERO_RULES.overlapPx,
-    aimDeadzone: HERO_RULES.aimDeadzonePx,
+    aimMinStep: (T.hero.speed / TICK_RATE) * HERO_RULES.aimMinStepFrac,
+    aimTurnTicks: HERO_RULES.aimTurnTicks,
     ability,
     cx: T.arena.centerX,
     cy: T.arena.centerY,
