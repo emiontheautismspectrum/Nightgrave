@@ -195,7 +195,7 @@ export function heroPage(back: () => void, onPick: () => void): MenuPage {
     })),
     lines: () => ['THE SHIELD FACES WHERE YOU MOVE'],
     linesTop: 186,
-    gap: 44, // phones: room for the name and the ability line in one row
+    gap: 60, // phones: room for SELECTED above the name and the two stat lines under it in one row
     decorate: (scene: Phaser.Scene, rowY: (i: number) => number, touch: boolean) => {
       const out: Phaser.GameObjects.GameObject[] = [];
       if (touch) {
@@ -204,11 +204,11 @@ export function heroPage(back: () => void, onPick: () => void): MenuPage {
         HERO_IDS.forEach((h, i) => {
           const y = rowY(i);
           // the sprite (y-22..y+10) sits above the ability line (y+11..y+19): the line can stay centred on any width
-          const sp = scene.add.sprite(24, Math.round(y - 6), ATLAS, frame(`${h}_idle`)).setScale(2);
+          const sp = scene.add.sprite(40, Math.round(y - 6), ATLAS, frame(`${h}_idle`)).setScale(2); // clear of the frame
           if (scene.anims.exists(`${h}_idle`)) sp.play(`${h}_idle`);
           out.push(sp);
           HERO_LINES(h).forEach((l, k) => out.push(snap(addText(scene, W / 2, Math.round(y + 12 + k * 9), l, { color: C.dim }).setOrigin(0.5))));
-          if (save().hero === h) out.push(snap(addText(scene, Math.round(W * 0.86), Math.round(y - 4), 'SELECTED', { color: C.gold }).setOrigin(0.5)));
+          if (save().hero === h) out.push(snap(addText(scene, W - 20 - 32, Math.round(y - 14), 'SELECTED', { color: C.gold }).setOrigin(0.5))); // top-right of the row, inside the frame
         });
         return out;
       }

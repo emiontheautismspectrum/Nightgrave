@@ -31,6 +31,11 @@ export interface MenuPage {
   items: MenuItem[];
   /** Extra text lines under the title (scores, controls, credits). */
   lines?: () => string[];
+  /**
+   * Footer lines (the title page: controls hint, champion block). Phones in portrait pin them in their own panel at the
+   * bottom of the screen (the bottom band); everywhere else they simply follow `lines`.
+   */
+  foot?: () => string[];
   /** Back goes here; undefined = root page (no back). */
   onBack?: () => void;
   /** Extra objects for this page (e.g. hero sprites); destroyed when the page changes. */
@@ -81,6 +86,13 @@ export function onTap(o: Phaser.GameObjects.GameObject, fn: (p: Phaser.Input.Poi
 /** Content of every menu page starts here (the page title sits at y 30 above it). */
 export const MENU_TOP = 58;
 export const PANEL_PAD = 8;
+/** Phones: gap between the screen edge and the menu frame (CSS px). Portrait: the logo band (share of the height) and
+ * how far rows may grow beyond their minimum (48 CSS px) before the block is centred instead. */
+export const MENU_GUTTER_CSS = 10;
+export const LOGO_BAND = 0.18;
+export const ROW_GROW = 1.6;
+/** Phones: an info row (disabled, not a tap target) takes this share of a row's height. */
+export const INFO_ROW = 0.6;
 
 const PAD = { a: 0, b: 1, start: 9, up: 12, down: 13, left: 14, right: 15 };
 
@@ -115,6 +127,11 @@ interface Geo {
   listBottom: number;
   arrowW: number;
   backW: number;
+  /** Phones: the gap between the screen edge and the panel frame (game px, ~10 CSS px), the first row's top edge. */
+  gutter: number;
+  rowTop: number;
+  /** Portrait: the pinned footer's text top (Infinity = none). */
+  footTop: number;
 }
 
 type Target = { kind: 'row' | 'left' | 'right' | 'back'; i: number; x: number; y: number; w: number; h: number; scrolls: boolean };
@@ -123,6 +140,10 @@ export class MenuView {
   private objs: Phaser.GameObjects.GameObject[] = [];
   private rows: UIText[] = [];
   private lineTexts: UIText[] = [];
+  /** Portrait footer (pinned, not scrolling): its texts, its panel and how many lines it was laid out for. */
+  private footTexts: UIText[] = [];
+  private footPanel: Phaser.GameObjects.Rectangle | null = null;
+  private footCount = 0;
   private arrows: UIText[] = [];
   /** The dark panel behind the page, sized to its content (+ even padding) on every refresh. */
   private panel: Phaser.GameObjects.Rectangle | null = null;
@@ -174,20 +195,28 @@ export class MenuView {
     const safe = touch ? sc.safe : { t: 0, b: 0, l: 0, r: 0 };
     if (!touch) {
       const top = Math.max(MENU_TOP, page.top ?? MENU_TOP);
-      return { touch, portrait, W, H, css, size: 8, rowH: page.gap ?? 14, mx: 0, titleY: 30, listTop: top, listBottom: H, arrowW: 0, backW: 0 };
+      return { touch, portrait, W, H, css, size: 8, rowH: page.gap ?? 14, mx: 0, titleY: 30, listTop: top, listBottom: H, arrowW: 0, backW: 0, gutter: 0, rowTop: top, footTop: Infinity };
     }
     // the target is the row minus a 4 px gap: the row is the minimum target size + 4
     const rowH = Math.max(page.gap ?? 14, Math.ceil((portrait ? TOUCH_ROW_CSS.portrait : TOUCH_ROW_CSS.landscape) * css) + 4);
     const backW = Math.ceil(TOUCH_TARGET_CSS * css);
-    const titleY = safe.t + Math.max(Math.ceil(backW / 2), portrait ? 20 : 14);
+    // a symmetric gutter (~10 CSS px) between the screen edge and the panel frame; rows start PANEL_PAD inside the frame
+    const gutter = Math.max(Math.ceil(MENU_GUTTER_CSS * css), safe.l, safe.r);
+    // portrait: the logo / title band is the top ~18% of the real screen; the title sits in its middle
+    const band = portrait ? Math.round((H - safe.t - safe.b) * LOGO_BAND) : 0;
+    const titleY = safe.t + Math.max(Math.ceil(backW / 2), portrait ? Math.max(20, Math.round(band / 2)) : 14);
+    const listTop = Math.max(titleY + Math.ceil(backW / 2) + 6, safe.t + band);
     return {
       touch, portrait, W, H, css, size: 16, rowH,
-      mx: Math.max(4, safe.l + 4, safe.r + 4),
+      mx: gutter + PANEL_PAD,
       titleY,
-      listTop: titleY + Math.ceil(backW / 2) + 6,
+      listTop,
       listBottom: H - safe.b - 4,
       arrowW: backW,
       backW,
+      gutter,
+      rowTop: listTop,
+      footTop: Infinity,
     };
   }
 
@@ -204,13 +233,26 @@ export class MenuView {
     if (!g || !it) return 0;
     if (!g.touch) return it.y ?? g.listTop + i * g.rowH;
     let n = 0;
-    for (let k = 0; k < i; k++) if (this.collapsed[k] !== '1') n++;
-    return g.listTop + g.rowH * (n + 0.5);
+    for (let k = 0; k < i; k++) n += this.slot(this.page!.items[k]!, this.collapsed[k] === '1');
+    return Math.round(g.rowTop + g.rowH * (n + this.slot(it, false) / 2));
   }
 
-  /** Rows taking space (phones). */
+  /**
+   * Phones: the height of a row in row units. A collapsed row (a disabled row with an empty label) takes none, an info
+   * row (disabled, e.g. the daily seed line: not a tap target) INFO_ROW of a row, every other row a full one.
+   */
+  private slot(it: MenuItem, collapsed: boolean): number {
+    return collapsed ? 0 : it.disabled ? INFO_ROW : 1;
+  }
+
+  /** Rows taking space on a page (phones, in row units), before it is shown. */
+  private shownRowsOf(page: MenuPage): number {
+    return page.items.reduce((a, it) => a + this.slot(it, !!it.disabled && it.label().trim() === ''), 0);
+  }
+
+  /** Rows taking space (phones, in row units). */
   private shownRows(): number {
-    return [...this.collapsed].filter((c) => c !== '1').length;
+    return (this.page?.items ?? []).reduce((a, it, k) => a + this.slot(it, this.collapsed[k] === '1'), 0);
   }
 
   show(page: MenuPage, focus = -1): void {
@@ -238,9 +280,48 @@ export class MenuView {
       const bh = Math.max(back.height + 8, g.backW);
       this.targets.push({ kind: 'back', i: -1, x: back.x - 4, y: back.y + back.height / 2 - bh / 2, w: bw, h: bh, scrolls: false });
     }
+    // lines (and the footer) are measured first: in portrait they decide the row spacing and the vertical centring
+    let lines = page.lines?.() ?? [];
+    let foot = page.foot?.() ?? [];
+    const lineObjs = (ls: string[]) =>
+      ls.map((l) => {
+        const t = snap(addText(s, g.W / 2, 0, l, { color: C.dim }).setOrigin(0.5, 0));
+        if (g.touch) t.setMaxWidth(g.W - 2 * g.mx - 8);
+        return t;
+      });
+    const lineH = (t: UIText) => (g.touch ? Math.max(11, t.height + 3) : 11);
+    if (g.portrait && foot.length) {
+      const probe = lineObjs(foot);
+      const footH = probe.reduce((a, t) => a + lineH(t), 0);
+      probe.forEach((t) => t.destroy());
+      const footTop = g.H - g.gutter - PANEL_PAD - footH;
+      // the pinned footer only when the rows (at their minimum size) and the lines still fit above it
+      const need = this.shownRowsOf(page) * g.rowH + 6 + lines.length * 11 + 2 * PANEL_PAD;
+      if (footTop - PANEL_PAD - 6 - g.listTop >= need) {
+        g.footTop = footTop;
+        g.listBottom = footTop - PANEL_PAD - 6;
+      }
+    }
+    if (g.footTop === Infinity) {
+      lines = [...lines, ...(foot.length ? ['', ...foot] : [])];
+      foot = [];
+    }
+    this.footCount = foot.length;
+    const lineTexts = lineObjs(lines);
+    const linesH = lineTexts.reduce((a, t) => a + lineH(t), 0);
+    if (g.portrait) {
+      // rows grow (up to 1.6x the minimum) before anything else, then the whole block is centred in the middle band
+      const n = this.shownRows();
+      const room = g.listBottom - g.listTop - 2 * PANEL_PAD - (lines.length ? linesH + 6 : 0);
+      if (n > 0) g.rowH = Math.max(g.rowH, Math.min(Math.floor(room / n), Math.round(g.rowH * ROW_GROW)));
+      const block = n * g.rowH + (lines.length ? 6 + linesH : 0);
+      const spare = g.listBottom - g.listTop - 2 * PANEL_PAD - block;
+      if (spare > 0) g.rowTop = g.listTop + PANEL_PAD + Math.floor(spare / 2);
+    }
     page.items.forEach((it, i) => {
       const x = g.touch ? g.W / 2 : (it.x ?? g.W / 2);
       const t = addText(s, x, this.rowY(i), '', { color: C.bone, size: g.size }).setOrigin(0.5);
+      t.setCenterAlign(); // a two-line label (the daily seed row) stays centred
       this.rows.push(t);
       this.list?.add(t);
       if (!it.disabled && g.touch && (it.onLeft || (it.onRight && !it.onActivate))) {
@@ -250,20 +331,32 @@ export class MenuView {
         this.list?.add([l, r]);
       }
     });
-    const lines = page.lines?.() ?? [];
     const placed = page.items.filter((it) => it.y === undefined).length;
     const lowest = Math.max(g.listTop - g.rowH, ...page.items.map((_it, i) => this.rowY(i)));
     let y = g.touch
-      ? g.listTop + g.rowH * this.shownRows() + 6
+      ? g.rowTop + g.rowH * this.shownRows() + 6
       : (page.linesTop ?? (page.items.length ? (placed === page.items.length ? g.listTop + placed * g.rowH + 6 : lowest + g.rowH) : g.listTop));
     if (g.touch && page.linesTop !== undefined && !page.items.every((it) => it.y === undefined)) y = Math.max(y, page.linesTop);
-    lines.forEach((l) => {
-      const t = snap(addText(s, g.W / 2, y, l, { color: C.dim }).setOrigin(0.5, 0));
-      if (g.touch) t.setMaxWidth(g.W - 2 * g.mx - 8);
+    lineTexts.forEach((t) => {
+      snap(t.setY(Math.round(y)));
       this.lineTexts.push(t);
       this.list?.add(t);
-      y += g.touch ? Math.max(11, t.height + 3) : 11;
+      y += lineH(t);
     });
+    // the pinned footer (portrait): its own panel above the home indicator, never scrolling
+    if (foot.length) {
+      this.footPanel = s.add.rectangle(g.gutter, g.footTop - PANEL_PAD, g.W - 2 * g.gutter, 10, 0x0b0d12, 0.8).setOrigin(0).setStrokeStyle(1, 0x3a4558).setDepth(this.depth + 0.6);
+      this.objs.push(this.footPanel);
+      let fy = g.footTop;
+      for (const t of lineObjs(foot)) {
+        snap(t.setY(Math.round(fy)).setDepth(this.depth + 0.7));
+        this.footTexts.push(t);
+        this.objs.push(t);
+        fy += lineH(t);
+      }
+      const h = Math.round(fy - g.footTop + 2 * PANEL_PAD - 3);
+      this.footPanel.setSize(g.W - 2 * g.gutter, h).setDisplaySize(g.W - 2 * g.gutter, h);
+    }
     this.deco = page.decorate ? page.decorate(s, (i) => this.rowY(i), g.touch) : [];
     this.list.add(this.deco);
     const first = page.items.findIndex((it) => !it.disabled);
@@ -294,6 +387,8 @@ export class MenuView {
   private clear(): void {
     for (const o of this.objs) o.destroy();
     this.objs = [];
+    this.footTexts = [];
+    this.footPanel = null;
     this.rows = [];
     this.lineTexts = [];
     this.arrows = [];
@@ -310,7 +405,8 @@ export class MenuView {
     const p = this.page;
     const g = this.g;
     if (!p || !g) return;
-    if (g.touch && this.collapseKey() !== this.collapsed) {
+    const footNow = p.foot?.() ?? [];
+    if ((g.touch && this.collapseKey() !== this.collapsed) || (this.footTexts.length > 0 && footNow.length !== this.footCount)) {
       // a row appeared or vanished (e.g. the difficulty changed): lay the page out again
       const fresh = this.fresh;
       this.show(p, this.focus);
@@ -354,8 +450,10 @@ export class MenuView {
         this.targets.push({ kind: 'row', i, x: b.x - 8, y: t.y - t.height / 2 - 3, w: t.width + 16, h: 14, scrolls: true });
       }
     });
-    const lines = p.lines?.() ?? [];
+    // the footer follows the lines unless it is pinned (portrait)
+    const lines = this.footTexts.length ? (p.lines?.() ?? []) : [...(p.lines?.() ?? []), ...(footNow.length ? ['', ...footNow] : [])];
     this.lineTexts.forEach((t, i) => snap(setTextValue(t, lines[i] ?? '')));
+    this.footTexts.forEach((t, i) => snap(setTextValue(t, footNow[i] ?? '')));
     this.fitPanel();
   }
 
@@ -370,6 +468,8 @@ export class MenuView {
       const b = o.getBounds?.();
       if (b && Number.isFinite(b.bottom) && b.height > 0) bottom = Math.max(bottom, b.bottom);
     }
+    // the last row's whole tap slot must scroll into view, not only its text
+    if (g.touch) bottom = Math.max(bottom, g.rowTop + this.shownRows() * g.rowH);
     this.scrollMin = g.touch ? Math.min(0, g.listBottom - (bottom + PANEL_PAD + 4)) : 0;
     this.list.y = Math.max(this.scrollMin, Math.min(0, y0));
   }
@@ -515,15 +615,19 @@ export class MenuView {
     const pad = PANEL_PAD;
     const g = this.g;
     if (g.touch) {
-      // phones: the panel spans the rows (full width) so every target sits on it
+      // phones: the panel spans the rows (full width, symmetric gutters) so every target sits on it
       x0 = Math.min(x0, g.mx);
       x1 = Math.max(x1, g.W - g.mx);
-      y0 = Math.min(y0, g.listTop + 2);
+      y0 = Math.min(y0, g.rowTop + 2);
+      // the row slots are symmetric: the panel covers the last slot as fully as the first one
+      const n = this.shownRows();
+      if (n > 0) y1 = Math.max(y1, g.rowTop + n * g.rowH - 2);
     }
     const w = g.touch ? x1 - x0 + 2 * pad : Math.max(160, x1 - x0 + 2 * pad);
     const cx = g.touch ? (x0 + x1) / 2 : g.W / 2;
-    const px = Math.max(0, Math.round(cx - w / 2));
-    const pw = Math.min(g.W - px, Math.round(w));
+    // phones: always the full width between the two (equal) gutters
+    const px = g.touch ? g.gutter : Math.max(0, Math.round(cx - w / 2));
+    const pw = g.touch ? g.W - 2 * g.gutter : Math.min(g.W - px, Math.round(w));
     this.panel.setVisible(true).setPosition(px, Math.round(y0 - pad)).setSize(pw, Math.round(y1 - y0 + 2 * pad));
     this.panel.setDisplaySize(pw, Math.round(y1 - y0 + 2 * pad));
     this.updateScroll();
@@ -546,6 +650,11 @@ export class MenuView {
       screen: [g.W, g.H],
       cssPerPx: 1 / g.css,
       list: [g.listTop, g.listBottom],
+      portrait: g.portrait,
+      gutter: g.gutter,
+      // the rows' block (content coords) for the vertical balance check
+      block: this.rows.length ? [Math.min(...this.rows.filter((t) => t.text.trim() !== '').map((t) => t.getBounds().y)), Math.max(...this.rows.filter((t) => t.text.trim() !== '').map((t) => t.getBounds().bottom))] : null,
+      foot: this.footPanel ? { panel: [this.footPanel.x, this.footPanel.y, this.footPanel.width, this.footPanel.height], texts: this.footTexts.filter((t) => t.text.trim() !== '').map((t) => ({ box: box(t), text: t.text })) } : null,
       scroll: [dy, this.scrollMin],
       panel: [this.panel.x, this.panel.y + dy, this.panel.width, this.panel.height],
       texts: [...this.rows.map((t, i) => ({ t, f: focusable.has(i) })), ...this.lineTexts.map((t) => ({ t, f: false })), ...(this.deco.filter((o) => o instanceof Phaser.GameObjects.BitmapText) as UIText[]).map((t) => ({ t, f: false }))]

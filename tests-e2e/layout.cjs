@@ -1,6 +1,10 @@
 /**
  * Automated menu layout check (smoke build): on every menu page, every text lies inside the page panel, no two texts
  * overlap, and every focusable item is on the visible 480x270 canvas. Desktop and phone (touch) layouts.
+ * Phones in portrait (390x844, 360x800, 412x915, 375x667, 430x932) and a short landscape, each also with SIMULATED
+ * safe-area insets (top 47 / bottom 34 CSS px, the standalone web app on an iPhone): symmetric gutters, the pinned
+ * footer (controls hint + champion block, a long name and message from a mocked board) inside its own panel, and the
+ * title page's menu block centred within +-8% of the visible screen's centre.
  * Run: npm run e2e:layout
  */
 const { chromium, devices } = require('playwright');
@@ -36,6 +40,28 @@ function checkTouch(name, L) {
         if (ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah) errs.push(`overlap: "${L.texts[i].text}" / "${L.texts[j].text}"`);
       }
     if (px < -0.5 || px + pw > W + 0.5) errs.push('panel wider than the screen');
+    // symmetric gutters (the frame never touches the screen edge)
+    if (L.gutter > 0 && (px < L.gutter - 0.5 || Math.abs(px - (W - px - pw)) > 1.5)) errs.push(`panel not symmetric: ${px} / ${W - px - pw}`);
+    if (L.foot) {
+      const [fx, fy, fw, fh] = L.foot.panel;
+      if (fy + fh > L.screen[1] + 0.5 || Math.abs(fx - (W - fx - fw)) > 1.5) errs.push('footer panel off screen or not symmetric');
+      if (fy < py + ph - 0.5 + (L.scroll[1] < 0 ? -1e9 : 0)) errs.push('footer overlaps the menu panel');
+      for (const t of L.foot.texts) {
+        const [x, y, w, h] = t.box;
+        if (x < fx - 0.5 || y < fy - 0.5 || x + w > fx + fw + 0.5 || y + h > fy + fh + 0.5) errs.push(`outside footer: "${t.text}"`);
+      }
+      for (let i = 0; i < L.foot.texts.length; i++)
+        for (let j = i + 1; j < L.foot.texts.length; j++) {
+          const [ax, ay, aw, ah] = L.foot.texts[i].box;
+          const [bx, by, bw, bh] = L.foot.texts[j].box;
+          if (ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah) errs.push(`footer overlap: "${L.foot.texts[i].text}"`);
+        }
+    }
+    if (L.balance && L.block && L.scroll[1] === 0) {
+      const c = (L.block[0] + L.block[1]) / 2;
+      const H = L.screen[1];
+      if (Math.abs(c - H / 2) > 0.08 * H) errs.push(`menu block off centre: ${(((c - H / 2) / H) * 100).toFixed(1)}%`);
+    }
     const k = L.cssPerPx;
     for (const t of L.targets) {
       const [x, y, w, h] = t.box;
@@ -92,21 +118,36 @@ function check(name, L) {
 }
 
 (async () => {
-  execSync('npx vite build', { cwd: ROOT, stdio: 'ignore', env: { ...process.env, VITE_SMOKE: '1' } });
+  // the board API is mocked (a long champion name and message): the title's champion block is laid out for real
+  execSync('npx vite build', { cwd: ROOT, stdio: 'ignore', env: { ...process.env, VITE_SMOKE: '1', VITE_API_BASE: 'http://localhost:8787' } });
   const srv = spawn(process.execPath, [VITE_BIN, 'preview', '--port', '4183', '--strictPort'], { cwd: ROOT, stdio: 'ignore' });
   await sleep(2500);
   const b = await chromium.launch();
   try {
     const phone = (w, h, dpr) => ({ viewport: { width: w, height: h }, deviceScaleFactor: dpr, isMobile: true, hasTouch: true });
-    for (const [label, opts] of [
+    const runs = [
       ['desktop', { viewport: { width: 1440, height: 810 } }],
       ['phone', { ...devices['Pixel 7 landscape'] }],
-      ['portrait 390x844', phone(390, 844, 3)],
-      ['portrait 360x800', phone(360, 800, 3)],
-      ['portrait 412x915', phone(412, 915, 2.625)],
-      ['portrait 375x667', phone(375, 667, 2)],
-    ]) {
+      ['landscape 667x375', phone(667, 375, 3)],
+    ];
+    for (const ins of [null, [47, 34]])
+      for (const [w, h, d] of [[390, 844, 3], [360, 800, 3], [412, 915, 2.625], [375, 667, 2], [430, 932, 3]])
+        runs.push([`portrait ${w}x${h}${ins ? ' insets 47/34' : ''}`, phone(w, h, d), ins]);
+    runs.push(['landscape 844x390 insets 47/34', phone(844, 390, 3), [0, 21]]);
+    const now = new Date();
+    const BOARD = { date: now.toISOString().slice(0, 10), serverNow: now.toISOString(), champion: { name: 'WWWWWWWWWWWWWWWW', message: 'Supercalifragilistic parries forever and ever, night' }, top: [] };
+    for (const [label, opts, ins] of runs) {
       const ctx = await b.newContext(opts);
+      await ctx.route('http://localhost:8787/api/daily**', (r) => r.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify(BOARD) }));
+      await ctx.route('http://localhost:8787/api/daily/me', (r) => r.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify({ verifiedScore: null, verifiedRank: null, pending: false, serverNow: now.toISOString() }) }));
+      if (ins)
+        // simulated safe-area insets: the #safe probe (normally env(safe-area-inset-*)) is padded before the game boots
+        await ctx.addInitScript(([t, bt]) => {
+          document.addEventListener('readystatechange', () => {
+            const el = document.getElementById('safe');
+            if (el) el.style.padding = `${t}px 0px ${bt}px 0px`;
+          });
+        }, ins);
       await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} }); // tests skip the site intro
       await ctx.addInitScript(() => localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'hard', settings: { touchHintSeen: true, hintsDone: true }, best: {}, daily: [] })));
       const page = await ctx.newPage();
@@ -117,7 +158,14 @@ function check(name, L) {
       };
       await page.goto('http://localhost:4183/');
       await sleep(1800);
-      check(`${label} title`, await L());
+      check(`${label} title`, { ...(await L()), balance: label.startsWith('portrait') });
+      if (ins) {
+        // the canvas sits inside the simulated insets: nothing under the status bar or the home indicator
+        const r = await page.evaluate(() => { const c = document.querySelector('#game canvas').getBoundingClientRect(); return [c.top, c.bottom, innerHeight]; });
+        const okIns = r[0] >= ins[0] - 0.5 && r[1] <= r[2] - ins[1] + 0.5;
+        if (!okIns) failed++;
+        console.log(`${okIns ? 'ok  ' : 'FAIL'} ${label} canvas inside the insets (${r.map((v) => v.toFixed(1)).join(' / ')})`);
+      }
       // pages reachable from the title: DIFF(1) HERO(2) SETTINGS(3) BEST(4) TODAY(5) CREDITS(6) (disabled rows skipped)
       for (const [name, downs, sub] of [['hero', 2], ['settings', 3], ['best scores', 4], ["today's best", 5], ['credits', 6], ['controls', 3, true]]) {
         await page.goto('http://localhost:4183/');
