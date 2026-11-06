@@ -33,6 +33,10 @@ export const SYNTH: Record<SfxEvent, Voice> = {
   new_record: { f0: 440, f1: 880, dur: 0.9, type: 'triangle', gain: 0.09 },
   ui_click: { f0: 300, f1: 260, dur: 0.04, type: 'square', gain: 0.025 },
   ui_confirm: { f0: 330, f1: 495, dur: 0.18, type: 'sine', gain: 0.06 },
+  guard_gain: { f0: 520, f1: 620, dur: 0.08, type: 'triangle', gain: 0.05 },
+  guard_ready: { f0: 620, f1: 930, dur: 0.25, type: 'triangle', gain: 0.07 },
+  guard_break: { f0: 1200, f1: 300, dur: 0.35, type: 'square', gain: 0.06, noise: 0.45 },
+  trail: { f0: 260, f1: 520, dur: 0.12, type: 'sawtooth', gain: 0.025, noise: 0.5 },
 };
 
 let noiseBuf: AudioBuffer | null = null;

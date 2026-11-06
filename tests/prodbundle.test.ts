@@ -19,6 +19,7 @@ describe('production bundle', () => {
       expect(js).not.toContain('__ngManual');
       expect(js).not.toMatch(/get\("play"\)|get\('play'\)/);
       expect(js).not.toMatch(/get\("wave"\)|get\('wave'\)/);
+      expect(js).not.toMatch(/get\("hero"\)|get\('hero'\)/); // the dev-only ?hero= helper
     } finally {
       process.env.NODE_ENV = env;
       rmSync(out, { recursive: true, force: true });

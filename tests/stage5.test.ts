@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  ALL_SFX, buildManifest, MUSIC, pickMusic, pitchFor, SFX_FILE, SoundDiffer, VoiceLimiter, type MusicTrack,
+  ALL_SFX, SYNTH_ONLY_SFX, buildManifest, MUSIC, pickMusic, pitchFor, SFX_FILE, SoundDiffer, VoiceLimiter, type MusicTrack,
 } from '../src/render/audioLogic';
 import { canRestart, isPortraitView, RESTART_GUARD_MS, RunDriver, STEP_MS } from '../src/render/runDriver';
 import { TAP_MS, TouchModel, touchButtons } from '../src/render/touch';
 import { BTN_DASH, BTN_PARRY, type InputFrame } from '../src/sim/input';
 import { decodeReplay, encodeReplay, playReplay } from '../src/sim/replay';
+import { SYNTH } from '../src/render/sfx';
 import { Sim } from '../src/sim/sim';
 import type { SimEvent } from '../src/sim/state';
 import {
@@ -312,8 +313,9 @@ describe('audio logic (no real audio)', () => {
     expect([...m.keys()]).toEqual(['sfx_parry']);
     expect(buildManifest({}).size).toBe(0);
     const list = readFileSync('docs/AUDIO_LIST.md', 'utf8');
-    for (const e of ALL_SFX) expect(list).toContain(`${SFX_FILE[e]}.mp3`);
-    expect(ALL_SFX.length).toBe(18);
+    for (const e of ALL_SFX) if (!SYNTH_ONLY_SFX.includes(e)) expect(list).toContain(`${SFX_FILE[e]}.mp3`);
+    expect(ALL_SFX.length).toBe(22);
+    expect(SYNTH_ONLY_SFX).toHaveLength(4);
   });
 
   it('voice limit 3 per sfx, pitch +-3% only on frequent sfx', () => {
@@ -349,6 +351,16 @@ describe('audio logic (no real audio)', () => {
     expect(d.tick({ multiplier: 100, projectiles: [] }, [spawn(4, 'orb_small')], 160)).toEqual(['orb_spawn']);
     expect(d.tick({ multiplier: 125, projectiles: [] }, [{ type: 'parry_hit', id: 1, x: 0, y: 0, points: 1, multiplier: 1, perfect: false, multAfter: 1.25 }], 200)).toEqual(['parry', 'parry_chain']);
     expect(d.tick({ multiplier: 125, projectiles: [] }, [spawn(5, 'blade'), spawn(6, 'wraith'), spawn(7, 'rune_shard', 30), spawn(8, 'rune_shard', 30)], 400)).toEqual(['blade_whoosh', 'wraith_wail', 'rune_burst']);
+  });
+
+  it('hero sounds: guard gain / ready / break and the ember trail (one per tick), synthesized when no file exists', () => {
+    const d = new SoundDiffer();
+    const m = { multiplier: 100, projectiles: [] };
+    expect(d.tick(m, [{ type: 'guard_gain', charges: 3 }, { type: 'guard_ready' }], 0)).toEqual(['guard_gain', 'guard_ready']);
+    expect(d.tick(m, [{ type: 'guard_break', id: 1, x: 0, y: 0 }], 10)).toEqual(['guard_break']);
+    const burn = (id: number): SimEvent => ({ type: 'trail_kill', id, x: 0, y: 0, points: 0.1 });
+    expect(d.tick(m, [{ type: 'trail_start' }, burn(1), burn(2)], 20)).toEqual(['trail']);
+    for (const e of SYNTH_ONLY_SFX) expect(SYNTH[e].dur).toBeGreaterThan(0);
   });
 
   it('a whole bot run produces sound events without touching the sim', () => {

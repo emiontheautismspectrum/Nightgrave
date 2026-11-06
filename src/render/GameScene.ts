@@ -8,7 +8,8 @@ import { VIEW_HEIGHT, VIEW_WIDTH } from '../config';
 import { TICK_RATE, type Difficulty } from '../data/tuning';
 import { utcDateKey } from '../daily';
 import { encodeReplay, type Replay } from '../sim/replay';
-import { dashCooldownLeft, dashDirection, isDashing, isFading, isParryActive, parryCooldownLeft, parryCooldownOf, Sim } from '../sim/sim';
+import { dashCooldownLeft, dashDirection, isDashing, isFading, isInvulnerable, isParryActive, parryCooldownLeft, parryCooldownOf, Sim } from '../sim/sim';
+import { drawHeroFx } from './heroView';
 import { HOLLOWS, RUNES } from '../data/arena';
 import type { SimEvent } from '../sim/state';
 import { bestScore, mergeFromDisk, persist, recordRun, save, shouldSaveRun } from '../storage';
@@ -96,6 +97,8 @@ export class GameScene extends Phaser.Scene {
   private touchGfx!: Phaser.GameObjects.Graphics;
   /** Dash direction chevron (render-only; the same pure rule the sim uses). */
   private chevron!: Phaser.GameObjects.Graphics;
+  /** Parry zone (shield arc / ring), aim indicator, guard pips, ember trail (src/render/heroView.ts). */
+  private heroFx!: Phaser.GameObjects.Graphics;
   private touchIcons: Phaser.GameObjects.Image[] = [];
   private fxLow = false;
   private slowFor = 0;
@@ -213,6 +216,7 @@ export class GameScene extends Phaser.Scene {
     this.buildPauseButton();
     this.touchGfx = this.add.graphics().setDepth(D_HUD);
     this.chevron = this.add.graphics();
+    this.heroFx = this.add.graphics();
     this.touchIcons = [this.add.image(0, 0, ATLAS, frame('icon_parry')), this.add.image(0, 0, ATLAS, frame('icon_dash'))];
     for (const i of this.touchIcons) i.setDepth(D_HUD + 1);
     // auto-pause when the tab loses focus or becomes hidden, or the device rotates
@@ -752,9 +756,8 @@ export class GameScene extends Phaser.Scene {
     switch (e.type) {
       case 'parry_start': {
         if (this.cfg.hero === 'knight') {
-          // Knight: shield bash in the facing direction (arc flash + metallic sparks)
-          const f = h.facing;
-          const b = this.add.sprite(Math.round(h.x + f * 9), Math.round(h.y - 2), ATLAS, frame('knight_bash')).setFlipX(f < 0).setAlpha(0.9);
+          // Knight: shield bash toward the aim (the arc the parry covers; metallic sparks)
+          const b = this.add.sprite(Math.round(h.x + h.aimX * 9), Math.round(h.y - 2 + h.aimY * 9), ATLAS, frame('knight_bash')).setFlipX(h.aimX < 0).setAlpha(0.9);
           b.setDepth(D_YSORT + h.y + 4.1).play('knight_bash').once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => b.destroy());
         } else {
           // Wisp: round flare pulse
@@ -778,6 +781,20 @@ export class GameScene extends Phaser.Scene {
           this.time.delayedCall(60, () => this.hero.anims.resume());
         }
         this.vibrate(12);
+        break;
+      case 'guard_break':
+        // the full guard absorbed a hit: the projectile shatters, a short shake (the hero blinks through the i-frames)
+        this.parried.add(e.id);
+        this.burst('parry_spark', e.x, e.y);
+        this.floatLabel('GUARD', h.x, h.y - 18, LABEL.step);
+        if (save().settings.shake) this.cameras.main.shake(90, this.reducedFx() ? 0.003 : 0.006);
+        this.vibrate(40);
+        break;
+      case 'trail_kill':
+        this.parried.add(e.id);
+        this.killsThisTick.push({ x: e.x, y: e.y });
+        this.pointsThisTick += e.points;
+        if (!this.lowFx()) this.burst('parry_spark', e.x, e.y);
         break;
       case 'dash_start': {
         const trail = this.cfg.hero === 'knight' ? 'knight_cloak_trail' : 'dash_trail'; // cloak vs flame streak
@@ -926,6 +943,9 @@ export class GameScene extends Phaser.Scene {
     const hx = Math.round(h.x);
     const hy = Math.round(h.y);
     this.hero.setPosition(hx, hy - 4).setFlipX(h.facing < 0).setDepth(D_YSORT + hy + 4);
+    // guard i-frames (isInvulnerable: the same rule as the sim): the hero blinks; steady and dimmed with reduced flashes
+    const guardIframes = st.alive && st.tick < h.guardInvulnUntil && isInvulnerable(st, p);
+    this.hero.setAlpha(!guardIframes ? 1 : this.reducedFx() ? 0.6 : Math.floor(this.time.now / 70) % 2 ? 0.35 : 1);
     this.shadow.setPosition(hx, hy + 5).setDepth(D_YSORT + hy + 3.9);
     this.pulse.setPosition(hx, hy - 2).setDepth(D_YSORT + hy + 4.1);
     this.drawCasters();
@@ -1044,11 +1064,10 @@ export class GameScene extends Phaser.Scene {
     g.clear();
     const st = this.sim.state;
     const p = this.sim.params;
-    // the true parry reach (radius from TUNING, follows any change automatically), both heroes, while the parry is active
-    if (st.alive && isParryActive(st, p)) {
-      g.lineStyle(1, 0xffb347, 0.45);
-      g.strokeCircle(Math.round(st.hero.x), Math.round(st.hero.y - 2), p.parryRadius);
-    }
+    // the true parry zone (sampled from the sim's zone function), the aim indicator, guard pips and the ember trail
+    const fx = this.heroFx;
+    fx.clear().setDepth(D_YSORT + st.hero.y + 4.2);
+    drawHeroFx(fx, st, p, isParryActive(st, p), isDashing(st, p), this.time.now, this.reducedFx());
     this.dust(st);
     if (!st.alive || isDashing(st, p)) return;
     const h = st.hero;

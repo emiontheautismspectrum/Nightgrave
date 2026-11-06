@@ -10,6 +10,7 @@ import { setDevice } from './render/hints';
 import { GameScene, type RunConfig } from './render/GameScene';
 import { TitleScene, type TitleConfig } from './render/TitleScene';
 import { save } from './storage';
+import { isHeroId, type HeroId } from './data/heroes';
 import { BoardPanel } from './web/boardPanel';
 import { computeLayout } from './web/layout';
 import { initBoardOverlay } from './web/boardOverlay';
@@ -109,12 +110,19 @@ async function boot(): Promise<void> {
   const q = new URLSearchParams(location.search);
   // dev-only start wave (screenshots of boss fights); never available in a production build, never saved
   const devWave = DEV_PARAMS && q.get('wave') ? Math.max(0, Math.min(99, Number(q.get('wave')) | 0)) : 0;
+  // dev-only hero preview (`npm run dev`, ?hero=knight|wisp): overrides the saved hero for runs, never saved. The whole
+  // branch is dead code in a production build (import.meta.env.DEV is false there; tests/prodbundle.test.ts checks it)
+  let devHero: HeroId | null = null;
+  if (import.meta.env.DEV) {
+    const h = q.get('hero');
+    if (isHeroId(h)) devHero = h;
+  }
 
   const runConfig = (): RunConfig => {
     const difficulty = save().difficulty;
     return {
       difficulty,
-      hero: save().hero,
+      hero: devHero ?? save().hero,
       // Hard: the same daily seed for everyone. The UTC date is read ONCE per run and both the seed and the HUD label
       // come from it, so they can never disagree at midnight.
       makeRun:

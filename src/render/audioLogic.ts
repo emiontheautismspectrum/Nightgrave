@@ -7,7 +7,8 @@ import type { SimEvent, SimState } from '../sim/state';
 export type SfxEvent =
   | 'parry' | 'parry_chain' | 'dash' | 'death' | 'orb_spawn' | 'rune_charge' | 'rune_burst' | 'blade_whoosh'
   | 'wraith_wail' | 'boss_intro_eye' | 'boss_intro_lich' | 'boss_hit' | 'boss_death' | 'pickup_slow'
-  | 'pickup_double' | 'new_record' | 'ui_click' | 'ui_confirm';
+  | 'pickup_double' | 'new_record' | 'ui_click' | 'ui_confirm'
+  | 'guard_gain' | 'guard_ready' | 'guard_break' | 'trail';
 export type MusicTrack = 'music_menu' | 'music_run_calm' | 'music_run_tense' | 'music_boss';
 export const AMBIENCE = 'amb_graveyard';
 
@@ -19,8 +20,11 @@ export const SFX_FILE: Record<SfxEvent, string> = {
   boss_intro_lich: 'sfx_boss_lich_intro', boss_hit: 'sfx_boss_hit', boss_death: 'sfx_boss_death',
   pickup_slow: 'sfx_pickup_slow', pickup_double: 'sfx_pickup_double', new_record: 'sfx_new_record',
   ui_click: 'sfx_ui_click', ui_confirm: 'sfx_ui_confirm',
+  guard_gain: 'sfx_guard_gain', guard_ready: 'sfx_guard_ready', guard_break: 'sfx_guard_break', trail: 'sfx_trail',
 };
 export const ALL_SFX = Object.keys(SFX_FILE) as SfxEvent[];
+/** Hero sounds not yet in docs/AUDIO_LIST.md: synthesized only until a file with that stem is added. */
+export const SYNTH_ONLY_SFX: readonly SfxEvent[] = ['guard_gain', 'guard_ready', 'guard_break', 'trail'];
 
 /** Build-time manifest: glob result (path -> url) -> file stem -> url. Only files that exist are ever requested. */
 export function buildManifest(glob: Record<string, string>): Map<string, string> {
@@ -96,6 +100,18 @@ export class SoundDiffer {
           break;
         case 'dash_start':
           out.push('dash');
+          break;
+        case 'guard_gain':
+          out.push('guard_gain');
+          break;
+        case 'guard_ready':
+          out.push('guard_ready');
+          break;
+        case 'guard_break':
+          out.push('guard_break');
+          break;
+        case 'trail_kill':
+          out.push('trail');
           break;
         case 'death':
           out.push('death');

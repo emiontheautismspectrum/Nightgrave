@@ -449,3 +449,29 @@ describe('maxPossibleScore bounds every hero', () => {
     expect(maxPossibleScore(1)).toBeGreaterThanOrEqual(T.maxKills * T.killPoints * TUNING.multiplier.cap * TUNING.pickups.doubleScore.factor);
   });
 });
+
+describe('hero render helpers (read-only)', () => {
+  it('stat lines fit the hero select screen and name the real guard size', () => {
+    for (const id of HERO_IDS) for (const l of HEROES[id].lines) expect(l.length).toBeLessThanOrEqual(19);
+    const g = HEROES.knight.ability;
+    expect(g.kind === 'guard' && HEROES.knight.lines.join(' ').includes(`${g.charges} PARRIES`)).toBe(true);
+  });
+  it('the drawn zone outline is sampled from the sim zone: an arc around the aim for the Knight, a closed ring for the Wisp', async () => {
+    const { zoneOutline, trailEmbers } = await import('../src/render/heroView');
+    const k = makeParams('hard', 'knight');
+    const runs = zoneOutline(100, 100, 0, -1, k); // aim up
+    expect(runs).toHaveLength(1);
+    for (const [x, y] of runs[0]!) {
+      expect(inParryZone(100, 100, 0, -1, x, y, 0, k)).toBeGreaterThanOrEqual(0);
+      expect(Math.acos(-(y - 100) / Math.hypot(x - 100, y - 100)) / DEG).toBeLessThanOrEqual(HEROES.knight.parry.arcDegrees / 2 + 1e-6);
+    }
+    const ring = zoneOutline(100, 100, 1, 0, makeParams('hard', 'wisp'));
+    expect(ring).toHaveLength(1);
+    expect(ring[0]![0]).toEqual(ring[0]![ring[0]!.length - 1]);
+    // embers: deterministic, fading with the remaining time, none for an empty trail
+    const seg = [{ x0: 0, y0: 0, x1: 30, y1: 0, until: 48 }];
+    expect(trailEmbers(seg, 0, 48, false)).toEqual(trailEmbers(seg, 0, 48, false));
+    expect(trailEmbers(seg, 24, 48, false)[0]!.a).toBeCloseTo(0.5, 5);
+    expect(trailEmbers([], 0, 48, true)).toEqual([]);
+  });
+});

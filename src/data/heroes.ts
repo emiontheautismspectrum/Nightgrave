@@ -24,7 +24,7 @@ export type HeroAbility =
 export interface HeroDef {
   id: AnyHeroId;
   name: string;
-  /** Hero select screen: two short lines (one per stat). */
+  /** Hero select screen: two short stat lines (<= 19 characters each: they sit side by side on desktop). */
   lines: [string, string];
   parry: {
     radius: number;
@@ -47,7 +47,7 @@ export const HEROES: Record<HeroId, HeroDef> = {
   knight: {
     id: 'knight',
     name: 'KNIGHT',
-    lines: ['SHIELD ARC 120 - LONGER REACH', 'GUARD: 3 PARRIES = 1 LIFE'],
+    lines: ['FRONT SHIELD ARC', '3 PARRIES = 1 GUARD'],
     parry: { radius: 24, arcDegrees: 120, maxKillsPerPulse: 3 },
     dashDistance: 80,
     ability: { kind: 'guard', charges: 3, invulnSeconds: 0.6 },
@@ -55,7 +55,7 @@ export const HEROES: Record<HeroId, HeroDef> = {
   wisp: {
     id: 'wisp',
     name: 'WISP',
-    lines: ['FULL RING - SMALLER REACH', 'EMBER DASH BURNS SHOTS'],
+    lines: ['FULL RING PARRY', 'DASH BURNS SHOTS'],
     parry: { radius: 22, arcDegrees: 360, maxKillsPerPulse: 3 },
     dashDistance: 100,
     ability: { kind: 'trail', seconds: 0.8, halfWidth: 3, killPoints: 10, maxKills: 5 },
