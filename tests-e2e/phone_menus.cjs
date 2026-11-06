@@ -129,7 +129,10 @@ function targetsOk(l) {
       ok(await s.tap('HERO'), 'tap HERO');
       l = await s.L();
       ok(l.title === 'HERO' && !targetsOk(l), 'hero page by tap, targets >= 44', targetsOk(l));
-      if (shots) await s.page.screenshot({ path: path.join(OUT, 'phone_hero.png') });
+      if (shots) {
+        await s.page.screenshot({ path: path.join(OUT, 'phone_hero.png') });
+        await s.page.screenshot({ path: path.join(OUT, 'hero_select_phone.png') }); // the heroes pass: stat lines from HeroDef
+      }
       ok(await s.tap('WISP'), 'tap WISP');
       l = await s.L();
       const hero = await s.page.evaluate(() => JSON.parse(localStorage.getItem('nightgrave.v1')).hero);

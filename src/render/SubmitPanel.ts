@@ -233,6 +233,11 @@ export class SubmitPanel {
     } else setTextColor(setTextValue(this.status, reasonText(res.reason)), C.ember);
   }
 
+  /** The status line as shown (smoke-build snapshot for the e2e checks). */
+  statusText(): string {
+    return this.status?.text ?? '';
+  }
+
   close(): void {
     window.removeEventListener('resize', this.onResize);
     for (const el of this.inputs) el.remove();

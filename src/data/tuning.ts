@@ -19,11 +19,11 @@ export const TUNING = {
    * whiffCooldownSeconds. Without the whiff penalty a fixed-rhythm parry in place is unbeatable:
    * orbs cannot cross the pulse-to-body gap during the short off-window.
    */
-  // Polish 2: parry is a skill: smaller (22 px), shorter (0.10 s), slower to recover (0.9 s after a hit, 1.4 s after a
+  // Polish 2: parry is a skill: small (the radius is per hero), short (0.10 s), slower to recover (0.9 s after a hit, 1.4 s after a
   // whiff), at most 3 kills per pulse. Multiplier fix: every successful pulse steps the multiplier; a PERFECT parry (a
-  // destroyed projectile whose EDGE is within radius * closeFraction = 16.5 px of the hero) steps it once more. The
-  // perfect timing window is (16.5 - hero radius 3) px / projectile speed: ~0.16 s for a Medium orb at wave 1 (83 px/s),
-  // ~0.21 s on Easy (64 px/s), ~0.13 s on Hard (108 px/s). Tuned with tools/bot/multiplier_report.ts: the skilled bot
+  // destroyed projectile whose EDGE is within the hero's radius * closeFraction of the hero, e.g. 22 x 0.75 = 16.5 px)
+  // steps it once more. At radius 22 the perfect timing window is (16.5 - hero radius 3) px / projectile speed: ~0.16 s
+  // for a Medium orb at wave 1 (83 px/s), ~0.21 s on Easy (64 px/s), ~0.13 s on Hard (108 px/s). Tuned with tools/bot/multiplier_report.ts: the skilled bot
   // (+-2 ticks of timing) is perfect on ~85% of its parries, the heuristic bot (no timing) on ~25%.
   // the parry RADIUS and ARC are per hero (src/data/heroes.ts); these are the shared timings
   parry: { activeSeconds: 0.1, cooldownSeconds: 0.9, whiffCooldownSeconds: 1.4, bufferSeconds: 0.1, maxKillsPerPulse: 3, closeFraction: 0.75 },

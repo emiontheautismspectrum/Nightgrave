@@ -6,10 +6,34 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 
 ## Design summary
 - Genre: fixed single arena, endless survival, no story, English-only UI.
-- Hero is a small pixel character. 2 heroes in MVP (cosmetic difference only, identical stats):
-  - Knight: parry = shield flash, dash = cloak dash.
-  - Wisp (ember spirit): parry = flare pulse, dash = flame streak.
-  - Later (not MVP): Mage, mythical beast.
+- Hero is a small pixel character. 2 heroes with DIFFERENT mechanics (the heroes pass; this replaced the old
+  "cosmetic only" rule). All hero numbers live in `src/data/heroes.ts` (HeroDef: parry radius / arc / kills, dash
+  distance, a typed `ability`); the sim dispatches on `ability.kind`, never on a hero name:
+  - Knight: shield ARC 120 degrees around the aim, radius 24; ability GUARD: +1 charge per successful pulse (max 3); a
+    FULL guard absorbs one lethal PARRYABLE hit (charges -> 0, the projectile is destroyed, 0.6 s guard i-frames, no
+    points); unparryables (blades, sigils, beams) still kill; no decay. Dash 80 px.
+  - Wisp (ember spirit): full ring, radius 22; dash 100 px; ability EMBER TRAIL: the dash leaves a 0.8 s burning line
+    that destroys parryable, non-armored projectiles (max 5 per dash), each 10 x the current multiplier (x2 under
+    Double Score); no multiplier step, no reset-timer refresh, not a parry.
+  - Frozen by the balance pass (`npx vite-node tools/bot/balance.ts 50`): on Hard the median survival and median score
+    of the two heroes are within +-12%. A test-only `classic` hero (full circle 22, dash 80, no ability) keeps the old
+    rules for the old golden numbers.
+  - FACING: `aimX/aimY` in the sim. Cursor input aims at the (arena-clamped) cursor when it is farther than
+    `aimDeadzonePx` (3), else keeps the aim; axis input aims along the movement while the axis is non-zero; a dash does
+    not turn it; initial aim (1, 0). The Knight's shield therefore faces where you move (a design choice).
+  - ONE parry zone function (`src/sim/parryZone.ts`): inside = distance <= radius + projectile radius and, below 360,
+    angle to the aim <= arc/2 + asin(clamp(r/d, 0, 1)); closer than `overlapPx` (6) always counts. Used by the parry,
+    the boss reflect, the PERFECT measure and the renderer (the drawn arc is sampled from it). `isInvulnerable` (dash
+    or guard i-frames) is one function for the sim and the renderer. Order: parry, then the trail, then hits.
+  - The hero is part of the run: `createState(seed, difficulty, heroId)`, `makeParams(difficulty, hero)`; the replay
+    stores it in its CORE (JSON replay v2, binary log format 2 header); a missing / unknown hero or an old-format
+    replay is invalid; the verifier and the Worker take the hero from the core and reject a different claimed `hero`.
+    Hero code never consumes the PRNG (test: identical spawn schedule for both heroes). One shared daily board.
+  - Adding a hero: append its id to `HERO_IDS` (append only: the index is the replay byte), add a HeroDef in `HEROES`
+    (two stat lines <= 19 chars), sprites (`<id>_idle`, `_run`, `_dash`, ... in tools/ and the atlas), a new
+    `ability` kind + its sim branch only for a new mechanic, a balance run, then bump CLIENT_VERSION (the fingerprint
+    covers the hero table) and follow docs/DEPLOY.md "Upgrading the game".
+  - Later: Mage, mythical beast.
 - ONE HIT = death. Restart in under 1 second by click/Space, with a mini score panel.
 - Mood: meditative flow with a competitive score chase.
 
@@ -51,15 +75,20 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   run per device a card with the controls and "Violet: parry it. Red: dodge or dash." (any input after 250 ms closes it,
   without acting); two one-time contextual hints ("Parry!", "Can't parry - dash!") away from the hero; "Show tips again"
   in Settings. A small amber chevron next to the hero shows where a dash would go.
+- Hero visuals (render-only, `src/render/heroView.ts`): Knight = the shield ARC around the aim during a parry plus a
+  faint aim indicator (12% opacity) the rest of the time; Wisp = a ring. Guard pips above the Knight (a slow pulse when
+  full, steady with reduced flashes); guard i-frames blink the hero (steady and dimmed with reduced flashes). Wisp
+  ember-trail particles. Sounds `guard_gain`, `guard_ready`, `guard_break`, `trail` (synthesized until files exist).
+  Hero select: two stat lines per hero from HeroDef. Dev only: `?hero=knight|wisp` (import.meta.env.DEV).
 
 ## Core mechanics (all values live in `src/data/tuning.ts`, tunable)
-- Parry (a skill, Polish 2): pulse radius 22 px, active 0.10 s, cooldown 0.9 s after a successful parry and 1.4 s after
+- Parry (a skill, Polish 2): pulse radius and arc per hero (see Heroes), active 0.10 s, cooldown 0.9 s after a successful parry and 1.4 s after
   a whiff. Destroys at most 3 parryable projectiles per pulse (nearest first) while they are inside it during the active
   window; each scores as before.
-- Dash: rare. ~80 px over 0.2 s, invulnerable only for the first 0.12 s, cooldown 3 s. Needed against unparryable threats.
+- Dash: rare. 80 px (Knight) / 100 px (Wisp) over 0.2 s, invulnerable only for the first 0.12 s, cooldown 3 s. Needed against unparryable threats.
 - Multiplier (fix-multiplier): +0.25 for every SUCCESSFUL pulse (at least one parryable destroyed; an armored crack
-  alone does not count), after its first kill has scored. A PERFECT parry (a destroyed projectile whose EDGE is within
-  parry.radius x closeFraction = 22 x 0.75 = 16.5 px of the hero; a ~0.16 s timing window on Medium) adds +0.25 more,
+  alone does not count), after its first kill has scored. A PERFECT parry (a destroyed projectile inside the parry
+  zone whose EDGE is within the hero's radius x closeFraction, e.g. 22 x 0.75 = 16.5 px; ~0.16 s on Medium) adds +0.25 more,
   once per pulse, and shows "PERFECT". Cap x5; every destroyed projectile refreshes the 3 s reset timer; whiffs and
   crack-only pulses neither step nor refresh. Scoring only: survival is unchanged. A hit kills the run.
 - Feedback (render-only): a floating "X1.50" / "PERFECT X2.00" label and a "+N" popup per tick, placed clear of the
@@ -67,7 +96,8 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   in the last second before the reset and a dim on reset (no pulse or blink with reduced flashes). Double Score: gold
   score with an X2 tag, a thin breathing gold outline of the arena, a gold ring on pickup, gold point popups.
 - Ember charge (boss drop): +0.01 s parry window per charge, cap +0.04 s (max window 0.14 s).
-- Score: survival 10 pts/s + parry 25 x multiplier + pickups + boss kill fixed 1000.
+- Score: survival 10 pts/s + parry 25 x multiplier + Wisp trail kills 10 x multiplier + pickups + boss kill fixed 1000.
+  `maxPossibleScore` (src/shared/maxScore.ts) bounds every hero (the most kills per pulse of any hero + the trail term).
 
 ## Threats
 - Orb (straight, parryable), Rune burst (radial ring from ground runes, parryable),

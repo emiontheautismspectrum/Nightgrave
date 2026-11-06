@@ -1025,7 +1025,8 @@ export class GameScene extends Phaser.Scene {
       },
       replay: () => JSON.stringify(this.sim.log),
       buttons: this.input2.touch.buttons().map((b) => ({ ...b })), pause: { ...this.pauseRect },
-      mult: st.multiplier, dbl: st.tick < st.doubleUntil, pickup: st.pickup ? { x: st.pickup.x, y: st.pickup.y, kind: st.pickup.kind } : null,
+      submitStatus: this.submit?.statusText() ?? null,
+      mult: st.multiplier, guard: st.hero.guardCharges, aim: [st.hero.aimX, st.hero.aimY], trail: st.trail.length, dbl: st.tick < st.doubleUntil, pickup: st.pickup ? { x: st.pickup.x, y: st.pickup.y, kind: st.pickup.kind } : null,
       proj: st.projectiles.map((pr) => [pr.x, pr.y, pr.vx, pr.vy, pr.radius, pr.parryable ? 1 : 0]),
     };
   }
