@@ -34,10 +34,16 @@
       <p>To limit abuse, the server also counts requests per salted hash of your IP address, and submissions per
         player ID. Your IP address itself is not stored; these counters are deleted within two days.</p>
       <p>Board entries are kept for 30 days and then deleted automatically. Names and messages are public on the board.</p>
+      <p>The server also keeps a short operations log (moderation actions, verification results, and hourly counts of
+        failed access attempts to its private endpoints). It holds no names, messages, player IDs or IP addresses, only
+        entry numbers, which point to a board entry while that entry exists (at most 30 days). It is kept for 90 days and
+        then deleted automatically.</p>
 
       <h2>Deletion</h2>
       <p>To have a name, message or run removed before then, <!--ng-contact--> with the date, the name on the board
-        and what should be removed. Offensive names and messages are removed without being asked.</p>
+        and what should be removed. Do not put the random player ID or anything else private into a public place. The
+        maintainers remove the entry with the server's moderation tool. Offensive names and messages are removed without
+        being asked.</p>
 
       <h2>Hosting</h2>
       <p>The game and the board run on Cloudflare (Pages, Workers and D1). Delivering a website involves processing

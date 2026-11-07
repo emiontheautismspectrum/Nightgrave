@@ -1,5 +1,8 @@
 # Deploying Nightgrave (Cloudflare, free plan)
 
+Day-to-day operations (kill switch, rollback, moderation, secret rotation, backups, monitoring) are in
+[RUNBOOK.md](RUNBOOK.md).
+
 The game is a static site (Cloudflare Pages). The Hard "Today's best" board is one Cloudflare Worker with one D1
 database (folder `server/`). Without the Worker the game still works fully offline: the title shows
 "Online board: offline".
@@ -265,14 +268,50 @@ board is new, so as few pending runs as possible are caught between versions.
 
 ## Free-plan limits to keep in mind
 
-- Workers: 100,000 requests per day. Each title visit costs 1-2 GETs (edge-cached for 30 s), each submit 1 POST.
-- D1: 5 GB storage, 5 million rows read and 100,000 rows written per day. The daily cron deletes entries older than
-  30 days and rate-limit rows older than 1 day; replays are stored for a later verification stage (up to ~256 KB each,
-  but typically a few KB).
-- Pages: 500 builds per month.
-- Cron triggers: included. If you exceed a limit, requests fail and the game falls back to "Board unavailable".
+Checked on 2026-11-07 against the Cloudflare docs: [Workers limits](https://developers.cloudflare.com/workers/platform/limits/),
+[D1 limits](https://developers.cloudflare.com/d1/platform/limits/),
+[D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/) and the
+[D1 free-tier enforcement changelog](https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/).
+Limits change: re-check those pages before relying on the numbers.
+
+- Workers Free: 100,000 requests per day (reset 00:00 UTC; above it Cloudflare answers with error 1027), 10 ms CPU per
+  request, 50 subrequests per request (this Worker makes none).
+- D1 Free: 5 million rows read and 100,000 rows written per day (reset 00:00 UTC; since 2026-09-01 queries FAIL above
+  either limit until the reset, stored data is untouched), 500 MB per database, Time Travel 7 days.
+- Pages: 500 builds per month. Cron triggers: included.
+
+What one attacker can consume with the current limits (`LIMITS` in `server/src/index.ts`):
+
+| Route | D1 cost per request | Bound |
+| --- | --- | --- |
+| `GET /api/daily`, `GET /api/health` | NO writes. Reads only when the isolate's 30 s copy is stale (the Cache API stores nothing on workers.dev) | about 2 D1 queries per minute per isolate, whatever the traffic |
+| `POST /api/daily/me` | NO writes; 1-3 indexed reads | 10 per minute per IP per isolate (memory limit) |
+| `POST /api/submit` | 2 counter writes + a few reads + 1 write when accepted | 10 per hour per IP (global D1 limit); past it, 429 from memory without a write |
+| wrong verifier / admin token | ONE aggregate audit row per hour and kind | at most 100 writes per hour per kind, then no D1 work |
+
+Public read limits live in the isolate's memory (approximate: requests spread over several isolates get more), which
+is fine for reads and keeps every read free of D1 writes; only submissions and authenticated admin calls use the
+global D1 counters. One attacker IP can therefore spend at most a few hundred D1 writes per day (submissions).
+
+The Worker REQUEST quota (100,000 per day) cannot be protected in code: every request counts, even a 404. Anyone can
+spend it with a loop; the D1 write quota is protected by design. When either quota is exhausted, the API fails until 00:00
+UTC and the game degrades gracefully: the board shows "board unavailable" / offline, runs and local best scores keep
+working (covered by `tests/api_client.test.ts`: a non-JSON answer such as Cloudflare's error page, a timeout or a
+network failure all end as "no board"). A stronger shield needs either Workers Paid or the API on a custom domain of
+the zone (for example `api.nightgrave.com`), where a Cloudflare rate-limiting rule can drop floods before they reach
+the Worker (see docs/RUNBOOK.md).
 
 ## Upgrading the game
+
+**Database migrations first.** When a pull request adds a file to `server/migrations/`, apply it to the remote D1
+BEFORE deploying the Worker (migrations are additive, the running Worker ignores new tables and columns):
+
+```bash
+cd server && npx wrangler d1 migrations apply nightgrave --remote && npx wrangler deploy
+```
+
+Migration `0005_audit.sql` (the audit log) is also safe the other way round: the Worker skips audit writes and the
+failed-token counter while the table is missing, so a deploy before the migration never breaks the board.
 
 Every client sends `clientVersion` and the tuning fingerprint. When tuning or `CLIENT_VERSION`
 (`src/shared/version.ts`) changes, deploy the Worker and Pages together: old clients get "Game updated: reload the

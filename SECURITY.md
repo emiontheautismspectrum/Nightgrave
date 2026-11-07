@@ -8,6 +8,9 @@ Include what you found, how to reproduce it and what an attacker could do with i
 private advisory; please give us a reasonable time to fix it before you talk about it publicly.
 If the button is missing, open an issue that only asks for a private contact, without any details of the problem.
 
+Privacy and deletion requests (a board name, message or run to remove) can use the same private form: the request is
+seen only by the maintainers. Do not post a player id or other private details in a public issue.
+
 ## In scope
 
 - The Worker API in `server/` (`/api/daily`, `/api/daily/me`, `/api/submit`, the verifier and admin endpoints):

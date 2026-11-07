@@ -72,10 +72,22 @@ The root also holds `index.html` and the four player-facing pages (`privacy.html
 ## Documentation
 
 - [docs/DEPLOY.md](docs/DEPLOY.md) - Cloudflare Pages + Worker + D1, step by step, and the site constants.
+- [docs/RUNBOOK.md](docs/RUNBOOK.md) - operations: kill switch, rollback, moderation, secrets, backups, monitoring.
 - [docs/ASSETS_SPEC.md](docs/ASSETS_SPEC.md) - art direction, palette and the full asset list.
 - [docs/AUDIO_LIST.md](docs/AUDIO_LIST.md) - every sound and music file with its generation prompt.
 - [CLAUDE.md](CLAUDE.md) - the design and the architecture rules.
 - [SECURITY.md](SECURITY.md) - how to report a vulnerability.
+
+## Privacy
+
+No accounts, no cookies, no analytics, no ads. Only when a Hard run is submitted to the daily board, the server stores
+the name, a short message (for the day's best run), the score, the hero, the run length, the view (full arena or the
+zoomed phone camera), the replay, a random player id from the browser and the date. Rate-limit counters use a salted
+hash of the IP address (never the address) and are deleted within two days; board entries are kept 30 days; a small
+operations log (moderation actions, verification results, hourly counts of failed private-endpoint access) holds no
+names, messages, player ids or IPs, only entry numbers (pointing to an entry while it exists), and is kept 90 days. Deletion requests: see the contact on [privacy.html](privacy.html) (until a project
+mailbox exists, the private report form described in [SECURITY.md](SECURITY.md)); the maintainers remove entries with
+the admin endpoint ([docs/RUNBOOK.md](docs/RUNBOOK.md)).
 
 ## How scores are verified
 

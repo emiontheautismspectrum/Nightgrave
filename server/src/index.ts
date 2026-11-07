@@ -8,7 +8,10 @@
  *   DELETE /api/admin/entry/:id         moderation (Bearer ADMIN_TOKEN)
  * Only VERIFIED runs (re-simulated from their replay by tools/verify) are ever shown on the board.
  *   POST /api/admin/clear-message/:id   moderation (Bearer ADMIN_TOKEN)
+ *   GET  /api/health                    { ok, version, oldestPendingMinutes } for an uptime monitor (no secrets)
  * JSON only, never HTML; user text is never echoed back in errors; all SQL uses bound parameters.
+ * POST bodies must be exactly `application/json` (a cross-site form or text/plain post cannot reach a handler: it would
+ * need a CORS preflight). The Worker makes no outbound fetch at all (no SSRF surface).
  */
 import { addDays, dailySeed, dayStartMs, utcDateKey, DATE_RE } from '../../src/shared/daily';
 import { maxPossibleScore } from '../../src/shared/maxScore';
@@ -33,6 +36,8 @@ export const LIMITS = {
   submitPerHourPerIp: 10,
   submitPerDayPerPlayer: 30,
   getPerMinutePerIp: 60,
+  /** POST /api/daily/me is never edge-cached: its own, lower limit (the board panel asks once a minute). */
+  mePerMinutePerIp: 10,
   adminPerMinutePerIp: 20,
   cacheSeconds: 30,
   keepDays: 30,
@@ -40,6 +45,16 @@ export const LIMITS = {
   maxPending: 500,
   /** Pending submissions older than this are dropped by the cron (e.g. stuck between versions). */
   pendingTtlMs: 2 * 86_400_000,
+  /** Audit log retention (the daily cron prunes older rows). */
+  auditKeepDays: 90,
+  /**
+   * Failed token attempts (verifier / admin routes) are counted per hour and kind in ONE audit row. Past this many in an
+   * hour, an isolate stops touching D1 for further failures of that kind in that hour (constant work per request): a
+   * flood of wrong tokens cannot burn the D1 write quota.
+   */
+  authFailCap: 100,
+  /** /api/health reports ok: false when the oldest pending run waited longer than this (the verifier stalled). */
+  healthStaleMinutes: 90,
 };
 
 const FIELDS: Record<string, 'string' | 'number'> = {
@@ -82,6 +97,60 @@ function json(body: unknown, status: number, req: Request, env: Env, cache = 'no
   });
 }
 const reject = (reason: string, status: number, req: Request, env: Env): Response => json({ accepted: false, rank: null, reason }, status, req, env);
+
+/** The request body is JSON: the media type must be exactly application/json (parameters such as charset allowed). */
+function isJson(req: Request): boolean {
+  const ct = (req.headers.get('Content-Type') ?? '').split(';')[0]!.trim().toLowerCase();
+  return ct === 'application/json';
+}
+
+/**
+ * Best-effort audit row (no personal data: action, entry id, a result code). A failure (e.g. migration 0005 not applied
+ * yet) never fails the request it belongs to.
+ */
+async function audit(env: Env, now: number, action: string, entryId: number | null, result: string): Promise<void> {
+  try {
+    await env.DB.prepare('INSERT INTO audit (at, action, entry_id, result) VALUES (?1, ?2, ?3, ?4)').bind(now, action, entryId, result).run();
+  } catch {
+    /* logging is best effort */
+  }
+}
+
+/** Per isolate: the hour from which a kind of failed token attempt is no longer written (the hourly cap was reached). */
+const authFailSaturated = new Map<string, number>();
+
+/**
+ * Count one failed token attempt in the hourly aggregate (ONE row per hour and kind, never one per attempt). Once the
+ * hour's counter reaches LIMITS.authFailCap this isolate does no D1 work at all for that kind until the next hour.
+ */
+async function noteAuthFailure(env: Env, kind: 'verify' | 'admin', now: number): Promise<void> {
+  const hour = Math.floor(now / 3_600_000) * 3_600_000;
+  if (authFailSaturated.get(kind) === hour) return;
+  try {
+    const row = await env.DB.prepare(
+      `INSERT INTO audit (at, action, entry_id, result) VALUES (?1, ?2, NULL, '1')
+       ON CONFLICT (action, at) WHERE entry_id IS NULL DO UPDATE SET result = CAST(CAST(result AS INTEGER) + 1 AS TEXT)
+       RETURNING result`,
+    ).bind(hour, `auth_fail_${kind}`).first<{ result: string }>();
+    if (Number(row?.result ?? 0) >= LIMITS.authFailCap) authFailSaturated.set(kind, hour);
+  } catch {
+    // no audit table yet (migration 0005 not applied): stop trying for this hour
+    authFailSaturated.set(kind, hour);
+  }
+}
+
+/** Test hook: drop the per-isolate copies of the board and the health query (a later read goes to D1). */
+export function clearMemCache(): void {
+  memCache.clear();
+}
+
+/** Test hook: forget the per-isolate state (failed tokens, over-limit keys, read limits, the memory cache). */
+export function resetAuthFailState(): void {
+  authFailSaturated.clear();
+  overLimit.clear();
+  memWindows.clear();
+  memCache.clear();
+}
 const notFound = (req: Request, env: Env): Response => json({ error: 'not_found' }, 404, req, env);
 
 async function sha256Hex(s: string): Promise<string> {
@@ -112,19 +181,62 @@ export function ipKey(ip: string): string {
   return `${full.slice(0, 4).map((x) => x.replace(/^0+(?=.)/, '')).join(':')}::/64`;
 }
 
-/** Fixed-window counter in D1. Returns true if the call is within the limit. */
+/**
+ * Public READ limits (GET /api/daily, GET /api/health, POST /api/daily/me) are kept in the isolate's memory, never in
+ * D1: on the workers.dev address the Cache API stores nothing, so a D1 counter would cost one written row per read
+ * request (one IP polling within the limit could spend the whole free daily write quota). Per-isolate limits are
+ * approximate (a request may land on another isolate), which is fine for reads; submissions keep the global D1 limit.
+ */
+const memWindows = new Map<string, { win: number; count: number }>();
+function allowMem(key: string, windowMs: number, limit: number, now: number): boolean {
+  const win = Math.floor(now / windowMs) * windowMs;
+  const e = memWindows.get(key);
+  if (!e || e.win !== win) {
+    if (memWindows.size > 20_000) memWindows.clear(); // bounded memory
+    memWindows.set(key, { win, count: 1 });
+    return true;
+  }
+  e.count++;
+  return e.count <= limit;
+}
+
+/** Per isolate: short-lived copies of the board and the health query (the Cache API is a no-op on workers.dev). */
+const memCache = new Map<string, { until: number; data: unknown }>();
+function memGet<T>(key: string, now: number): T | undefined {
+  const e = memCache.get(key);
+  return e && e.until > now ? (e.data as T) : undefined;
+}
+function memPut(key: string, data: unknown, now: number): void {
+  if (memCache.size > 100) memCache.clear();
+  memCache.set(key, { until: now + LIMITS.cacheSeconds * 1000, data });
+}
+
+/** Per isolate: keys already over their limit in a window (no further D1 write until the window ends). */
+const overLimit = new Map<string, number>();
+
+/**
+ * Fixed-window counter in D1. Returns true if the call is within the limit. Once a key is over its limit, this isolate
+ * answers "no" for the rest of the window WITHOUT touching D1: a flood past the limit cannot burn the D1 write quota.
+ */
 async function allow(env: Env, key: string, windowMs: number, limit: number, now: number): Promise<boolean> {
   const win = Math.floor(now / windowMs) * windowMs;
+  if (overLimit.get(key) === win) return false;
   const row = await env.DB.prepare(
     'INSERT INTO ratelimit (key, window, count) VALUES (?1, ?2, 1) ON CONFLICT (key, window) DO UPDATE SET count = count + 1 RETURNING count',
   ).bind(key, win).first<{ count: number }>();
-  return (row?.count ?? 1) <= limit;
+  const ok = (row?.count ?? 1) <= limit;
+  if (!ok) {
+    if (overLimit.size > 10_000) overLimit.clear(); // bounded memory
+    overLimit.set(key, win);
+  }
+  return ok;
 }
 
 function cacheKey(date: string): Request {
   return new Request(`https://nightgrave-cache.internal/api/daily/${date}`);
 }
 async function purge(date: string): Promise<void> {
+  memCache.delete(`board:${date}`); // this isolate's copy (others expire within 30 s, like the edge cache)
   try {
     await caches.default.delete(cacheKey(date));
   } catch {
@@ -166,10 +278,13 @@ async function getDaily(req: Request, env: Env, now: number): Promise<Response> 
     cached = undefined;
   }
   let data: { top: object[]; champion: object | null };
+  const mem = memGet<typeof data>(`board:${date}`, now);
   if (cached) data = (await cached.json()) as typeof data; // cached hits never touch D1
+  else if (mem) data = mem;
   else {
-    if (!(await allow(env, `get:${await ipHash(req, env)}`, 60_000, LIMITS.getPerMinutePerIp, now))) return json({ error: 'rate' }, 429, req, env);
+    if (!allowMem(`get:${await ipHash(req, env)}`, 60_000, LIMITS.getPerMinutePerIp, now)) return json({ error: 'rate' }, 429, req, env);
     data = await board(env, date);
+    memPut(`board:${date}`, data, now);
     try {
       await caches.default.put(cacheKey(date), new Response(JSON.stringify(data), { headers: { 'Cache-Control': `public, max-age=${LIMITS.cacheSeconds}` } }));
     } catch {
@@ -186,8 +301,7 @@ async function getDaily(req: Request, env: Env, now: number): Promise<Response> 
  * limit as GET /api/daily.
  */
 async function postMe(req: Request, env: Env, now: number): Promise<Response> {
-  const ct = (req.headers.get('Content-Type') ?? '').toLowerCase();
-  if (!ct.startsWith('application/json')) return json({ error: 'invalid' }, 415, req, env);
+  if (!isJson(req)) return json({ error: 'invalid' }, 415, req, env);
   const buf = await readCapped(req, 1024);
   if (!buf) return json({ error: 'invalid' }, 413, req, env);
   let o: Record<string, unknown>;
@@ -202,7 +316,7 @@ async function postMe(req: Request, env: Env, now: number): Promise<Response> {
   if (keys.length !== 2 || typeof o.date !== 'string' || typeof o.playerId !== 'string' || !UUID4.test(o.playerId)) return json({ error: 'invalid' }, 400, req, env);
   const today = utcDateKey(new Date(now));
   if (!DATE_RE.test(o.date) || (o.date !== today && o.date !== addDays(today, -1))) return json({ error: 'date' }, 400, req, env);
-  if (!(await allow(env, `get:${await ipHash(req, env)}`, 60_000, LIMITS.getPerMinutePerIp, now))) return json({ error: 'rate' }, 429, req, env);
+  if (!allowMem(`me:${await ipHash(req, env)}`, 60_000, LIMITS.mePerMinutePerIp, now)) return json({ error: 'rate' }, 429, req, env);
   const row = await env.DB.prepare('SELECT id, score, achieved_at, verified, p_replay FROM entries WHERE date = ?1 AND player_id = ?2')
     .bind(o.date, o.playerId).first<{ id: number; score: number; achieved_at: number; verified: number; p_replay: string | null }>();
   // serverNow: an uncached clock (the GET board can be up to 30 s old at the edge)
@@ -294,8 +408,7 @@ async function readCapped(req: Request, max: number): Promise<Uint8Array | null>
 
 async function postSubmit(req: Request, env: Env, now: number): Promise<Response> {
   // 1. transport: JSON, size
-  const ct = (req.headers.get('Content-Type') ?? '').toLowerCase();
-  if (!ct.startsWith('application/json')) return reject('invalid', 415, req, env);
+  if (!isJson(req)) return reject('invalid', 415, req, env);
   const len = Number(req.headers.get('Content-Length') ?? '0');
   if (len > LIMITS.bodyBytes) return reject('too_large', 413, req, env);
   const buf = await readCapped(req, LIMITS.bodyBytes);
@@ -380,7 +493,7 @@ async function verifyPending(req: Request, env: Env): Promise<Response> {
 
 const REASONS = new Set(['score_mismatch', 'length_mismatch', 'invalid_input', 'outdated', 'error', 'duplicate']);
 
-async function verifyResult(req: Request, env: Env, idPart: string | undefined): Promise<Response> {
+async function verifyResult(req: Request, env: Env, idPart: string | undefined, now: number): Promise<Response> {
   const m = /^(\d{1,15})-(\d{1,15})$/.exec(idPart ?? '');
   if (!m) return notFound(req, env);
   const id = Number(m[1]);
@@ -405,6 +518,7 @@ async function verifyResult(req: Request, env: Env, idPart: string | undefined):
         `UPDATE entries SET reject_reason = 'duplicate', p_score = NULL, p_name = NULL, p_message = NULL, p_hero = NULL, p_view = NULL,
            p_duration = NULL, p_replay = NULL, p_tuning = NULL, p_client = NULL, p_at = NULL WHERE id = ?1 AND p_seq = ?2`,
       ).bind(id, seq).run();
+      await audit(env, now, 'verify', id, 'rejected:duplicate');
       return json({ ok: false, error: 'duplicate' }, 409, req, env);
     }
     // promote ONLY this exact submission (id + version): a newer pending run that arrived meanwhile stays pending
@@ -417,6 +531,7 @@ async function verifyResult(req: Request, env: Env, idPart: string | undefined):
     ).bind(id, seq, sha).run();
     if ((r.meta?.changes ?? 0) === 0) return json({ ok: false, error: 'stale' }, 409, req, env);
     await purge(row.date);
+    await audit(env, now, 'verify', id, 'accepted');
     return json({ ok: true }, 200, req, env);
   }
   if (o.status === 'rejected') {
@@ -426,27 +541,77 @@ async function verifyResult(req: Request, env: Env, idPart: string | undefined):
          p_duration = NULL, p_replay = NULL, p_tuning = NULL, p_client = NULL, p_at = NULL
        WHERE id = ?1 AND p_seq = ?2`,
     ).bind(id, seq, reason).run();
+    await audit(env, now, 'verify', id, `rejected:${reason}`);
     return json({ ok: true }, 200, req, env);
   }
   return json({ ok: false, error: 'status' }, 400, req, env);
 }
 
 async function admin(req: Request, env: Env, now: number, parts: string[]): Promise<Response> {
-  if (!(await allow(env, `admin:${await ipHash(req, env)}`, 60_000, LIMITS.adminPerMinutePerIp, now))) return json({ error: 'rate' }, 429, req, env);
   const auth = req.headers.get('Authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  // a missing or weak admin token disables moderation entirely (never a guessable password)
-  if (!env.ADMIN_TOKEN || env.ADMIN_TOKEN.length < 32 || !(await safeEqual(token, env.ADMIN_TOKEN))) return notFound(req, env);
+  // a missing or weak admin token disables moderation entirely (never a guessable password). The token is checked FIRST
+  // (constant time, no D1): a failure is only counted in the hourly aggregate, never one D1 row per attempt
+  if (!env.ADMIN_TOKEN || env.ADMIN_TOKEN.length < 32 || !(await safeEqual(token, env.ADMIN_TOKEN))) {
+    await noteAuthFailure(env, 'admin', now);
+    return notFound(req, env);
+  }
+  if (!(await allow(env, `admin:${await ipHash(req, env)}`, 60_000, LIMITS.adminPerMinutePerIp, now))) return json({ error: 'rate' }, 429, req, env);
+  // the entry id: decimal digits only (no 0x10, 1e3, signs or spaces), at most 15 of them
+  if (parts.length !== 5 || !/^[1-9]\d{0,14}$/.test(parts[4] ?? '')) return notFound(req, env);
   const id = Number(parts[4]);
-  if (!Number.isSafeInteger(id) || id < 1 || parts.length !== 5) return notFound(req, env);
   const row = await env.DB.prepare('SELECT date FROM entries WHERE id = ?1').bind(id).first<{ date: string }>();
   if (!row) return notFound(req, env);
-  if (req.method === 'DELETE' && parts[3] === 'entry') await env.DB.prepare('DELETE FROM entries WHERE id = ?1').bind(id).run();
-  else if (req.method === 'POST' && parts[3] === 'clear-message') await env.DB.prepare('UPDATE entries SET message = NULL WHERE id = ?1').bind(id).run();
-  else return notFound(req, env);
+  let action: string;
+  if (req.method === 'DELETE' && parts[3] === 'entry') {
+    await env.DB.prepare('DELETE FROM entries WHERE id = ?1').bind(id).run();
+    action = 'admin_delete';
+  } else if (req.method === 'POST' && parts[3] === 'clear-message') {
+    await env.DB.prepare('UPDATE entries SET message = NULL WHERE id = ?1').bind(id).run();
+    action = 'admin_clear_message';
+  } else return notFound(req, env);
   await purge(row.date);
+  await audit(env, now, action, id, 'ok');
   return json({ ok: true }, 200, req, env);
 }
+
+/**
+ * For an uptime monitor: { ok, version, oldestPendingMinutes } (no secrets, no details). One indexed query (the partial
+ * pending index); ok: false with HTTP 200 when the verifier has stalled (the monitor reads the body); a D1 error is
+ * { ok: false } with 503. Never cached; the same per-IP limit as the other public GETs.
+ */
+async function getHealth(req: Request, env: Env, now: number): Promise<Response> {
+  try {
+    // the oldest pending time is kept in the edge cache for 30 s (like the board): a flood of health checks reads the
+    // cache, never D1; the per-IP limit applies on a cache miss only. The client still gets no-store.
+    let oldest: number | null;
+    let cached: Response | undefined;
+    try {
+      cached = await caches.default.match(HEALTH_KEY);
+    } catch {
+      cached = undefined;
+    }
+    const mem = memGet<{ oldest: number | null }>('health', now);
+    if (cached) oldest = ((await cached.json()) as { oldest: number | null }).oldest;
+    else if (mem) oldest = mem.oldest;
+    else {
+      if (!allowMem(`get:${await ipHash(req, env)}`, 60_000, LIMITS.getPerMinutePerIp, now)) return json({ error: 'rate' }, 429, req, env);
+      const r = await env.DB.prepare('SELECT MIN(p_at) AS oldest FROM entries WHERE p_replay IS NOT NULL').first<{ oldest: number | null }>();
+      oldest = r?.oldest ?? null;
+      memPut('health', { oldest }, now);
+      try {
+        await caches.default.put(HEALTH_KEY, new Response(JSON.stringify({ oldest }), { headers: { 'Cache-Control': `public, max-age=${LIMITS.cacheSeconds}` } }));
+      } catch {
+        /* no cache here */
+      }
+    }
+    const mins = oldest === null ? null : Math.max(0, Math.floor((now - oldest) / 60_000));
+    return json({ ok: mins === null || mins <= LIMITS.healthStaleMinutes, version: CLIENT_VERSION, oldestPendingMinutes: mins }, 200, req, env);
+  } catch {
+    return json({ ok: false }, 503, req, env);
+  }
+}
+const HEALTH_KEY = new Request('https://nightgrave-cache.internal/api/health');
 
 export async function handle(req: Request, env: Env, now = Date.now()): Promise<Response> {
   const url = new URL(req.url);
@@ -466,6 +631,7 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
   }
   try {
     if (url.pathname === '/api/daily' && req.method === 'GET') return await getDaily(req, env, now);
+    if (url.pathname === '/api/health' && req.method === 'GET') return await getHealth(req, env, now);
     if (url.pathname === '/api/daily/me' && req.method === 'POST') {
       if (origin && !allowed.includes(origin)) return json({ error: 'origin' }, 403, req, env);
       return await postMe(req, env, now);
@@ -477,10 +643,14 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
       return await postSubmit(req, env, now);
     }
     if (parts[1] === 'api' && parts[2] === 'verify') {
-      // the verifier is exempt from the public rate limits; a bad or missing token is a plain 404
-      if (!(await verifierAuth(req, env))) return notFound(req, env);
+      // the verifier is exempt from the public rate limits; a bad or missing token is a plain 404, counted only in the
+      // hourly aggregate (no D1 row per attempt, no D1 work at all past the cap)
+      if (!(await verifierAuth(req, env))) {
+        await noteAuthFailure(env, 'verify', now);
+        return notFound(req, env);
+      }
       if (url.pathname === '/api/verify/pending' && req.method === 'GET') return await verifyPending(req, env);
-      if (parts[3] === 'result' && parts.length === 5 && req.method === 'POST') return await verifyResult(req, env, parts[4]);
+      if (parts[3] === 'result' && parts.length === 5 && req.method === 'POST') return await verifyResult(req, env, parts[4], now);
       return notFound(req, env);
     }
     if (parts[1] === 'api' && parts[2] === 'admin') return await admin(req, env, now, parts);
@@ -500,6 +670,12 @@ export async function cleanup(env: Env, now = Date.now()): Promise<void> {
        p_duration = NULL, p_replay = NULL, p_tuning = NULL, p_client = NULL, p_at = NULL
      WHERE p_replay IS NOT NULL AND p_at < ?1`,
   ).bind(now - LIMITS.pendingTtlMs).run();
+  // the audit log: 90 days (best effort: no table before migration 0005)
+  try {
+    await env.DB.prepare('DELETE FROM audit WHERE at < ?1').bind(now - LIMITS.auditKeepDays * 86_400_000).run();
+  } catch {
+    /* no audit table yet */
+  }
 }
 
 export default {

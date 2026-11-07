@@ -1,12 +1,17 @@
 /** Minimal D1 adapter over node:sqlite for tests: the Worker's real SQL runs against a real SQLite database. */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 type V = string | number | null;
 
-export function makeD1(): { DB: unknown; raw: DatabaseSync } {
+/** Every migration in server/migrations, in order; `upTo` stops before a migration (the live D1 before it is applied). */
+export function makeD1(opts: { upTo?: string } = {}): { DB: unknown; raw: DatabaseSync } {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_init.sql', '0002_verification.sql', '0003_replay_hash.sql', '0004_view.sql']) db.exec(readFileSync(new URL(`../migrations/${m}`, import.meta.url), 'utf8'));
+  const dir = new URL('../migrations/', import.meta.url);
+  for (const m of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
+    if (opts.upTo && m >= opts.upTo) break;
+    db.exec(readFileSync(new URL(m, dir), 'utf8'));
+  }
   const stmt = (sql: string, params: V[] = []) => ({
     bind: (...p: V[]) => stmt(sql, p),
     first: async <T>() => (db.prepare(sql).get(...params) as T | undefined) ?? null,

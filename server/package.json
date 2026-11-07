@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p .",
+    "test": "cd .. && npx vitest run server"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261104.1",

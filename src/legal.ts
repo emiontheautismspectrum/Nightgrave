@@ -48,10 +48,13 @@ export function footerHtml(): string {
   return `<span class="ft-copy">${esc(copyrightLine())}</span> <span class="ft-links">${links}</span>`;
 }
 
-/** The contact sentence on the privacy page: the mailbox when set, otherwise the source repository. */
+/**
+ * The contact sentence on the privacy page: the mailbox when set; otherwise the PRIVATE route of SECURITY.md (GitHub's
+ * private report form on the repository's Security tab), never a public issue with personal details.
+ */
 export function contactHtml(): string {
   const mail = contactEmail();
   if (mail) return `write to <a href="mailto:${esc(mail)}">${esc(mail)}</a>`;
   if (!/^https:\/\//.test(SOURCE_URL)) return 'contact the site operator';
-  return `open an issue in the <a href="${esc(SOURCE_URL)}" target="_blank" rel="noopener noreferrer">source repository</a>`;
+  return `send a private request through the "Report a vulnerability" form on the Security tab of the <a href="${esc(SOURCE_URL)}/security" target="_blank" rel="noopener noreferrer">source repository</a> (it is seen only by the maintainers; if the form is missing, open an issue that only asks for a private contact, without any personal details)`;
 }
