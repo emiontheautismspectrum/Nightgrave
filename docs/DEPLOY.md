@@ -282,16 +282,19 @@ Limits change: re-check those pages before relying on the numbers.
 
 What one attacker can consume with the current limits (`LIMITS` in `server/src/index.ts`):
 
-| Route | Cost per request | Bound per attacker IP |
+| Route | D1 cost per request | Bound |
 | --- | --- | --- |
-| `GET /api/daily`, `GET /api/health` | edge-cached 30 s: no D1 on a hit; a miss = 1 counter write + 1 read | about 2 misses per minute per data centre |
-| `POST /api/daily/me` | 1 counter write + 1-2 reads | 10 per minute = at most ~14,400 writes per day |
-| `POST /api/submit` | 2 counter writes + a few reads + 1 write when accepted | 10 per hour |
-| wrong verifier / admin token | ONE aggregate audit row per hour and kind | at most 100 writes per hour per kind (then no D1 work) |
-| any request past its limit | answered 429 from the isolate's memory: no D1 write | - |
+| `GET /api/daily`, `GET /api/health` | NO writes. Reads only when the isolate's 30 s copy is stale (the Cache API stores nothing on workers.dev) | about 2 D1 queries per minute per isolate, whatever the traffic |
+| `POST /api/daily/me` | NO writes; 1-3 indexed reads | 10 per minute per IP per isolate (memory limit) |
+| `POST /api/submit` | 2 counter writes + a few reads + 1 write when accepted | 10 per hour per IP (global D1 limit); past it, 429 from memory without a write |
+| wrong verifier / admin token | ONE aggregate audit row per hour and kind | at most 100 writes per hour per kind, then no D1 work |
+
+Public read limits live in the isolate's memory (approximate: requests spread over several isolates get more), which
+is fine for reads and keeps every read free of D1 writes; only submissions and authenticated admin calls use the
+global D1 counters. One attacker IP can therefore spend at most a few hundred D1 writes per day (submissions).
 
 The Worker REQUEST quota (100,000 per day) cannot be protected in code: every request counts, even a 404. Anyone can
-spend it with a loop; the D1 quota is protected far better. When either quota is exhausted, the API fails until 00:00
+spend it with a loop; the D1 write quota is protected by design. When either quota is exhausted, the API fails until 00:00
 UTC and the game degrades gracefully: the board shows "board unavailable" / offline, runs and local best scores keep
 working (covered by `tests/api_client.test.ts`: a non-JSON answer such as Cloudflare's error page, a timeout or a
 network failure all end as "no board"). A stronger shield needs either Workers Paid or the API on a custom domain of

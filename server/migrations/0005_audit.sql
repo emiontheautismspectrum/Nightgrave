@@ -1,6 +1,7 @@
 -- Security and operations audit (additive only; safe to apply while the old Worker runs, and the new Worker keeps
 -- working before it is applied: every audit write is best effort).
--- The audit log holds NO personal data: never tokens, IPs, request bodies, names, messages or player ids.
+-- The audit log never holds tokens, IPs, request bodies, names, messages or player ids: only actions, entry numbers
+-- (which point to a board entry while it exists, at most 30 days) and result codes.
 --   admin actions:   action 'admin_delete' / 'admin_clear_message', entry_id, result 'ok'
 --   verifier:        action 'verify', entry_id, result 'accepted' or 'rejected:<reason code>'
 --   failed tokens:   action 'auth_fail_verify' / 'auth_fail_admin', at = the start of the hour (ms), entry_id NULL,

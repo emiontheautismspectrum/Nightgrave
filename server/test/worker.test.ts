@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, handle, LIMITS, resetAuthFailState, type Env } from '../src/index';
+import { cleanup, clearMemCache, handle, LIMITS, resetAuthFailState, type Env } from '../src/index';
 import { dailySeed } from '../../src/shared/daily';
 import { maxPossibleScore } from '../../src/shared/maxScore';
 import { encodeInputLog } from '../../src/shared/replayCodec';
@@ -257,6 +257,7 @@ describe('view metadata (full / zoomed)', () => {
     raw.exec("UPDATE entries SET view = 'full'");
     expect(((await (await get()).json()) as { top: { view: string }[] }).top[0]?.view).toBe('full');
     raw.exec("INSERT INTO entries (date, player_id, name, score, hero, duration_ticks, replay, achieved_at, verified) VALUES ('2026-11-05', 'x', 'Old', 50, 'wisp', 600, '', 1, 1)");
+    clearMemCache(); // a raw SQL change bypasses the Worker's own cache invalidation
     const top = ((await (await get()).json()) as { top: { name: string; view: string }[] }).top;
     expect(top.find((e) => e.name === 'Old')?.view).toBe('full');
   });
@@ -278,8 +279,13 @@ describe('rate limits', () => {
   });
   it('GET: 60 per minute per IP hash', async () => {
     let last = 0;
-    for (let i = 0; i < 61; i++) last = (await get('', NOW, '5.5.5.5')).status;
+    // the limit counts board reads that miss the 30 s cache (memory, per isolate; no D1 write)
+    for (let i = 0; i < 61; i++) {
+      clearMemCache();
+      last = (await get('', NOW, '5.5.5.5')).status;
+    }
     expect(last).toBe(429);
+    expect((raw.prepare("SELECT COUNT(*) AS n FROM ratelimit WHERE key LIKE 'get:%'").get() as { n: number }).n).toBe(0);
   });
 });
 

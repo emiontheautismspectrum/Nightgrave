@@ -85,7 +85,7 @@ the name, a short message (for the day's best run), the score, the hero, the run
 zoomed phone camera), the replay, a random player id from the browser and the date. Rate-limit counters use a salted
 hash of the IP address (never the address) and are deleted within two days; board entries are kept 30 days; a small
 operations log (moderation actions, verification results, hourly counts of failed private-endpoint access) holds no
-personal data and is kept 90 days. Deletion requests: see the contact on [privacy.html](privacy.html) (until a project
+names, messages, player ids or IPs, only entry numbers (pointing to an entry while it exists), and is kept 90 days. Deletion requests: see the contact on [privacy.html](privacy.html) (until a project
 mailbox exists, the private report form described in [SECURITY.md](SECURITY.md)); the maintainers remove entries with
 the admin endpoint ([docs/RUNBOOK.md](docs/RUNBOOK.md)).
 

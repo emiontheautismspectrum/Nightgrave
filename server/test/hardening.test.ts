@@ -4,7 +4,7 @@
  * resubmission and a seeded fuzz of everything that decodes untrusted input (bounded time, never throws out).
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, handle, LIMITS, resetAuthFailState, type Env } from '../src/index';
+import { cleanup, clearMemCache, handle, LIMITS, resetAuthFailState, type Env } from '../src/index';
 import { dailySeed } from '../../src/shared/daily';
 import { countTicks, decodeInputLog, encodeInputLog, logHero } from '../../src/shared/replayCodec';
 import { CLIENT_VERSION, tuningFingerprint } from '../../src/shared/version';
@@ -94,10 +94,20 @@ describe('failed token floods: one aggregate row per hour and kind, capped D1 wo
 });
 
 describe('quota: a flood past a limit stops writing to D1', () => {
-  it('past the per-IP limit the counter row is no longer written (this isolate answers 429 from memory)', async () => {
-    for (let i = 0; i < LIMITS.getPerMinutePerIp + 40; i++) await req('GET', '/api/health', { ip: '6.6.6.6' });
-    const rows = raw.prepare("SELECT count FROM ratelimit WHERE key LIKE 'get:%'").all() as { count: number }[];
-    expect(rows).toEqual([{ count: LIMITS.getPerMinutePerIp + 1 }]);
+  it('public reads (board, health, me) never write to D1, however many there are (memory limits and a 30 s copy)', async () => {
+    const meBody = JSON.stringify({ date: DATE, playerId: pid(1) });
+    for (let i = 0; i < 300; i++) {
+      await req('GET', '/api/health', { ip: '6.6.6.6' });
+      await req('GET', '/api/daily', { ip: '6.6.6.6' });
+      await req('POST', '/api/daily/me', { body: meBody, ip: '6.6.6.6' });
+    }
+    expect(count('SELECT COUNT(*) AS n FROM ratelimit')).toBe(0);
+    expect(count('SELECT COUNT(*) AS n FROM audit')).toBe(0);
+  });
+  it('past a submit limit the counter row is no longer written (this isolate answers 429 from memory)', async () => {
+    for (let i = 0; i < LIMITS.submitPerHourPerIp + 30; i++) await req('POST', '/api/submit', { body: JSON.stringify(body({ playerId: pid(500 + i) })), ip: '6.6.6.8' });
+    const rows = raw.prepare("SELECT count FROM ratelimit WHERE key LIKE 'submit:%'").all() as { count: number }[];
+    expect(rows).toEqual([{ count: LIMITS.submitPerHourPerIp + 1 }]);
   });
   it('POST /api/daily/me has its own lower limit (never edge-cached)', async () => {
     const meBody = JSON.stringify({ date: DATE, playerId: pid(1) });
@@ -135,10 +145,12 @@ describe('GET /api/health', () => {
   it('a pending run waiting > 90 min: ok false with HTTP 200 (the monitor reads the body)', async () => {
     expect((await req('POST', '/api/submit', { body: JSON.stringify(body()) })).status).toBe(200);
     raw.prepare('UPDATE entries SET p_at = ?1').run(NOW - 95 * 60_000);
+    clearMemCache();
     const r = await req('GET', '/api/health');
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ ok: false, version: CLIENT_VERSION, oldestPendingMinutes: 95 });
     raw.prepare('UPDATE entries SET p_at = ?1').run(NOW - 30 * 60_000);
+    clearMemCache();
     expect(await (await req('GET', '/api/health')).json()).toEqual({ ok: true, version: CLIENT_VERSION, oldestPendingMinutes: 30 });
   });
   it('a D1 error: { ok: false } with 503 and no details', async () => {
@@ -151,7 +163,10 @@ describe('GET /api/health', () => {
   });
   it('the same per-IP rate limit as the public GETs', async () => {
     let last = 0;
-    for (let i = 0; i <= LIMITS.getPerMinutePerIp; i++) last = (await req('GET', '/api/health', { ip: '4.4.4.4' })).status;
+    for (let i = 0; i <= LIMITS.getPerMinutePerIp; i++) {
+      clearMemCache(); // the limit counts reads that miss the 30 s copy
+      last = (await req('GET', '/api/health', { ip: '4.4.4.4' })).status;
+    }
     expect(last).toBe(429);
   });
 });

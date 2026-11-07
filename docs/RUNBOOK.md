@@ -13,10 +13,10 @@ git checkout main && git pull --autostash && grep -E "database_id|ALLOWED_ORIGIN
 
 ## Secrets in your shell (never typed into the history)
 
-PowerShell (the prompt's input is not saved in the history):
+PowerShell (the prompt's input is not saved in the history; works in Windows PowerShell 5 and PowerShell 7):
 
 ```powershell
-$s = Read-Host "Admin token" -AsSecureString; $env:NG_ADMIN = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))
+$env:NG_ADMIN = [System.Net.NetworkCredential]::new('', (Read-Host "Admin token" -AsSecureString)).Password
 ```
 
 bash:
@@ -133,9 +133,11 @@ Order: merge -> wait for the Pages build -> pull (`--autostash`) -> migrations -
 
 ## Logs, analytics, monitoring
 
-- Live Worker logs: `npx wrangler tail` (in `server/`). Workers Logs (`[observability]` in wrangler.toml) keeps them
-  in the dashboard: **Workers & Pages** -> **nightgrave-api** -> **Logs**. The Worker logs no bodies, tokens, names or
-  IPs.
+- Live Worker logs: `npx wrangler tail` (in `server/`; live only, nothing stored). Workers Logs (`[observability]` in
+  wrangler.toml) keeps errors and the Worker's own console output in the dashboard: **Workers & Pages** ->
+  **nightgrave-api** -> **Logs**. Invocation logs are deliberately OFF (`invocation_logs = false`): they would store
+  request metadata such as client IPs, which the privacy page says are never stored. Keep it that way, or update
+  privacy.html in the same change.
 - Analytics: the same Worker page (requests, errors, CPU); D1 -> **nightgrave** -> **Metrics** (rows read / written
   against the daily free limits).
 - GitHub emails you when a workflow run fails (Settings -> Notifications -> Actions).

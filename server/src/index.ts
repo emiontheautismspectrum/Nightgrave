@@ -139,10 +139,17 @@ async function noteAuthFailure(env: Env, kind: 'verify' | 'admin', now: number):
   }
 }
 
-/** Test hook: forget the per-isolate saturation state (failed tokens and over-limit keys). */
+/** Test hook: drop the per-isolate copies of the board and the health query (a later read goes to D1). */
+export function clearMemCache(): void {
+  memCache.clear();
+}
+
+/** Test hook: forget the per-isolate state (failed tokens, over-limit keys, read limits, the memory cache). */
 export function resetAuthFailState(): void {
   authFailSaturated.clear();
   overLimit.clear();
+  memWindows.clear();
+  memCache.clear();
 }
 const notFound = (req: Request, env: Env): Response => json({ error: 'not_found' }, 404, req, env);
 
@@ -174,6 +181,36 @@ export function ipKey(ip: string): string {
   return `${full.slice(0, 4).map((x) => x.replace(/^0+(?=.)/, '')).join(':')}::/64`;
 }
 
+/**
+ * Public READ limits (GET /api/daily, GET /api/health, POST /api/daily/me) are kept in the isolate's memory, never in
+ * D1: on the workers.dev address the Cache API stores nothing, so a D1 counter would cost one written row per read
+ * request (one IP polling within the limit could spend the whole free daily write quota). Per-isolate limits are
+ * approximate (a request may land on another isolate), which is fine for reads; submissions keep the global D1 limit.
+ */
+const memWindows = new Map<string, { win: number; count: number }>();
+function allowMem(key: string, windowMs: number, limit: number, now: number): boolean {
+  const win = Math.floor(now / windowMs) * windowMs;
+  const e = memWindows.get(key);
+  if (!e || e.win !== win) {
+    if (memWindows.size > 20_000) memWindows.clear(); // bounded memory
+    memWindows.set(key, { win, count: 1 });
+    return true;
+  }
+  e.count++;
+  return e.count <= limit;
+}
+
+/** Per isolate: short-lived copies of the board and the health query (the Cache API is a no-op on workers.dev). */
+const memCache = new Map<string, { until: number; data: unknown }>();
+function memGet<T>(key: string, now: number): T | undefined {
+  const e = memCache.get(key);
+  return e && e.until > now ? (e.data as T) : undefined;
+}
+function memPut(key: string, data: unknown, now: number): void {
+  if (memCache.size > 100) memCache.clear();
+  memCache.set(key, { until: now + LIMITS.cacheSeconds * 1000, data });
+}
+
 /** Per isolate: keys already over their limit in a window (no further D1 write until the window ends). */
 const overLimit = new Map<string, number>();
 
@@ -199,6 +236,7 @@ function cacheKey(date: string): Request {
   return new Request(`https://nightgrave-cache.internal/api/daily/${date}`);
 }
 async function purge(date: string): Promise<void> {
+  memCache.delete(`board:${date}`); // this isolate's copy (others expire within 30 s, like the edge cache)
   try {
     await caches.default.delete(cacheKey(date));
   } catch {
@@ -240,10 +278,13 @@ async function getDaily(req: Request, env: Env, now: number): Promise<Response> 
     cached = undefined;
   }
   let data: { top: object[]; champion: object | null };
+  const mem = memGet<typeof data>(`board:${date}`, now);
   if (cached) data = (await cached.json()) as typeof data; // cached hits never touch D1
+  else if (mem) data = mem;
   else {
-    if (!(await allow(env, `get:${await ipHash(req, env)}`, 60_000, LIMITS.getPerMinutePerIp, now))) return json({ error: 'rate' }, 429, req, env);
+    if (!allowMem(`get:${await ipHash(req, env)}`, 60_000, LIMITS.getPerMinutePerIp, now)) return json({ error: 'rate' }, 429, req, env);
     data = await board(env, date);
+    memPut(`board:${date}`, data, now);
     try {
       await caches.default.put(cacheKey(date), new Response(JSON.stringify(data), { headers: { 'Cache-Control': `public, max-age=${LIMITS.cacheSeconds}` } }));
     } catch {
@@ -275,7 +316,7 @@ async function postMe(req: Request, env: Env, now: number): Promise<Response> {
   if (keys.length !== 2 || typeof o.date !== 'string' || typeof o.playerId !== 'string' || !UUID4.test(o.playerId)) return json({ error: 'invalid' }, 400, req, env);
   const today = utcDateKey(new Date(now));
   if (!DATE_RE.test(o.date) || (o.date !== today && o.date !== addDays(today, -1))) return json({ error: 'date' }, 400, req, env);
-  if (!(await allow(env, `me:${await ipHash(req, env)}`, 60_000, LIMITS.mePerMinutePerIp, now))) return json({ error: 'rate' }, 429, req, env);
+  if (!allowMem(`me:${await ipHash(req, env)}`, 60_000, LIMITS.mePerMinutePerIp, now)) return json({ error: 'rate' }, 429, req, env);
   const row = await env.DB.prepare('SELECT id, score, achieved_at, verified, p_replay FROM entries WHERE date = ?1 AND player_id = ?2')
     .bind(o.date, o.playerId).first<{ id: number; score: number; achieved_at: number; verified: number; p_replay: string | null }>();
   // serverNow: an uncached clock (the GET board can be up to 30 s old at the edge)
@@ -550,11 +591,14 @@ async function getHealth(req: Request, env: Env, now: number): Promise<Response>
     } catch {
       cached = undefined;
     }
+    const mem = memGet<{ oldest: number | null }>('health', now);
     if (cached) oldest = ((await cached.json()) as { oldest: number | null }).oldest;
+    else if (mem) oldest = mem.oldest;
     else {
-      if (!(await allow(env, `get:${await ipHash(req, env)}`, 60_000, LIMITS.getPerMinutePerIp, now))) return json({ error: 'rate' }, 429, req, env);
+      if (!allowMem(`get:${await ipHash(req, env)}`, 60_000, LIMITS.getPerMinutePerIp, now)) return json({ error: 'rate' }, 429, req, env);
       const r = await env.DB.prepare('SELECT MIN(p_at) AS oldest FROM entries WHERE p_replay IS NOT NULL').first<{ oldest: number | null }>();
       oldest = r?.oldest ?? null;
+      memPut('health', { oldest }, now);
       try {
         await caches.default.put(HEALTH_KEY, new Response(JSON.stringify({ oldest }), { headers: { 'Cache-Control': `public, max-age=${LIMITS.cacheSeconds}` } }));
       } catch {

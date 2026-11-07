@@ -22,7 +22,11 @@ crons = ["17 3 * * *"]
 # Secrets (never in git): npx wrangler secret put ADMIN_TOKEN / IP_SALT / VERIFIER_TOKEN
 # Local development: put them in server/.dev.vars (git-ignored), see .dev.vars.example.
 
-# Workers Logs (dashboard -> Workers & Pages -> nightgrave-api -> Logs). The Worker logs no request bodies, tokens,
-# names or IPs; see docs/RUNBOOK.md.
+# Workers Logs (dashboard -> Workers & Pages -> nightgrave-api -> Logs): errors and the Worker's own console output
+# (it logs no bodies, tokens, names or IPs). Invocation logs are OFF: they would store request metadata such as the
+# client IP, which privacy.html says is never stored. See docs/RUNBOOK.md.
 [observability]
 enabled = true
+
+[observability.logs]
+invocation_logs = false
