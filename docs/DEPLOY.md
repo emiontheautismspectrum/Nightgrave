@@ -297,6 +297,16 @@ the Worker (see docs/RUNBOOK.md).
 
 ## Upgrading the game
 
+**Database migrations first.** When a pull request adds a file to `server/migrations/`, apply it to the remote D1
+BEFORE deploying the Worker (migrations are additive, the running Worker ignores new tables and columns):
+
+```bash
+cd server && npx wrangler d1 migrations apply nightgrave --remote && npx wrangler deploy
+```
+
+Migration `0005_audit.sql` (the audit log) is also safe the other way round: the Worker skips audit writes and the
+failed-token counter while the table is missing, so a deploy before the migration never breaks the board.
+
 Every client sends `clientVersion` and the tuning fingerprint. When tuning or `CLIENT_VERSION`
 (`src/shared/version.ts`) changes, deploy the Worker and Pages together: old clients get "Game updated: reload the
 page" instead of posting incompatible runs.
