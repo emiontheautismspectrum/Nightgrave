@@ -8,10 +8,10 @@ export const DESCRIPTION = 'A dark-fantasy dodge-and-parry survival game. One hi
  * Public site address, e.g. 'https://nightgrave.example' (no trailing slash). Empty: og:url and og:image are left out
  * (link previews need absolute URLs). The VITE_SITE_URL environment variable overrides it at build time.
  */
-export const SITE_URL = '';
+export const SITE_URL = 'https://nightgrave.com';
 
 /** Domain shown in the footer copyright, e.g. 'nightgrave.example'. Empty: "The <TITLE> Authors". */
-export const SITE_DOMAIN = '';
+export const SITE_DOMAIN = 'nightgrave.com';
 
 /** Source code link in the footer and on the Credits page. */
 export const SOURCE_URL = 'https://github.com/emiontheautismspectrum/nightgrave';
