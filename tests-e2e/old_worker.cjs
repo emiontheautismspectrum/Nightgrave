@@ -2,11 +2,11 @@
  * A NEW client against the OLD Worker (the one live before the heroes pass), with no Cloudflare and no live board:
  * - the game is built with VITE_API_BASE=http://localhost:8787 and every API call is answered by Playwright mocks (the
  *   e2e board mock); any request to another host fails the test (nothing can reach the live board);
- * - the POST /api/submit body the client really sends is handed to the OLD Worker's own code (origin/main, checked out
+ * - the POST /api/submit body the client really sends is handed to the OLD Worker's own code (by default the commit before the last CLIENT_VERSION change, checked out
  *   in a temporary git worktree, run against an in-memory D1), and its real response goes back to the page;
  * - expected: the old Worker refuses it as outdated (409) with zero rows written, and the client shows the graceful
  *   "GAME UPDATED: RELOAD THE PAGE" message. Zero CSP violations (the production CSP is applied to every document).
- * Run: node tests-e2e/old_worker.cjs [git ref of the old Worker, default origin/main]
+ * Run: node tests-e2e/old_worker.cjs [git ref of the old Worker, default: the commit before the last CLIENT_VERSION change]
  */
 const { chromium } = require('playwright');
 const { spawn, execSync, execFileSync } = require('node:child_process');
@@ -16,7 +16,10 @@ const path = require('node:path');
 const VITE_BIN = path.join(__dirname, '..', 'node_modules', 'vite', 'bin', 'vite.js');
 
 const ROOT = path.join(__dirname, '..');
-const REF = process.argv[2] ?? 'origin/main';
+// default: the Worker as it was before the CURRENT client version (the parent of the last commit that changed
+// src/shared/version.ts), so the check is meaningful even when main already runs this version
+const lastBump = () => execSync('git log -1 --format=%H -- src/shared/version.ts', { cwd: path.join(__dirname, '..') }).toString().trim();
+const REF = process.argv[2] ?? `${lastBump()}^`;
 const API = 'http://localhost:8787';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = (m) => {
