@@ -125,6 +125,21 @@ UI
 - cursor_reticle 9x9 (amber), logo_wordmark (title text in pixel style, uses TITLE constant)
 - Font: OFL pixel font via npm (@fontsource/press-start-2p). No bitmap font generation needed.
 
+Shell (the phone-portrait console around the run screen; `tools/nglib/shell.py`, group `shell`, one atlas)
+- shell_fill 8x8 (tileable body iron), shell_bezel_h 8x5 2f (top, bottom), shell_bezel_v 5x8 2f (left, right),
+  shell_bezel_corner 5x5 4f (TL, TR, BL, BR, mitred), shell_rivet 3x3, shell_screw 5x5, shell_rune 10x10 (engraving),
+  shell_grille 4x4 (speaker tile), shell_pause 19x11 (pill), shell_plate_end 4x9 2f + shell_plate_mid 1x9 (title
+  plate), shell_cap_l 11x12 2f and shell_cap_s 9x10 2f (PARRY / DASH caps, up / pressed: 9-slice sources whose middle
+  row and column are ONE pixel, so any whole-pixel size is exact), shell_lamp 11x11 10f (dash, guard, trail, slow,
+  double; off = outlined lens, on = filled lens), shell_glyph 3x5 37f (engraved A-Z 0-9 - for the TITLE plate).
+- Assembled at runtime from whole-pixel tiles (src/render/shellParts.ts), never stretched; the round stick parts (well,
+  ring, knob) are rasterised at runtime (pixel-exact scanlines) at the layout's radius. Original design: no brand text,
+  logos, A / B lettering, D-pad or SELECT / START.
+- Colour rule for UI (validate_palette.py): body and bezel only bg0, bg1, fog, stone_dark, stone, bone; amber, gold
+  and teal only in the lamps (hero / double score / slow time, as in the HUD). NEVER red / blood (unparryable) or
+  violet (parryable) in the shell, no ember, no decor-only (moon, earth, dry) or ground-only colours. The PARRY / DASH
+  icons on the caps are not shell art (their ready colours are amber and bone: contrast >= 7.6 on the stone_dark cap).
+
 ## Deliverables of the art stage
 1. `tools/gen_assets.py` (+ helper modules) that regenerates everything from scratch in one command.
 2. `tools/validate_palette.py` that fails if any pixel is off-palette or any sprite breaks size rules.

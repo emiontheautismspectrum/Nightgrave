@@ -69,7 +69,7 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   (`src/web/screen.ts`: ~280 game px wide at an integer device-px scale, inside the safe area, >= 95% of the height):
   HUD band on top (two rows), the world window in the middle (camera zoom raised until it shows at most the world
   height, crisp; `PORTRAIT.zoom` in `src/data/view.ts` is the floor), the boss bar and the control strip at the bottom
-  with PARRY >= 88 and DASH >= 64 CSS px (hit areas +12 CSS px, mirrored by Left-handed, never over the playfield) and
+  with PARRY >= 88 and DASH >= 64 CSS px round buttons without the shell, the shell's rectangular caps with it (hit areas +12 CSS px, mirrored by Left-handed, never over the playfield) and
   the stick (the strip is tall enough for its 120 CSS px base);
   smooth follow with a dead zone and a lead (reduced motion or reduced flashes: snappier, no lead); shake follows the
   setting. The pause menu, cards and the death panel stay on the portrait screen. Multi-touch: one finger moves while
@@ -79,6 +79,23 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   every threat first appearing off-view is marked >= 15 ticks before it can hit. Rotating mid-run re-lays out and
   auto-pauses until RESUME (no rotate overlay). Replay / board metadata `view: "full" | "zoomed"` (never affects the
   sim or the verifier; the board shows a phone icon).
+- Portrait SHELL (phones in portrait, the run scene only: play, pause, death and submit panels; menus, settings, the
+  board and other overlays unchanged; desktop and landscape unchanged): a blackened-iron "relic console" around the run
+  screen. Top PLATE (the HUD readouts at today's positions and fonts, the pause pill in a >= 44 CSS px square target, an
+  engraved title plate with TITLE only where it fits beside the HUD), a riveted BEZEL around the world window, a control
+  DECK (the boss bar in a slot on its top edge, the lamp row, the stick well, RECTANGULAR caps: PARRY >= 100 x 72 CSS
+  px lower and nearest the thumb, DASH >= 76 x 56 higher and further in, hit rectangles 12 CSS px larger on every side,
+  >= 4 CSS px apart, never over the stick zone; DASH rises only as much as the stick zone needs). Tunables and the
+  `enabled` switch (off = exactly the previous layout) in `src/data/shell.ts`; pure layout in portraitLayout.ts, the
+  part list in `src/render/shellParts.ts` (integers, tiles, 1 px 9-slice repeats, scanline circles), baked ONCE per
+  layout into one canvas texture (`src/render/shellView.ts`; rebuilt on resize / rotation / Left-handed / stick-drag /
+  hero / WebGL restore, the old texture destroyed). Lamps (steady, never blinking): DASH ready (amber), GUARD x3 for
+  the Knight / the burning TRAIL for the Wisp (amber), SLOW (teal), DOUBLE (gold); each lamp has its own place and
+  glyph, on = filled lens, off = outlined. Caps: up / pressed (flat, 1 px down), cooldown = a dark shade draining from
+  the bottom up with a thin amber edge. Drag mode: the well is drawn empty and dimmed. Decoration (screws, grille, rune)
+  only where free; dropped first: rune, grille, screws (lamps last); controls never shrink. Colour rule: NO red / blood
+  and NO violet in the shell (they mean unparryable / parryable); the page under the notch / home indicator takes the
+  body colour. Tests: tests/shell.test.ts, tests-e2e/shell.cjs, the run check in tests-e2e/layout.cjs.
 - Pause: Esc, P, gamepad Start or the pause button; auto-pause on focus loss / hidden tab.
 - Menus by touch (`MenuView`, src/render/ui.ts): every item on every page is tappable; a tap fires on pointer-up over the
   item it went down on, shows a pressed state, and a drag over 10 CSS px cancels it (scrolling never activates).
