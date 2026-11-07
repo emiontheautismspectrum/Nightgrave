@@ -61,7 +61,8 @@ const UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{
  */
 const ORIGIN_RE = /^https?:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*(:\d{1,5})?$/;
 function origins(env: Env): string[] {
-  return (env.ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim()).filter((s) => ORIGIN_RE.test(s));
+  // a configured entry is lower-cased (browsers send the host in lower case), then it must be an exact origin
+  return (env.ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter((s) => ORIGIN_RE.test(s));
 }
 
 function corsHeaders(req: Request, env: Env): Record<string, string> {

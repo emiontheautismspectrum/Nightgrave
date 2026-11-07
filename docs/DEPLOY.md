@@ -168,11 +168,21 @@ The canonical address of the game is `https://nightgrave.com` (`SITE_URL` / `SIT
 Worker already allows it (`ALLOWED_ORIGINS` in `server/wrangler.toml`). `https://nightgrave.pages.dev` keeps working.
 Order, after the pull request that set this up:
 
-1. Merge the pull request and wait for the Pages build of `main` to succeed.
-2. Redeploy the Worker (REQUIRED: without it the board is blocked by CORS on the new domain):
+1. Merge the pull request and wait for the Pages build of `main` to succeed. From then on every page names
+   `https://nightgrave.com` as its canonical / og address, so do steps 2 and 3 right away (the domain was bought at
+   Cloudflare Registrar, so its zone is already on Cloudflare: no nameserver change, the domain attaches in minutes).
+2. Redeploy the Worker (REQUIRED: without it the board is blocked by CORS on the new domain). Your real
+   `database_id` is a local, uncommitted edit of `server/wrangler.toml`, and the merge changed another line of that
+   file: a plain `git pull` refuses to touch it. `--autostash` keeps your edit:
 
    ```bash
-   git checkout main && git pull
+   git checkout main && git pull --autostash
+   ```
+
+   Check that your database id is still there (not `REPLACE_WITH_YOUR_D1_DATABASE_ID`) and that the new origin is in:
+
+   ```bash
+   grep -E "database_id|ALLOWED_ORIGINS" server/wrangler.toml
    ```
 
    ```bash

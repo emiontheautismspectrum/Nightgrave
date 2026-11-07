@@ -231,6 +231,11 @@ describe('custom domain: the origins in wrangler.toml', () => {
     const pre2 = (o: string) => handle(new Request('https://api.test/api/submit', { method: 'OPTIONS', headers: { Origin: o, 'Access-Control-Request-Method': 'POST' } }), e, NOW);
     for (const o of ['https://evil.example', 'null', 'https://a.example', 'https://b.example']) expect((await pre2(o)).status).toBe(403);
     expect((await pre2('https://ok.example')).status).toBe(204);
+    // an upper-case entry in the configuration still matches the (lower-case) browser origin, and only that
+    const e2 = { ...env, ALLOWED_ORIGINS: 'https://Nightgrave.COM' };
+    const pre3 = (o: string) => handle(new Request('https://api.test/api/submit', { method: 'OPTIONS', headers: { Origin: o, 'Access-Control-Request-Method': 'POST' } }), e2, NOW);
+    expect((await pre3('https://nightgrave.com')).headers.get('Access-Control-Allow-Origin')).toBe('https://nightgrave.com');
+    expect((await pre3('https://NIGHTGRAVE.COM')).status).toBe(403);
   });
 });
 
