@@ -212,6 +212,8 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   watch (iOS may settle the viewport without an event). The portrait game size is also EXACT on the browser's 1/64 CSS
   px grid (exactSize in src/web/screen.ts): an iPhone 14 (DPR 3) otherwise got a canvas of 389.333 CSS px stretched by
   a non-integer factor (soft pixels). tests-e2e/crisp.cjs checks CSS width x DPR = game width x k on phones.
+- No relayout while a board text field is focused (src/web/textFocus.ts; the keyboard is a viewport change): the fields
+  are created once per panel and only moved, use a >= 16 CSS px font on phones; one re-measure ~150 ms after the focus leaves.
 - Phones: no side panel. "BOARD" on the title and the death panel opens a full-screen board overlay (back button, drag
   scroll, Esc / B close it, never during a run). The canvas never pans, zooms, selects or shows callouts (CSS), the
   page uses 100dvh and follows visualViewport resizes; the web manifest is fullscreen in any orientation ("Add to Home

@@ -28,6 +28,7 @@ import { PORTRAIT } from '../data/view';
 import { portraitLayout, type PortraitLayout } from './portraitLayout';
 import { FollowCam } from './camera';
 import { getScreen, onScreenChange } from '../web/screen';
+import { textFieldFocused } from '../web/textFocus';
 import { edgeMarkers } from './edgeMarkers';
 import { decayAlpha, doubleActive, LABEL, LABEL_MS, labelSpot, multColor, type LabelBounds } from './multFeedback';
 import { emitAudioEvent } from './events';
@@ -238,7 +239,11 @@ export class GameScene extends Phaser.Scene {
     };
     const onBlur = () => this.autoPause('blur');
     const onFocus = () => this.driver?.resume('blur');
-    const onOrient = () => this.onResize();
+    // a window resize while a board field is focused is the on-screen keyboard: never re-lay out under it (the page
+    // layout re-measures once the focus leaves, src/web/textFocus.ts)
+    const onOrient = () => {
+      if (!textFieldFocused()) this.onResize();
+    };
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('blur', onBlur);
     window.addEventListener('focus', onFocus);
@@ -1065,6 +1070,8 @@ export class GameScene extends Phaser.Scene {
       replay: () => JSON.stringify(this.sim.log),
       buttons: this.input2.touch.buttons().map((b) => ({ ...b })), pause: { ...this.pauseRect },
       submitStatus: this.submit?.statusText() ?? null,
+      submitBoxes: this.submit?.debugBoxes() ?? null,
+      panelBox: this.panel.visible ? (() => { const b = this.panelText.getBounds(); return [b.x, b.y, b.width, b.height]; })() : null,
       stick: this.input2.touch.opts.stick && this.input2.touch.stickLayout ? { ...this.input2.touch.stickLayout } : null,
       mult: st.multiplier, guard: st.hero.guardCharges, aim: [st.hero.aimX, st.hero.aimY], trail: st.trail.length, dbl: st.tick < st.doubleUntil, pickup: st.pickup ? { x: st.pickup.x, y: st.pickup.y, kind: st.pickup.kind } : null,
       proj: st.projectiles.map((pr) => [pr.x, pr.y, pr.vx, pr.vy, pr.radius, pr.parryable ? 1 : 0]),

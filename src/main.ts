@@ -16,6 +16,7 @@ import { computeLayout } from './web/layout';
 import { initBoardOverlay } from './web/boardOverlay';
 import { isInRun, onRunChange, setRelayout } from './web/runFlag';
 import { portraitGameSize, setScreen } from './web/screen';
+import { installTextFocusWatch, layoutGate, onTextFocusEnd, textFieldFocused } from './web/textFocus';
 
 document.title = TITLE;
 
@@ -192,7 +193,18 @@ async function boot(): Promise<void> {
   };
   for (const t of ['pointerdown', 'keydown', 'touchend']) addEventListener(t, unlock, { capture: true, passive: true });
   document.addEventListener('visibilitychange', () => audio.setHidden(document.hidden));
-  const resize = () => applyLayout(game);
+  // never re-lay out under a focused text field: on a phone the viewport changes ARE the on-screen keyboard, and a
+  // relayout there used to rebuild the field and close the keyboard at once. A real rotation (orientationchange) may
+  // still re-measure (the submit panel keeps its fields). The owed re-measure runs ~150 ms after the focus leaves.
+  let owed = false;
+  const relayout = (forced = false) => {
+    const g = layoutGate(textFieldFocused(), forced, owed);
+    owed = g.pending;
+    if (g.run) applyLayout(game);
+  };
+  const resize = () => relayout();
+  installTextFocusWatch();
+  onTextFocusEnd(() => relayout());
   setRelayout(resize);
   onRunChange(resize);
   initBoardOverlay();
@@ -200,7 +212,7 @@ async function boot(): Promise<void> {
   // mobile browser bars showing / hiding change the visual viewport (not always the window): lay out again
   window.visualViewport?.addEventListener('resize', resize);
   window.visualViewport?.addEventListener('scroll', resize);
-  addEventListener('orientationchange', resize);
+  addEventListener('orientationchange', () => relayout(true));
   // back from the bfcache / an installed web app brought to the front: measure again
   addEventListener('pageshow', resize);
   // iOS can settle the viewport after the first frames without any event: measure again shortly after boot, and keep a
