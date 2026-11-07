@@ -484,7 +484,7 @@ export class GameScene extends Phaser.Scene {
   private panelCenterY(): number {
     const H = this.scale.height;
     const G = this.zoomed ? this.pl.shell : null;
-    return G ? Math.min(Math.round(H / 2), G.deckTop - 52) : H / 2;
+    return G ? Math.min(Math.round(H / 2), G.deckTop - 50) : H / 2; // the panel spans +- 48
   }
 
   /** Centre the Phaser camera on the follow camera (whole world px: crisp). */

@@ -134,11 +134,12 @@ function knobParts(out: Part[], x: number, y: number, kn: number): void {
 }
 
 /** The shell for a layout (null when the layout has no shell). */
-export function shellParts(L: PortraitLayout, o: ShellOptions): ShellParts | null {
+/** `S`: the shell tunables (the same object the layout was made with; tests pass a modified copy). */
+export function shellParts(L: PortraitLayout, o: ShellOptions, S: typeof SHELL = SHELL): ShellParts | null {
   const G = L.shell;
   if (!G) return null;
   const { W, H } = L;
-  const C = SHELL.colors;
+  const C = S.colors;
   const parts: Part[] = [];
   const B = G.bezelW;
   const bz = G.bezel;
@@ -199,10 +200,10 @@ export function shellParts(L: PortraitLayout, o: ShellOptions): ShellParts | nul
   const ornaments: ShellParts['ornaments'] = [];
   const lamps: ShellParts['lamps'] = [];
   const band = G.lampBand;
-  const lw = o.lamps.length * LAMP + Math.max(0, o.lamps.length - 1) * SHELL.lampGap;
+  const lw = o.lamps.length * LAMP + Math.max(0, o.lamps.length - 1) * S.lampGap;
   const lampRect: Rect = { x: band.x + Math.floor((band.w - lw) / 2), y: band.y, w: lw, h: LAMP };
   if (o.lamps.length && free(lampRect)) {
-    o.lamps.forEach((kind, i) => lamps.push({ kind, x: lampRect.x + i * (LAMP + SHELL.lampGap), y: lampRect.y }));
+    o.lamps.forEach((kind, i) => lamps.push({ kind, x: lampRect.x + i * (LAMP + S.lampGap), y: lampRect.y }));
     blocked.push(lampRect);
     ornaments.push({ name: 'lamps', rect: lampRect });
   }
@@ -222,7 +223,7 @@ export function shellParts(L: PortraitLayout, o: ShellOptions): ShellParts | nul
       }
     return best;
   };
-  // the decoration is placed in the reverse of SHELL.dropOrder: what is dropped first is placed last (when no room is
+  // the decoration is placed in the reverse of S.dropOrder: what is dropped first is placed last (when no room is
   // left, it is the one that goes)
   const midY = (G.deckTop + H) / 2;
   const placers: Record<string, () => void> = {
@@ -240,7 +241,7 @@ export function shellParts(L: PortraitLayout, o: ShellOptions): ShellParts | nul
     // the speaker grille: whole 4 px tiles in a recessed frame, near the middle of the deck's free area
     grille: () => {
       const gt = size('shell_grille').w;
-      for (const [cols, rows] of SHELL.grille) {
+      for (const [cols, rows] of S.grille) {
         const outer = spot(cols * gt + 3, rows * gt + 3, W / 2, midY); // the frame plus its lit lip
         if (!outer) continue;
         const r = { x: outer.x, y: outer.y, w: outer.w - 1, h: outer.h - 1 };
@@ -263,7 +264,7 @@ export function shellParts(L: PortraitLayout, o: ShellOptions): ShellParts | nul
       ornaments.push({ name: 'rune', rect: r });
     },
   };
-  for (const d of [...SHELL.dropOrder].reverse()) placers[d]?.();
+  for (const d of [...S.dropOrder].reverse()) placers[d]?.();
   // ---- the title plate on the top plate (TITLE, engraved 3x5 letters)
   if (G.title) {
     const t = G.title;

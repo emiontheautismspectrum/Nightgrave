@@ -68,7 +68,10 @@ export class ShellView {
     for (const im of [this.base, this.caps.parry, this.caps.dash, this.knob]) im.setTexture(ATLAS, frame('shell_fill'));
     if (tm.exists(SHELL_TEX)) tm.remove(SHELL_TEX);
     const tex = tm.createCanvas(SHELL_TEX, P.texW, P.texH);
-    if (!tex) return;
+    if (!tex) {
+      this.hide();
+      return;
+    }
     const ctx = tex.context;
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, P.texW, P.texH);

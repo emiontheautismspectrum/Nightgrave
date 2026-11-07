@@ -47,8 +47,6 @@ export const SHELL = {
     slotLit: 'stone_dark' as ShellColor,
     cooldown: 'amber' as ShellColor,
   },
-  /** Drag mode has no stick: the well is drawn empty and dimmed (no ring, no knob). */
-  dragWellAlpha: 0.5,
 };
 
 /** The palette colours the shell may use (docs/ASSETS_SPEC.md; tests/shell.test.ts checks them against the doc). */
