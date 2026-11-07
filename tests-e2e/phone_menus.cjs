@@ -189,7 +189,10 @@ function targetsOk(l) {
       const parry = d.buttons.find((x) => x.id === 'parry');
       const dash = d.buttons.find((x) => x.id === 'dash');
       if (portrait) {
-        ok(parry.r * 2 * cssPx >= 88 - 0.5 && dash.r * 2 * cssPx >= 64 - 0.5, 'run: PARRY >= 88 and DASH >= 64 CSS px', `${(parry.r * 2 * cssPx).toFixed(0)} / ${(dash.r * 2 * cssPx).toFixed(0)}`);
+        // the console shell: rectangular caps (PARRY >= 100 x 72, DASH >= 76 x 56 CSS px); without it round buttons
+        if (parry.w !== undefined)
+          ok(parry.w * cssPx >= 100 - 0.5 && parry.h * cssPx >= 72 - 0.5 && dash.w * cssPx >= 76 - 0.5 && dash.h * cssPx >= 56 - 0.5, 'run: PARRY >= 100x72 and DASH >= 76x56 CSS px', `${(parry.w * cssPx).toFixed(0)}x${(parry.h * cssPx).toFixed(0)} / ${(dash.w * cssPx).toFixed(0)}x${(dash.h * cssPx).toFixed(0)}`);
+        else ok(parry.r * 2 * cssPx >= 88 - 0.5 && dash.r * 2 * cssPx >= 64 - 0.5, 'run: PARRY >= 88 and DASH >= 64 CSS px', `${(parry.r * 2 * cssPx).toFixed(0)} / ${(dash.r * 2 * cssPx).toFixed(0)}`);
         ok(r.h / r.vh >= 0.95, 'run fills >= 95% of the viewport height', (r.h / r.vh).toFixed(3));
       } else ok(parry.r > 0 && dash.r > 0, 'run: landscape buttons in the side margin');
       ok(d.parryStart < 0, 'the PLAY tap did not leak into the run (no parry)', String(d.parryStart));

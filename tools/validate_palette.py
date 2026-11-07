@@ -37,6 +37,9 @@ ACCENT_PARENT = {"giant_tree_crack": "giant_tree", "glow_mushrooms": "giant_tree
 # v2 value hierarchy: share of bone/moon-bright pixels allowed per arena sprite (decor: none; landmarks: accents)
 BRIGHT = {"bone", "moon"}
 GROUND_ONLY_PROP_MAX = 0.10
+# Shell (phone-portrait console body): its own UI rule, see main()
+SHELL_ACCENTS = {"amber", "gold", "teal"}
+SHELL_COLORS = {"bg0", "bg1", "fog", "stone_dark", "stone", "bone"} | SHELL_ACCENTS
 
 
 def color_share(px, names):
@@ -118,7 +121,8 @@ def main():
     expected = dict(spec.SPRITES)
     for n, frames in art["sprites"].items():
         expected[n] = (frames[0].shape[1], frames[0].shape[0], len(frames))
-    groups = art["groups"]
+    expected.update(spec.SHELL)
+    groups = {**art["groups"], **{n: "shell" for n in spec.SHELL}}
 
     def reserved_used(px):
         rgb = px[..., :3][px[..., 3] == 255]
@@ -129,8 +133,24 @@ def main():
         p = os.path.join(ASSETS, "sprites", f"{n}.png")
         if p in images and color_share(images[p], GROUND_ONLY) > 0:
             err(f"sprites/{n}.png (gameplay) uses ground-only colors")
+    # The phone-portrait shell (UI art, docs/ASSETS_SPEC.md "Shell"): ONLY the body colours (bg0, bg1, fog, stone_dark,
+    # stone, bone) and, for the lamps, amber / gold / teal (they already mean hero / double score / slow time in the
+    # HUD). Never red or violet (unparryable / parryable), ember, decor-only or ground-only colours.
+    for n in sorted(spec.SHELL):
+        p = os.path.join(ASSETS, "sprites", f"{n}.png")
+        if p not in images:
+            err(f"sprites/{n}.png is missing")
+            continue
+        px = images[p]
+        rgb = px[..., :3][px[..., 3] == 255]
+        used = {NAMES[RGB.index(tuple(c))] for c in np.unique(rgb.reshape(-1, 3), axis=0)} if len(rgb) else set()
+        bad = used - SHELL_COLORS
+        if bad:
+            err(f"sprites/{n}.png (shell) uses colours outside the shell palette: {sorted(bad)}")
+        if n != "shell_lamp" and used & SHELL_ACCENTS:
+            err(f"sprites/{n}.png (shell) uses lamp accents {sorted(used & SHELL_ACCENTS)} outside the lamps")
     for n in sorted(expected):
-        if n in spec.SPRITES:
+        if n in spec.SPRITES or n in spec.SHELL:
             continue
         p = os.path.join(ASSETS, "sprites", f"{n}.png")
         if p not in images:

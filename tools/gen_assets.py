@@ -15,7 +15,7 @@ import gen_arena  # noqa: E402
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 from nglib import arena_previews as AP  # noqa: E402
-from nglib import board, bosses, effects, heroes, threats  # noqa: E402
+from nglib import board, bosses, effects, heroes, shell, threats  # noqa: E402
 from nglib import canvas as C  # noqa: E402
 from nglib import spec  # noqa: E402
 from nglib.pack import pack  # noqa: E402
@@ -57,6 +57,20 @@ def gameplay_sprites():
             assert f.shape == (fh, fw), f"{name}: frame {f.shape}, expected {(fh, fw)}"
         sprites[name] = frames
     return sprites
+
+
+def shell_sprites():
+    """The phone-portrait shell pieces (group "shell", own colour rule), sizes from spec.SHELL."""
+    assert set(shell.SPRITES) == set(spec.SHELL), set(shell.SPRITES) ^ set(spec.SHELL)
+    out = {}
+    for name in spec.SHELL:
+        frames = shell.SPRITES[name]()
+        fw, fh, n = spec.SHELL[name]
+        assert len(frames) == n, f"{name}: {len(frames)} frames, expected {n}"
+        for f in frames:
+            assert f.shape == (fh, fw), f"{name}: frame {f.shape}, expected {(fh, fw)}"
+        out[name] = frames
+    return out
 
 
 def write_json(path, data):
@@ -241,10 +255,11 @@ def main():
 
     game = gameplay_sprites()
     art = gen_arena.build()
-    overlap = set(game) & set(art["sprites"])
+    shells = shell_sprites()
+    overlap = (set(game) & set(art["sprites"])) | (set(shells) & (set(game) | set(art["sprites"])))
     assert not overlap, overlap
-    sprites = {**game, **art["sprites"]}
-    groups = {**{n: "gameplay" for n in game}, **art["groups"]}
+    sprites = {**game, **art["sprites"], **shells}
+    groups = {**{n: "gameplay" for n in game}, **art["groups"], **{n: "shell" for n in shells}}
     for name, frames in sprites.items():
         save(C.strip(frames), os.path.join(ASSETS, "sprites", f"{name}.png"))
 
@@ -292,6 +307,7 @@ def main():
     save(AP.animation_strips(art), pv("animation_strips.png"))
     rgb(boss_board(art, game), "boss_board.png")
     rgb(heroes_compare(game), "heroes_compare.png")
+    rgb(shell.board(shells, title), "shell_parts.png")
     write_web_manifest(read_title(), game)
     import gen_font  # noqa: E402  pixel-exact bitmap font for the game's text
     gen_font.main()

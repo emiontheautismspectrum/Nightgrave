@@ -46,7 +46,8 @@ export class SubmitPanel {
   rects: [number, number, number, number][] = [];
   private onResize = () => this.place();
 
-  constructor(private scene: Phaser.Scene, private depth: number) {}
+  /** `centerY`: the death panel's centre (game px); the portrait panel goes above it (default: the screen middle). */
+  constructor(private scene: Phaser.Scene, private depth: number, private centerY: () => number = () => scene.scale.height / 2) {}
 
   /** Async: fetch a fresh board, and if the run would rank, show the fields. */
   async offer(run: RunResult, alive: () => boolean): Promise<void> {
@@ -137,9 +138,9 @@ export class SubmitPanel {
     }
     const fields = this.wantsMessage ? 2 : 1;
     const content = 12 + fields * (fh + 4) + 2 + 14 + 20 + 20; // label, fields, buttons, status (2 lines), note (2 lines)
-    // above the death panel (its box spans H/2 +- 48) AND above its [ BOARD ] button (centred at H/2 - 62, a >= 44 CSS px
-    // tap target): the frame ends clear of that target
-    const bottom = Math.round(H / 2 - 62 - Math.ceil(22 / this.k()) - 4);
+    // above the death panel (its box spans centerY +- 48) AND above its [ BOARD ] button (centred at centerY - 62, a >= 44
+    // CSS px tap target): the frame ends clear of that target. The shell moves the centre up off the control deck.
+    const bottom = Math.round(this.centerY() - 62 - Math.ceil(22 / this.k()) - 4);
     const top = Math.max(4, bottom - (content + 16));
     const y0 = top + 6;
     const fw = W - 16;

@@ -117,6 +117,48 @@ function check(name, L) {
   console.log(`${errs.length ? 'FAIL' : 'ok  '} ${name}${errs.length ? ': ' + errs.slice(0, 4).join('; ') : ''}`);
 }
 
+/**
+ * The phone-portrait run screen with the console shell: every interactive item inside the visible screen and at its
+ * minimum size, no two hit areas overlapping (>= 4 CSS px apart), none over the HUD readouts, decoration inside the
+ * deck, the world window >= 60% of the height on 390x844 (insets 47/34), the game >= 95% of the visible height, the
+ * page under the notch / home indicator in the shell's body colour.
+ */
+async function runShell(page, label, ins) {
+  const sh = await page.evaluate(() => { const s = window.__ngShell && window.__ngShell(); return s && JSON.parse(JSON.stringify({ ...s, canvas: null, atlas: null })); });
+  const box = await page.evaluate(() => { const c = document.querySelector('#game canvas').getBoundingClientRect(); return { k: c.width / document.querySelector('#game canvas').width, h: c.height, ih: innerHeight }; });
+  const errs = [];
+  const need = (c, m) => { if (!c) errs.push(m); };
+  need(sh && sh.visible, 'shell visible');
+  if (sh && sh.visible) {
+    const L = sh.layout;
+    const css = box.k;
+    const inScreen = (r) => r.x >= 0 && r.y >= 0 && r.x + r.w <= L.W && r.y + r.h <= L.H;
+    const hits = L.buttons.map((b) => ({ id: b.id, x: b.x - b.hitW / 2, y: b.y - b.hitH / 2, w: b.hitW, h: b.hitH, b }));
+    for (const r of hits) {
+      need(inScreen(r), `${r.id} hit inside the screen`);
+      need(r.y >= L.shell.deckTop, `${r.id} in the deck`);
+      const nx = Math.min(Math.max(L.stick.x, r.x), r.x + r.w);
+      const ny = Math.min(Math.max(L.stick.y, r.y), r.y + r.h);
+      need(Math.hypot(nx - L.stick.x, ny - L.stick.y) >= L.stick.zone, `${r.id} clear of the stick zone`);
+    }
+    const [P, D] = hits;
+    const gap = Math.max(D.x - (P.x + P.w), P.x - (D.x + D.w), D.y - (P.y + P.h), P.y - (D.y + D.h));
+    need(gap * css >= 4 - 0.01, `>= 4 CSS px between the hit rectangles (${(gap * css).toFixed(1)})`);
+    need(P.b.w * css >= 99.5 && P.b.h * css >= 71.5 && D.b.w * css >= 75.5 && D.b.h * css >= 55.5, 'cap sizes');
+    need(L.stick.r * 2 * css >= 119.5 && L.stick.knob * 2 * css >= 55.5, 'stick sizes');
+    need(L.stick.x - L.stick.r >= 0 && L.stick.x + L.stick.r <= L.W && L.stick.y + L.stick.r <= L.H, 'stick inside the screen');
+    need(inScreen(L.pauseHit) && L.pauseHit.w * css >= 43.5 && L.pauseHit.h * css >= 43.5 && L.pauseHit.x > 192, 'pause target >= 44 CSS px, clear of the HUD');
+    for (const o of sh.parts.ornaments) need(inScreen(o.rect) && (o.name === 'title' ? o.rect.y + o.rect.h <= L.shell.plateH : o.rect.y > L.shell.deckTop), `${o.name} inside its panel`);
+    for (const l of sh.parts.lamps) need(l.y > L.shell.deckTop && l.y + 11 <= L.H, 'lamp in the deck');
+    if (label.includes('390x844') && ins) need(L.view.h / L.H >= 0.6, `world window >= 60% of the height (${(L.view.h / L.H).toFixed(3)})`);
+    const vis = box.ih - (ins ? ins[0] + ins[1] : 0);
+    need(box.h / vis >= 0.95, `the game fills >= 95% of the visible height (${(box.h / vis).toFixed(3)})`);
+    need(sh.body === 'rgb(18, 22, 29)', `the page under the insets is the body colour (${sh.body})`);
+  }
+  if (errs.length) failed++;
+  console.log(`${errs.length ? 'FAIL' : 'ok  '} ${label} run screen (shell)${errs.length ? `: ${errs.join('; ')}` : ''}`);
+}
+
 (async () => {
   // the board API is mocked (a long champion name and message): the title's champion block is laid out for real
   execSync('npx vite build', { cwd: ROOT, stdio: 'ignore', env: { ...process.env, VITE_SMOKE: '1', VITE_API_BASE: 'http://localhost:8787' } });
@@ -184,6 +226,7 @@ function check(name, L) {
       await sleep(1500);
       await key('Enter'); // play
       await sleep(400);
+      if (label.startsWith('portrait')) await runShell(page, label, ins);
       await key('KeyP'); // pause
       check(`${label} pause`, await L());
       await ctx.close();

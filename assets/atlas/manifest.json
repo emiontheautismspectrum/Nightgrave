@@ -1050,6 +1050,96 @@
    "h": 20,
    "w": 16
   },
+  "shell_bezel_corner": {
+   "frames": 4,
+   "group": "shell",
+   "h": 5,
+   "w": 5
+  },
+  "shell_bezel_h": {
+   "frames": 2,
+   "group": "shell",
+   "h": 5,
+   "w": 8
+  },
+  "shell_bezel_v": {
+   "frames": 2,
+   "group": "shell",
+   "h": 8,
+   "w": 5
+  },
+  "shell_cap_l": {
+   "frames": 2,
+   "group": "shell",
+   "h": 12,
+   "w": 11
+  },
+  "shell_cap_s": {
+   "frames": 2,
+   "group": "shell",
+   "h": 10,
+   "w": 9
+  },
+  "shell_fill": {
+   "frames": 1,
+   "group": "shell",
+   "h": 8,
+   "w": 8
+  },
+  "shell_glyph": {
+   "frames": 37,
+   "group": "shell",
+   "h": 5,
+   "w": 3
+  },
+  "shell_grille": {
+   "frames": 1,
+   "group": "shell",
+   "h": 4,
+   "w": 4
+  },
+  "shell_lamp": {
+   "frames": 10,
+   "group": "shell",
+   "h": 11,
+   "w": 11
+  },
+  "shell_pause": {
+   "frames": 1,
+   "group": "shell",
+   "h": 11,
+   "w": 19
+  },
+  "shell_plate_end": {
+   "frames": 2,
+   "group": "shell",
+   "h": 9,
+   "w": 4
+  },
+  "shell_plate_mid": {
+   "frames": 1,
+   "group": "shell",
+   "h": 9,
+   "w": 1
+  },
+  "shell_rivet": {
+   "frames": 1,
+   "group": "shell",
+   "h": 3,
+   "w": 3
+  },
+  "shell_rune": {
+   "frames": 1,
+   "group": "shell",
+   "h": 10,
+   "w": 10
+  },
+  "shell_screw": {
+   "frames": 1,
+   "group": "shell",
+   "h": 5,
+   "w": 5
+  },
   "skull_0": {
    "frames": 2,
    "group": "arena",
