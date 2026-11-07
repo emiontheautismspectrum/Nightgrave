@@ -4,7 +4,7 @@
  */
 import Phaser from 'phaser';
 import { addText, setTextColor, snap, type UIText } from './text';
-import { VIEW_HEIGHT, VIEW_WIDTH } from '../config';
+import { TITLE, VIEW_HEIGHT, VIEW_WIDTH } from '../config';
 import { TICK_RATE, type Difficulty } from '../data/tuning';
 import { utcDateKey } from '../daily';
 import { encodeReplay, type Replay } from '../sim/replay';
@@ -26,6 +26,8 @@ import type { HeroId } from '../data/heroes';
 import { boardOverlayOpen, openBoardOverlay } from '../web/boardOverlay';
 import { PORTRAIT } from '../data/view';
 import { portraitLayout, type PortraitLayout } from './portraitLayout';
+import { heroLamps } from './shellParts';
+import { SHELL_TEX, ShellView } from './shellView';
 import { FollowCam } from './camera';
 import { getScreen, onScreenChange } from '../web/screen';
 import { textFieldFocused } from '../web/textFocus';
@@ -36,7 +38,7 @@ import { InputCollector } from './input';
 import { settingsPage, type MenuCtx } from './menus';
 import { canRestart, isPortraitView, RunDriver, type PauseReason } from './runDriver';
 import { cardLines, ContextHints, getDevice, HINT_TEXT } from './hints';
-import { TouchModel, touchStick, type TouchStick } from './touch';
+import { TouchModel, touchStick, type TouchButton, type TouchStick } from './touch';
 import { C, hitPad, MenuView, onTap, type MenuPage } from './ui';
 
 /** Frame time above this for PERF_WINDOW_MS lowers effects for the rest of the session (render only). */
@@ -66,6 +68,11 @@ const ALTAR_BASE = ARENA_PROPS.props.find((p) => p.sprite === 'portal_altar')?.b
 const FONT = '"Press Start 2P", monospace';
 
 export type HeroKind = HeroId;
+
+/** The page under the notch and the home indicator takes the shell's body colour while the shell is shown. */
+function setShellPage(on: boolean): void {
+  document.body.classList.toggle('shell', on);
+}
 
 export interface RunConfig {
   difficulty: Difficulty;
@@ -109,6 +116,9 @@ export class GameScene extends Phaser.Scene {
   private arcPx: number[] = [];
   private arcKey = { x: NaN, y: NaN, ax: NaN, ay: NaN, pulse: false, reduced: false, on: false };
   private touchIcons: Phaser.GameObjects.Image[] = [];
+  /** The phone-portrait console shell (src/render/shellView.ts); visible only while the zoomed view has a shell. */
+  private shellView!: ShellView;
+  private pausePill!: Phaser.GameObjects.Image;
   private fxLow = false;
   private slowFor = 0;
   private mist: Phaser.GameObjects.Image | null = null;
@@ -201,6 +211,24 @@ export class GameScene extends Phaser.Scene {
     // the reticle is a world object (the cursor target), above fog and overhang, below the HUD
     this.reticle = this.add.image(0, 0, ATLAS, frame('cursor_reticle')).setDepth(D_FOG + 5);
     this.markGfx = this.add.graphics().setDepth(D_FOG + 6);
+    // the shell's base image is the first HUD-depth object: every HUD object draws above it
+    this.shellView = new ShellView(this, D_HUD);
+    // dev / smoke-test builds only: the shell's layout, parts and baked canvas for tests-e2e/shell.cjs (never in a
+    // production bundle: tests/prodbundle.test.ts)
+    if (import.meta.env.DEV || import.meta.env.VITE_SMOKE === '1')
+      (window as unknown as { __ngShell?: () => object }).__ngShell = () => ({
+        visible: this.shellView.visible,
+        bakes: this.shellView.bakes,
+        textures: this.textures.getTextureKeys().length,
+        layout: this.pl,
+        parts: this.shellView.parts,
+        canvas: this.textures.exists(SHELL_TEX) ? this.textures.get(SHELL_TEX).getSourceImage() : null,
+        atlas: this.textures.get(ATLAS).getSourceImage(),
+        frames: this.textures.get(ATLAS).getFrameNames().filter((n) => n.startsWith('shell_')).map((n) => { const f = this.textures.getFrame(ATLAS, n); return [n, f.cutX, f.cutY, f.cutWidth, f.cutHeight]; }),
+        panel: this.panel.visible ? this.panel.getBounds() : null,
+        body: getComputedStyle(document.body).backgroundColor,
+        base: { x: this.shellView.debugBase().x, y: this.shellView.debugBase().y, w: this.shellView.debugBase().width },
+      });
     this.buildHud();
     this.bossView = new BossView(this, { ysort: D_YSORT, fog: D_FOG, hud: D_HUD }, this.vigOuter, this.banner, al.vignette_outer ?? 1);
     const st = save().settings;
@@ -252,6 +280,8 @@ export class GameScene extends Phaser.Scene {
       setInRun(false);
       publishArc(null); // no run: no arc (title, menus)
       this.submit?.close();
+      this.shellView.destroy();
+      setShellPage(false);
       this.uiCam = null;
       document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('blur', onBlur);
@@ -293,6 +323,7 @@ export class GameScene extends Phaser.Scene {
    * and sideways into the right margin, never down into the playfield. The same rect for Phaser and uiHit.
    */
   private pauseHitRect(): { x: number; y: number; w: number; h: number } {
+    if (this.zoomed && this.pl.pauseHit) return this.pl.pauseHit; // the shell: a square >= 44 CSS px on the top plate
     const b = this.pauseRect;
     const pd = hitPad(b.w, b.h);
     const w = b.w + 2 * pd.x;
@@ -307,7 +338,9 @@ export class GameScene extends Phaser.Scene {
     const b = PAUSE_BTN;
     const bg = this.add.rectangle(0, 0, b.w, b.h, 0x0b0d12, 0.6).setOrigin(0).setStrokeStyle(1, 0x3a4558);
     const t = addText(this, b.w / 2 - 7, b.h / 2 - 4, 'II', { color: C.bone });
-    this.pauseBtn = this.add.container(b.x, b.y, [bg, t]).setDepth(D_HUD + 1).setSize(b.w, b.h);
+    // the shell's pause pill (art, centred in its >= 44 CSS px target) replaces the plain box on the portrait shell
+    this.pausePill = this.add.image(0, 0, ATLAS, frame('shell_pause')).setOrigin(0).setVisible(false);
+    this.pauseBtn = this.add.container(b.x, b.y, [bg, t, this.pausePill]).setDepth(D_HUD + 1).setSize(b.w, b.h);
     // a separate invisible zone takes the taps (origin top-left: no container display-origin offset)
     this.pauseZone = this.add.zone(0, 0, 1, 1).setOrigin(0).setDepth(D_HUD + 1);
     this.setPauseHit();
@@ -353,7 +386,7 @@ export class GameScene extends Phaser.Scene {
 
   private portraitLayoutNow(): PortraitLayout {
     const ps = getScreen().portraitSize;
-    return portraitLayout(ps.w, ps.h, ps.k, window.devicePixelRatio || 1, save().settings.leftHanded);
+    return portraitLayout(ps.w, ps.h, ps.k, window.devicePixelRatio || 1, save().settings.leftHanded, PORTRAIT.zoom, undefined, TITLE);
   }
 
   private makeFollow(): FollowCam {
@@ -378,7 +411,8 @@ export class GameScene extends Phaser.Scene {
       const vp = this.pl.view;
       cam.setViewport(vp.x, vp.y, vp.w, vp.h).setZoom(this.pl.zoom);
       if (!this.uiCam) this.uiCam = this.cameras.add(0, 0, W, H, false, 'ui');
-      this.uiCam.setViewport(0, 0, W, H).setScroll(0, 0).setVisible(true);
+      // origin 0: an odd screen width / height must not put the HUD layer half a pixel off (a 1 px shift, a dark column)
+      this.uiCam.setViewport(0, 0, W, H).setOrigin(0, 0).setScroll(0, 0).setVisible(true);
       const h = this.sim.state.hero;
       this.follow.reset(h.x, h.y);
       this.camLast = { x: h.x, y: h.y };
@@ -393,6 +427,7 @@ export class GameScene extends Phaser.Scene {
     this.input2.touch.zoomedButtons = z ? this.pl.buttons : null;
     this.syncStick();
     this.input2.touch.rebase(); // a finger held across the switch must not jump by the change of screen space
+    this.syncShell();
     this.layoutHud();
     requestRelayout();
   }
@@ -400,21 +435,56 @@ export class GameScene extends Phaser.Scene {
   /** HUD, pause button, boss bar and banner for the current view (screen game px). */
   private layoutHud(): void {
     const z = this.zoomed;
+    const shell = z && !!this.pl.shell;
     if (z) this.hudBand.setPosition(0, 0).setSize(this.pl.W, this.pl.hudH);
     else this.hudBand.setPosition(48, 4).setSize(384, 18);
+    this.hudBand.setVisible(!shell); // the shell's top plate is the HUD's background
     const pos = (o: UIText, full: [number, number], zz: readonly [number, number]) => o.setPosition(...(z ? zz : full));
     pos(this.hudScore, [HUD_X.score, 9], HUD_Z.score);
     pos(this.hudMult, [HUD_X.mult, 9], HUD_Z.mult);
     pos(this.hudWave, [HUD_X.wave, 9], HUD_Z.wave);
     pos(this.hudDaily, [HUD_X.daily, 9], HUD_Z.daily);
-    this.banner.setPosition(z ? this.pl.W / 2 : VIEW_WIDTH / 2, z ? this.pl.hudH + 34 : 70);
+    this.banner.setPosition(z ? this.pl.W / 2 : VIEW_WIDTH / 2, z ? this.pl.view.y + 34 : 70);
     this.pauseRect = z ? this.pl.pause : PAUSE_BTN;
-    // the death panel and its BOARD button: centred on whichever screen is shown
-    this.panel.setPosition(this.scale.width / 2, this.scale.height / 2);
-    this.boardBtn?.setPosition(this.scale.width / 2, this.scale.height / 2 - 62);
+    // the death panel and its BOARD button: centred on whichever screen is shown (the shell: never over the deck)
+    this.panel.setPosition(this.scale.width / 2, this.panelCenterY());
+    this.boardBtn?.setPosition(this.scale.width / 2, this.panelCenterY() - 62);
     this.pauseBtn.setPosition(this.pauseRect.x, this.pauseRect.y);
+    const [pbg, pt] = this.pauseBtn.list as Phaser.GameObjects.GameObject[];
+    (pbg as Phaser.GameObjects.Rectangle).setVisible(!shell);
+    (pt as Phaser.GameObjects.Image).setVisible(!shell);
+    this.pausePill.setVisible(shell);
     this.setPauseHit();
     this.bossView.setLayout(z, z ? this.pl.bar : undefined);
+  }
+
+  /** The shell's lamps for the current hero (Knight: one per guard charge; Wisp: the trail). */
+  private shellKey = '';
+
+  /**
+   * Bake (or hide) the console shell for the current view: a phone in portrait with SHELL.enabled. Called on every
+   * layout change (resize, rotation, Left-handed, a stick / drag switch, a new hero); a no-op when nothing changed.
+   */
+  private syncShell(force = false): void {
+    const on = this.zoomed && !!this.pl.shell;
+    setShellPage(on);
+    if (!on) {
+      this.shellView.hide();
+      this.shellKey = '';
+      return;
+    }
+    const o = { lamps: heroLamps(heroDef(this.cfg.hero).ability), stick: !!this.input2.touch.opts.stick, title: TITLE };
+    const key = JSON.stringify([this.pl, o]);
+    if (!force && key === this.shellKey && this.shellView.visible) return;
+    this.shellKey = key;
+    this.shellView.build(this.pl, o);
+  }
+
+  /** The death panel's centre: the middle of the screen; on the shell never lower than the deck allows. */
+  private panelCenterY(): number {
+    const H = this.scale.height;
+    const G = this.zoomed ? this.pl.shell : null;
+    return G ? Math.min(Math.round(H / 2), G.deckTop - 52) : H / 2;
   }
 
   /** Centre the Phaser camera on the follow camera (whole world px: crisp). */
@@ -524,6 +594,7 @@ export class GameScene extends Phaser.Scene {
     if (modeChanged) t.releaseAll(); // switching Stick / Drag never leaves a finger holding the old control
     if (mirrored && this.zoomed) this.setView(true); // the portrait buttons and the stick move to the other corner
     this.syncStick();
+    if (modeChanged && this.shellView) this.syncShell(); // Drag mode: the well is drawn empty
     const low = st.effects === 'low' || this.fxLow;
     this.fog.setVisible(!low);
     this.mist?.setVisible(!low);
@@ -577,14 +648,17 @@ export class GameScene extends Phaser.Scene {
     out.push(g);
     const t = this.input2.touch;
     if (!this.zoomed) this.syncStick();
-    const mark = (x: number, y: number, r: number, label: string) => {
-      g.lineStyle(1, 0xffd86b, 0.9).strokeCircle(x, y, r);
-      const above = y - r - 8 > 4;
-      out.push(snap(addText(this, x, above ? y - r - 7 : y + r + 7, label, { color: C.gold }).setOrigin(0.5)));
+    const mark = (x: number, y: number, r: number, label: string, b?: TouchButton) => {
+      // a rectangular cap (the shell) is outlined as a rectangle, a round button as a circle
+      const hh = b?.h !== undefined ? b.h / 2 : r;
+      if (b?.w !== undefined && b.h !== undefined) g.lineStyle(1, 0xffd86b, 0.9).strokeRect(Math.round(x - b.w / 2) - 1.5, Math.round(y - b.h / 2) - 1.5, b.w + 3, b.h + 3);
+      else g.lineStyle(1, 0xffd86b, 0.9).strokeCircle(x, y, r);
+      const above = y - hh - 8 > 4;
+      out.push(snap(addText(this, x, above ? y - hh - 7 : y + hh + 7, label, { color: C.gold }).setOrigin(0.5)));
     };
     const S = t.stickLayout;
     if (t.opts.stick && S) mark(S.x, S.y, S.r, 'MOVE');
-    for (const b of t.buttons()) mark(b.x, b.y, b.r, b.id === 'parry' ? 'PARRY' : 'DASH');
+    for (const b of t.buttons()) mark(b.x, b.y, b.r, b.id === 'parry' ? 'PARRY' : 'DASH', b);
     return out;
   }
 
@@ -683,6 +757,7 @@ export class GameScene extends Phaser.Scene {
   private newRun(): void {
     const run = this.cfg.makeRun();
     this.cfg.hero = this.cfg.devHero ?? save().hero;
+    if (this.shellView && this.input2) this.syncShell(); // a new hero: its lamps (a no-op when nothing changed)
     // the hero is part of the run definition (it changes the rules); an instant restart keeps the selected hero
     this.sim = new Sim(run.seed, this.cfg.difficulty, { hero: this.cfg.hero, ...(this.cfg.startWave ? { startWave: this.cfg.startWave } : {}) });
     this.driver = new RunDriver(this.sim);
@@ -964,7 +1039,7 @@ export class GameScene extends Phaser.Scene {
     this.panel.setVisible(true);
     // phones: a Board button above the death panel opens the full-screen board overlay
     if (this.cfg.isTouch() && online()) {
-      const b = snap(addText(this, this.scale.width / 2, this.scale.height / 2 - 62, '[ BOARD ]', { color: C.gold }).setOrigin(0.5).setDepth(D_HUD + 6));
+      const b = snap(addText(this, this.scale.width / 2, this.panelCenterY() - 62, '[ BOARD ]', { color: C.gold }).setOrigin(0.5).setDepth(D_HUD + 6));
       const pd = hitPad(b.width, b.height, 6);
       b.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-pd.x, -pd.y, b.width + 2 * pd.x, b.height + 2 * pd.y), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
       onTap(b, () => openBoardOverlay(), (down) => b.setAlpha(down ? 0.6 : 1));
@@ -974,7 +1049,7 @@ export class GameScene extends Phaser.Scene {
     // Hard only, online, never a dev run: offer the board if the score would enter today's top 10
     if (d === 'hard' && online() && shouldSaveRun('death', this.cfg.startWave)) {
       const sim = this.sim;
-      this.submit = new SubmitPanel(this, D_HUD + 6);
+      this.submit = new SubmitPanel(this, D_HUD + 6, () => this.panelCenterY());
       void this.submit.offer({ date: this.runDate, seed: this.runSeed, score, hero, view, log: sim.log }, () => this.sim === sim);
     }
   }
@@ -1251,6 +1326,10 @@ export class GameScene extends Phaser.Scene {
     const g = this.touchGfx;
     g.clear();
     this.touchIcons.forEach((i) => i.setVisible(touch));
+    if (this.shellView.visible) {
+      this.drawShell(touch);
+      return;
+    }
     if (!touch) return;
     if (!this.zoomed) this.syncStick(); // the landscape stick follows the CSS scale (cheap compare)
     this.drawStick(g);
@@ -1272,6 +1351,50 @@ export class GameScene extends Phaser.Scene {
       this.touchIcons[i]?.setScale(b.r >= 24 ? 2 : 1).setPosition(b.x, b.y).setFrame(frame(b.id === 'parry' ? 'icon_parry' : 'icon_dash', cd > 0 ? 1 : 0)).setAlpha(0.85);
     });
   }
+
+  /**
+   * The console shell, per frame (no allocations): the caps up / pressed with their cooldown shade and icons, the
+   * knob, the lamps (dash ready; the Knight's guard charges or the Wisp's burning trail; slow; double). The caps show
+   * the cooldown on every device; the stick only in Stick mode.
+   */
+  private drawShell(touch: boolean): void {
+    const st = this.sim.state;
+    const p = this.sim.params;
+    const t = this.input2.touch;
+    const sv = this.shellView;
+    const live = st.alive;
+    const cdP = parryCooldownLeft(st, p) / parryCooldownOf(st, p);
+    const cdD = dashCooldownLeft(st, p) / p.dashCooldown;
+    sv.cap('parry', touch && t.held('parry'), live ? cdP : 0, true);
+    sv.cap('dash', touch && t.held('dash'), live ? cdD : 0, false);
+    for (let i = 0; i < 2; i++) {
+      const id = i === 0 ? 'parry' : 'dash';
+      const c = sv.capOf(id);
+      const cd = i === 0 ? cdP : cdD;
+      const big = c.h >= 36 && c.w >= 36;
+      this.touchIcons[i]?.setVisible(true).setScale(big ? 2 : 1).setPosition(Math.floor(c.x + c.w / 2), Math.floor(c.y + c.h / 2) + (sv.pressed(id) ? 1 : 0))
+        .setFrame(i === 0 ? (live && cd > 0 ? this.iconFrames[1] : this.iconFrames[0]) : live && cd > 0 ? this.iconFrames[3] : this.iconFrames[2]).setAlpha(1);
+    }
+    const lamps = sv.parts?.lamps ?? [];
+    let guard = 0;
+    for (let i = 0; i < lamps.length; i++) {
+      const k = lamps[i]!.kind;
+      let on = false;
+      if (k === 'dash') on = live && cdD === 0;
+      else if (k === 'guard') on = live && st.hero.guardCharges > guard++;
+      else if (k === 'trail') on = live && st.trail.length > 0;
+      else if (k === 'slow') on = live && st.tick < st.slowUntil;
+      else on = live && doubleActive(st);
+      sv.lamp(i, on);
+    }
+    const S = t.stickLayout;
+    if (S && t.opts.stick) {
+      const k = t.knobOffset();
+      sv.knobAt(Math.round(S.x + k.x), Math.round(S.y + k.y), this.driver.paused ? 0.5 : 1);
+    }
+  }
+  /** icon_parry ready / cooldown, icon_dash ready / cooldown (frame names built once). */
+  private iconFrames: [string, string, string, string] = [frame('icon_parry', 0), frame('icon_parry', 1), frame('icon_dash', 0), frame('icon_dash', 1)];
 
   private cooldownIcon(icon: Phaser.GameObjects.Image, ring: Phaser.GameObjects.Image, name: SpriteName, left: number, total: number): void {
     const cooling = left > 0;

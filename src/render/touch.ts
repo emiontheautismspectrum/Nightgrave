@@ -15,6 +15,7 @@ import { BTN_DASH, BTN_PARRY } from '../sim/input';
 import { STICK, TOUCH_INPUT, type TouchSmoothing } from '../data/input';
 import { getScreen } from '../web/screen';
 import { PORTRAIT } from '../data/view';
+import { portraitLayout } from './portraitLayout';
 
 export const TAP_MS = 200;
 export const TAP_PX = 6;
@@ -24,11 +25,24 @@ export const VIEW_W = 480;
 
 export interface TouchButton {
   id: 'parry' | 'dash';
+  /** Centre (game px). */
   x: number;
   y: number;
   r: number;
   /** Hit radius (default r + 2). */
   hit?: number;
+  /** RECTANGULAR form (the phone-portrait shell's caps): the visible cap w x h and the hit rectangle hitW x hitH, both
+   * centred at (x, y). When set, the hit test is the rectangle (edges included); the circle fields are not used. */
+  w?: number;
+  h?: number;
+  hitW?: number;
+  hitH?: number;
+}
+
+/** Is (x, y) on the button? Rectangle (edges included) for a cap, else the hit circle. */
+export function onButton(b: TouchButton, x: number, y: number): boolean {
+  if (b.hitW !== undefined && b.hitH !== undefined) return Math.abs(x - b.x) <= b.hitW / 2 && Math.abs(y - b.y) <= b.hitH / 2;
+  return (x - b.x) ** 2 + (y - b.y) ** 2 <= (b.hit ?? b.r + 2) ** 2;
 }
 
 /**
@@ -37,13 +51,9 @@ export interface TouchButton {
  */
 export function touchButtons(leftHanded: boolean, view: 'full' | 'zoomed' = 'full'): TouchButton[] {
   if (view === 'zoomed') {
-    const y = PORTRAIT.h - 26;
-    const px = leftHanded ? 28 : PORTRAIT.w - 28;
-    const dx = leftHanded ? 40 : -40;
-    return [
-      { id: 'parry', x: px, y, r: 18 },
-      { id: 'dash', x: px + dx, y: y + 3, r: 14 },
-    ];
+    // fallback only (the scene sets the real screen's buttons): the portrait layout of the PORTRAIT fallback size
+    const css = Math.max(0.1, getScreen().cssPerPx);
+    return portraitLayout(PORTRAIT.w, PORTRAIT.h, 1, 1 / css, leftHanded).buttons;
   }
   const cx = leftHanded ? ARENA.x0 / 2 : VIEW_W - (VIEW_W - ARENA.x1) / 2;
   // hit areas of at least 44 CSS px across where the margin allows (24 px radius at most: inside the 48 px margin and
@@ -197,7 +207,7 @@ export class TouchModel {
 
   down(id: number, x: number, y: number, t: number, hero: { x: number; y: number }): Role {
     let role: Role = 'move';
-    for (const b of this.buttons()) if ((x - b.x) ** 2 + (y - b.y) ** 2 <= (b.hit ?? b.r + 2) ** 2) role = b.id;
+    for (const b of this.buttons()) if (onButton(b, x, y)) role = b.id;
     const S = this.stickLayout;
     if (role === 'parry') this.pending |= BTN_PARRY;
     else if (role === 'dash') this.pending |= BTN_DASH;

@@ -4,7 +4,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { STICK } from '../src/data/input';
-import { portraitLayout } from '../src/render/portraitLayout';
+import { portraitLayout, rectHitsCircle, type Btn } from '../src/render/portraitLayout';
+import { SHELL } from '../src/data/shell';
 import { TouchModel, touchButtons, touchStick, type TouchStick } from '../src/render/touch';
 import { cardLines, controlsLine } from '../src/render/hints';
 import { AXIS_MAX, BTN_DASH, BTN_PARRY, type InputFrame } from '../src/sim/input';
@@ -123,13 +124,19 @@ describe('stick logic', () => {
   });
 });
 
+/** A button's hit area is clear of a circle: the hit circle (round buttons) or the hit rectangle (the shell's caps). */
+const clearOf = (b: Btn, x: number, y: number, r: number): boolean =>
+  b.hitW !== undefined ? !rectHitsCircle({ x: b.x - b.hitW / 2, y: b.y - b.hitH! / 2, w: b.hitW, h: b.hitH! }, x, y, r) : Math.hypot(b.x - x, b.y - y) > r + b.hit;
+const PLAIN = { ...SHELL, enabled: false };
+
 describe('stick layout', () => {
   const PHONES: [number, number, number][] = [[390, 844, 3], [412, 915, 2.625], [360, 800, 3], [375, 667, 2], [430, 932, 3], [390, 664, 3]];
   for (const [vw, vh, dpr] of PHONES)
     for (const lh of [false, true])
-      it(`portrait ${vw}x${vh}${lh ? ' left-handed' : ''}: >= 120 CSS px base, >= 56 knob, in the strip, clear of the buttons`, () => {
+      for (const shell of [true, false])
+      it(`portrait ${vw}x${vh}${lh ? ' left-handed' : ''}${shell ? ' (shell)' : ' (plain)'}: >= 120 CSS px base, >= 56 knob, in the strip, clear of the buttons`, () => {
         const { w, h, k } = portraitGameSize(vw, vh, dpr);
-        const L = portraitLayout(w, h, k, dpr, lh);
+        const L = portraitLayout(w, h, k, dpr, lh, 1, shell ? SHELL : PLAIN);
         const css = k / dpr;
         const St = L.stick;
         expect(St.r * 2 * css).toBeGreaterThanOrEqual(STICK.portrait);
@@ -139,16 +146,17 @@ describe('stick layout', () => {
         expect(St.y + St.r).toBeLessThanOrEqual(h);
         expect(St.y - St.r).toBeGreaterThanOrEqual(L.bar.y + 10); // under the boss bar, below the world window
         expect(St.y - St.zone).toBeGreaterThan(L.pause.y + L.pause.h);
-        for (const b of L.buttons) expect(Math.hypot(b.x - St.x, b.y - St.y)).toBeGreaterThan(St.zone + b.hit);
+        for (const b of L.buttons) expect(clearOf(b, St.x, St.y, St.zone)).toBe(true);
         if (lh) expect(St.x).toBeGreaterThan(w / 2);
         else expect(St.x).toBeLessThan(w / 2);
       });
   for (const [vw, vh, dpr] of [[320, 548, 2], [280, 653, 3], [344, 882, 3]] as const)
     it(`narrow portrait ${vw}x${vh}: the stick shrinks so its base never reaches the DASH / PARRY hit circles`, () => {
       const { w, h, k } = portraitGameSize(vw, vh, dpr);
-      for (const lh of [false, true]) {
-        const L = portraitLayout(w, h, k, dpr, lh);
-        for (const b of L.buttons) expect(Math.hypot(b.x - L.stick.x, b.y - L.stick.y)).toBeGreaterThan(L.stick.r + b.hit);
+      for (const lh of [false, true])
+      for (const shell of [SHELL, PLAIN]) {
+        const L = portraitLayout(w, h, k, dpr, lh, 1, shell);
+        for (const b of L.buttons) expect(clearOf(b, L.stick.x, L.stick.y, L.stick.r)).toBe(true);
         expect(L.stick.x - L.stick.r).toBeGreaterThanOrEqual(0);
       }
     });

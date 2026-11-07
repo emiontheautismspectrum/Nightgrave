@@ -173,7 +173,9 @@ async function push(s, dx, dy, n = 12) {
         await sleep(500);
         d = await s.dbg();
         const W = d.game[0];
-        ok(d.stick.x > W / 2 && d.buttons.every((bt) => bt.x < W / 2), `${label}: Left-handed mirrors the stick and the buttons`);
+        // PARRY in the outer corner of the left side, DASH further in (on a narrow phone it may reach the middle)
+        const [lp, ld] = d.buttons;
+        ok(d.stick.x > W / 2 && lp.x < W / 2 && ld.x >= lp.x, `${label}: Left-handed mirrors the stick and the buttons`);
         const [mx] = await push(s, 1, 0);
         ok(mx > 5, `${label}: the mirrored stick moves the hero`);
         await s.ctx.close();
