@@ -25,3 +25,6 @@ assets/audio-src/
 *.log
 .idea/
 .vscode/
+# database backups (wrangler d1 export): never in the repository; migrations stay tracked
+*.sql
+!server/migrations/*.sql

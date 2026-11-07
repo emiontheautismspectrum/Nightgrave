@@ -72,6 +72,7 @@ The root also holds `index.html` and the four player-facing pages (`privacy.html
 ## Documentation
 
 - [docs/DEPLOY.md](docs/DEPLOY.md) - Cloudflare Pages + Worker + D1, step by step, and the site constants.
+- [docs/RUNBOOK.md](docs/RUNBOOK.md) - operations: kill switch, rollback, moderation, secrets, backups, monitoring.
 - [docs/ASSETS_SPEC.md](docs/ASSETS_SPEC.md) - art direction, palette and the full asset list.
 - [docs/AUDIO_LIST.md](docs/AUDIO_LIST.md) - every sound and music file with its generation prompt.
 - [CLAUDE.md](CLAUDE.md) - the design and the architecture rules.
@@ -86,7 +87,7 @@ hash of the IP address (never the address) and are deleted within two days; boar
 operations log (moderation actions, verification results, hourly counts of failed private-endpoint access) holds no
 personal data and is kept 90 days. Deletion requests: see the contact on [privacy.html](privacy.html) (until a project
 mailbox exists, the private report form described in [SECURITY.md](SECURITY.md)); the maintainers remove entries with
-the admin endpoint (docs/RUNBOOK.md).
+the admin endpoint ([docs/RUNBOOK.md](docs/RUNBOOK.md)).
 
 ## How scores are verified
 

@@ -21,3 +21,8 @@ crons = ["17 3 * * *"]
 
 # Secrets (never in git): npx wrangler secret put ADMIN_TOKEN / IP_SALT / VERIFIER_TOKEN
 # Local development: put them in server/.dev.vars (git-ignored), see .dev.vars.example.
+
+# Workers Logs (dashboard -> Workers & Pages -> nightgrave-api -> Logs). The Worker logs no request bodies, tokens,
+# names or IPs; see docs/RUNBOOK.md.
+[observability]
+enabled = true

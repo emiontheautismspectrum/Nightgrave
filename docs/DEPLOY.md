@@ -1,5 +1,8 @@
 # Deploying Nightgrave (Cloudflare, free plan)
 
+Day-to-day operations (kill switch, rollback, moderation, secret rotation, backups, monitoring) are in
+[RUNBOOK.md](RUNBOOK.md).
+
 The game is a static site (Cloudflare Pages). The Hard "Today's best" board is one Cloudflare Worker with one D1
 database (folder `server/`). Without the Worker the game still works fully offline: the title shows
 "Online board: offline".
