@@ -28,12 +28,21 @@ const attr = (s: string): string => s.replace(/&/g, '&amp;').replace(/"/g, '&quo
 /**
  * Every page (index.html and the legal pages): title, description, footer, and the Open Graph / Twitter tags from src/config.ts. og:url, og:image and
  * twitter:image need an absolute address: they are only written when SITE_URL (or VITE_SITE_URL) is a valid
- * http(s) URL, otherwise left out.
+ * http(s) URL, otherwise left out. og:url and the canonical link are the page's OWN address: `<site>/` for the game,
+ * `<site>/privacy` (rules, credits, license) for the legal pages: the clean form Cloudflare Pages answers with 200
+ * (it serves privacy.html there and redirects /privacy.html to it). og:image is the same file on every page.
  */
+export function pagePath(file: string | undefined): string {
+  const name = (file ?? '').split(/[\\/]/).pop()?.replace(/\?.*$/, '') ?? '';
+  const m = /^([a-z0-9-]+)\.html$/i.exec(name);
+  return !m || m[1]!.toLowerCase() === 'index' ? '/' : `/${m[1]!.toLowerCase()}`;
+}
+
 export function pageMeta(siteUrlEnv: string | undefined): Plugin {
   return {
     name: 'nightgrave-meta',
-    transformIndexHtml(html) {
+    transformIndexHtml(html, ctx) {
+      const own = pagePath(ctx?.filename || ctx?.path);
       const title = attr(TITLE);
       const desc = attr(DESCRIPTION);
       let site = (siteUrlEnv ?? SITE_URL).trim().replace(/\/+$/, '');
@@ -45,13 +54,13 @@ export function pageMeta(siteUrlEnv: string | undefined): Plugin {
       }
       const extra = site
         ? [
-            `<meta property="og:url" content="${attr(site)}/" />`,
+            `<meta property="og:url" content="${attr(site + own)}" />`,
             `<meta property="og:image" content="${attr(site)}/og-image.png" />`,
             '<meta property="og:image:width" content="1200" />',
             '<meta property="og:image:height" content="630" />',
             `<meta property="og:image:alt" content="${title}: a moonlit forest clearing arena" />`,
             `<meta name="twitter:image" content="${attr(site)}/og-image.png" />`,
-            `<link rel="canonical" href="${attr(site)}/" />`,
+            `<link rel="canonical" href="${attr(site + own)}" />`,
           ].join('\n    ')
         : '';
       return html

@@ -53,8 +53,16 @@ const UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{
 
 // ------------------------------------------------------------------ helpers
 
+/**
+ * The allowed browser origins: EXACT `scheme://host[:port]` strings (no path, no trailing slash, lowercase host), compared
+ * by exact string equality with the request's Origin header (browsers send it in that canonical form). Entries that are
+ * not such an origin (`*`, `null`, a path, a typo) are ignored: a configuration slip can never allow every site or the
+ * opaque `null` origin.
+ */
+const ORIGIN_RE = /^https?:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*(:\d{1,5})?$/;
 function origins(env: Env): string[] {
-  return (env.ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  // a configured entry is lower-cased (browsers send the host in lower case), then it must be an exact origin
+  return (env.ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter((s) => ORIGIN_RE.test(s));
 }
 
 function corsHeaders(req: Request, env: Env): Record<string, string> {

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, handle, LIMITS, type Env } from '../src/index';
 import { dailySeed } from '../../src/shared/daily';
@@ -184,6 +185,57 @@ describe('GET /api/daily', () => {
     const r = await handle(new Request('https://api.test/admin'), env, NOW);
     expect(r.status).toBe(404);
     expect(r.headers.get('Content-Type')).toContain('application/json');
+  });
+});
+
+describe('custom domain: the origins in wrangler.toml', () => {
+  // the REAL production list (server/wrangler.toml), not the test default above
+  const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
+  const PROD = /^ALLOWED_ORIGINS = "([^"]*)"/m.exec(toml)![1]!;
+  const prodEnv = () => ({ ...env, ALLOWED_ORIGINS: PROD });
+  const pre = (o: string) => handle(new Request('https://api.test/api/submit', { method: 'OPTIONS', headers: { Origin: o, 'Access-Control-Request-Method': 'POST' } }), prodEnv(), NOW);
+  const daily = (o: string) => handle(new Request('https://api.test/api/daily', { headers: { Origin: o, 'CF-Connecting-IP': `7.7.7.${o.length % 250}` } }), prodEnv(), NOW);
+  const submit = (o: string) =>
+    handle(new Request('https://api.test/api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: o, 'CF-Connecting-IP': `8.8.8.${o.length % 250}` }, body: JSON.stringify(body({ playerId: pid(40 + (o.length % 50)) })) }), prodEnv(), NOW);
+  it('the list is exactly nightgrave.com, nightgrave.pages.dev and localhost (no wildcard, no www, no trailing slash)', () => {
+    expect(PROD).toBe('https://nightgrave.com,https://nightgrave.pages.dev,http://localhost:5173');
+  });
+  for (const o of ['https://nightgrave.com', 'https://nightgrave.pages.dev', 'http://localhost:5173'])
+    it(`${o}: allowed on the preflight and on the real requests (exactly that origin echoed, Vary: Origin, no credentials)`, async () => {
+      const p = await pre(o);
+      expect(p.status).toBe(204);
+      expect(p.headers.get('Access-Control-Allow-Origin')).toBe(o);
+      expect(p.headers.get('Vary')).toContain('Origin');
+      expect(p.headers.get('Access-Control-Allow-Credentials')).toBeNull();
+      const g = await daily(o);
+      expect(g.status).toBe(200);
+      expect(g.headers.get('Access-Control-Allow-Origin')).toBe(o);
+      expect(g.headers.get('Vary')).toContain('Origin');
+      const r = await submit(o);
+      expect(r.status).toBe(200);
+      expect(r.headers.get('Access-Control-Allow-Origin')).toBe(o);
+    });
+  for (const o of ['https://nightgrave.com.evil.example', 'https://evilnightgrave.com', 'http://nightgrave.com', 'https://www.nightgrave.com', 'null', 'https://nightgrave.com:8443', 'https://NIGHTGRAVE.COM', 'https://nightgrave.com/'])
+    it(`${o}: refused (preflight 403, no CORS header on the real requests, submit refused)`, async () => {
+      const p = await pre(o);
+      expect(p.status).toBe(403);
+      expect(p.headers.get('Access-Control-Allow-Origin')).toBeNull();
+      const g = await daily(o);
+      expect(g.headers.get('Access-Control-Allow-Origin')).toBeNull();
+      const r = await submit(o);
+      expect(r.status).toBe(403);
+      expect(r.headers.get('Access-Control-Allow-Origin')).toBeNull();
+    });
+  it('configuration slips never widen the list: "*", "null", a path or a trailing slash are ignored', async () => {
+    const e = { ...env, ALLOWED_ORIGINS: '*, null ,https://a.example/,https://b.example/x,https://ok.example' };
+    const pre2 = (o: string) => handle(new Request('https://api.test/api/submit', { method: 'OPTIONS', headers: { Origin: o, 'Access-Control-Request-Method': 'POST' } }), e, NOW);
+    for (const o of ['https://evil.example', 'null', 'https://a.example', 'https://b.example']) expect((await pre2(o)).status).toBe(403);
+    expect((await pre2('https://ok.example')).status).toBe(204);
+    // an upper-case entry in the configuration still matches the (lower-case) browser origin, and only that
+    const e2 = { ...env, ALLOWED_ORIGINS: 'https://Nightgrave.COM' };
+    const pre3 = (o: string) => handle(new Request('https://api.test/api/submit', { method: 'OPTIONS', headers: { Origin: o, 'Access-Control-Request-Method': 'POST' } }), e2, NOW);
+    expect((await pre3('https://nightgrave.com')).headers.get('Access-Control-Allow-Origin')).toBe('https://nightgrave.com');
+    expect((await pre3('https://NIGHTGRAVE.COM')).status).toBe(403);
   });
 });
 

@@ -69,10 +69,11 @@ Secrets are never stored in git.
 
 ## 6. Set the allowed origins
 
-Open `server/wrangler.toml` and set `ALLOWED_ORIGINS` to the address your game will have on Pages (step 8), for example:
+Open `server/wrangler.toml` and set `ALLOWED_ORIGINS` to the addresses your game is served from (step 8 and, with a
+custom domain, step 12): exact origins, comma-separated, no wildcard, no trailing slash. This game uses:
 
 ```toml
-ALLOWED_ORIGINS = "https://nightgrave.pages.dev"
+ALLOWED_ORIGINS = "https://nightgrave.com,https://nightgrave.pages.dev,http://localhost:5173"
 ```
 
 (Keep `,http://localhost:5173` at the end only if you also test locally against the real API.)
@@ -150,8 +151,8 @@ All in `src/config.ts`, next to `TITLE`. Edit, commit, and Pages rebuilds:
 
 | Constant | Example | Empty means |
 | --- | --- | --- |
-| `SITE_URL` | `https://nightgrave.example` (no trailing slash) | `og:url`, `og:image`, `twitter:image` and the canonical link are left out (link previews show no picture) |
-| `SITE_DOMAIN` | `nightgrave.example` | the footer says "(c) 2026 The Nightgrave Authors" |
+| `SITE_URL` | `https://nightgrave.com` (set; no trailing slash) | `og:url`, `og:image`, `twitter:image` and the canonical link are left out (link previews show no picture) |
+| `SITE_DOMAIN` | `nightgrave.com` (set) | the footer says "(c) 2026 The Nightgrave Authors" |
 | `CONTACT_EMAIL` | a project mailbox, never a personal one | the footer has no Contact link; the privacy page points to the source repository instead |
 | `SOURCE_URL` | the GitHub repository | (set) |
 
@@ -161,12 +162,62 @@ All in `src/config.ts`, next to `TITLE`. Edit, commit, and Pages rebuilds:
 The privacy, rules, credits and license pages are built from `privacy.html`, `rules.html`, `credits.html` and
 `license.html`; `dist/_headers` applies the same CSP to them (`/*`).
 
-## 12. Custom domain (later)
+## 12. Custom domain (nightgrave.com)
 
-- Game: Pages project -> **Custom domains** -> add `play.example.com`.
-- API: Worker -> **Settings** -> **Domains & Routes** -> add `api.example.com`.
-- Then set `ALLOWED_ORIGINS = "https://play.example.com"`, `npx wrangler deploy`, set `VITE_API_BASE` to
-  `https://api.example.com` in Pages and redeploy Pages.
+The canonical address of the game is `https://nightgrave.com` (`SITE_URL` / `SITE_DOMAIN` in `src/config.ts`); the
+Worker already allows it (`ALLOWED_ORIGINS` in `server/wrangler.toml`). `https://nightgrave.pages.dev` keeps working.
+Order, after the pull request that set this up:
+
+1. Merge the pull request and wait for the Pages build of `main` to succeed. From then on every page names
+   `https://nightgrave.com` as its canonical / og address, so do steps 2 and 3 right away (the domain was bought at
+   Cloudflare Registrar, so its zone is already on Cloudflare: no nameserver change, the domain attaches in minutes).
+2. Redeploy the Worker (REQUIRED: without it the board is blocked by CORS on the new domain). Your real
+   `database_id` is a local, uncommitted edit of `server/wrangler.toml`, and the merge changed another line of that
+   file: a plain `git pull` refuses to touch it. `--autostash` keeps your edit:
+
+   ```bash
+   git checkout main && git pull --autostash
+   ```
+
+   Check that your database id is still there (not `REPLACE_WITH_YOUR_D1_DATABASE_ID`) and that the new origin is in:
+
+   ```bash
+   grep -E "database_id|ALLOWED_ORIGINS" server/wrangler.toml
+   ```
+
+   ```bash
+   cd server && npx wrangler deploy
+   ```
+
+3. Cloudflare dashboard: **Workers & Pages** -> **nightgrave** -> **Custom domains** -> **Set up a custom domain** ->
+   `nightgrave.com`. The DNS record and the certificate are created automatically.
+4. Optional: add `www.nightgrave.com` as a second custom domain, then a **Redirect Rule** `www` -> apex (301). The
+   Worker does not allow `https://www.nightgrave.com` on purpose: a page served on `www` would get no board.
+5. Verify (expected: `204` with `Access-Control-Allow-Origin: https://nightgrave.com`; a foreign origin gets `403`):
+
+   ```bash
+   curl -s -i -X OPTIONS https://nightgrave-api.<your-subdomain>.workers.dev/api/submit -H "Origin: https://nightgrave.com" -H "Access-Control-Request-Method: POST"
+   ```
+
+   ```bash
+   curl -s -i -X OPTIONS https://nightgrave-api.<your-subdomain>.workers.dev/api/submit -H "Origin: https://evil.example" -H "Access-Control-Request-Method: POST"
+   ```
+
+   Then open `https://nightgrave.com`, play Hard and submit a score.
+6. Browser storage (best scores, settings, the board name) and an installed home-screen app are PER ORIGIN: players
+   of `nightgrave.pages.dev` start fresh on the new domain, and the home-screen icon must be added again from it.
+7. `nightgrave.pages.dev` keeps working. Sending its visitors to the new domain (a Pages redirect or a Redirect Rule)
+   is a later, separate step.
+8. Pages -> **nightgrave** -> **Settings** -> **Variables and Secrets**: `VITE_SITE_URL` must be unset or exactly
+   `https://nightgrave.com` (a leftover value overrides `src/config.ts` at build time and silently puts a wrong
+   canonical / og address on every page). `VITE_API_BASE` stays the workers.dev address.
+9. Rollback: Pages -> **Deployments** -> the previous deployment -> **Rollback**; Worker: `npx wrangler rollback` (or
+   deploy the previous commit). Removing the custom domain does not affect `nightgrave.pages.dev`.
+10. The GitHub Actions secret `API_BASE` and the Pages variable `VITE_API_BASE` stay the workers.dev address:
+    unchanged.
+
+Later, an API domain is possible too (Worker -> **Settings** -> **Domains & Routes** -> `api.example.com`, then
+`VITE_API_BASE` and the `API_BASE` secret point at it and Pages is redeployed).
 
 ## 13. Local development
 

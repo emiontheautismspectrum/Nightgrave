@@ -48,6 +48,17 @@ const ok = (c, name, extra = '') => {
         });
         const name = `${vp.width}px ${pg || 'index.html'}`;
         ok(r.status() === 200 && errs.length === 0, `${name}: loads, no CSP violations or errors`, errs.join(' | '));
+        // the site address (src/config.ts SITE_URL): one canonical per page = og:url = the page's own clean address
+        // (Cloudflare Pages serves privacy.html at /privacy); none of either when SITE_URL is empty
+        const site = (/export const SITE_URL = '([^']*)'/.exec(readFileSync(path.join(ROOT, 'src', 'config.ts'), 'utf8')) || [])[1] || '';
+        const meta = await page.evaluate(() => ({
+          canon: [...document.querySelectorAll('link[rel="canonical"]')].map((l) => l.getAttribute('href')),
+          ogUrl: document.querySelector('meta[property="og:url"]')?.getAttribute('content') ?? null,
+          ogImg: document.querySelector('meta[property="og:image"]')?.getAttribute('content') ?? null,
+        }));
+        const own = site ? `${site.replace(/\/+$/, '')}/${pg.replace(/\.html$/, '')}` : null;
+        ok(site ? meta.canon.length === 1 && meta.canon[0] === own && meta.ogUrl === own && meta.ogImg === `${site.replace(/\/+$/, '')}/og-image.png` : meta.canon.length === 0 && meta.ogUrl === null,
+          `${name}: canonical / og:url = ${own ?? '(none)'}`, JSON.stringify(meta));
         ok(/\(c\) 2026 .+Code: MIT\. Art and audio: all rights reserved\./.test(info.text) && info.links.length >= 5, `${name}: footer`, info.links.join(' '));
         if (pg) ok(info.sw <= info.vw && /Press Start 2P/.test(info.font), `${name}: no horizontal scroll, game font`);
         for (const h of info.links.filter((x) => x.startsWith('./'))) {

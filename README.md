@@ -8,7 +8,7 @@ Sentinel, Lich Mage), two pickups, three difficulties and an online daily board 
 verified by re-simulating its replay. Static HTML5 (TypeScript, Phaser 3, Vite); the title lives in one constant,
 `TITLE` in `src/config.ts`.
 
-**Play:** [nightgrave.pages.dev][play]. On a phone, "Add to Home Screen" (Safari: Share -> Add to Home Screen;
+**Play:** [nightgrave.com][play] (the same game is also reachable at nightgrave.pages.dev). On a phone, "Add to Home Screen" (Safari: Share -> Add to Home Screen;
 Chrome: menu -> Add to Home screen / Install app) opens the game fullscreen without the browser bars.
 
 | | |
@@ -98,4 +98,4 @@ secret into the seed and publish it at 00:00 UTC (offline Hard runs would then b
 - Credits: art and code were generated for this project; audio credits come with the audio files
   (`credits.html` in the game).
 
-[play]: https://nightgrave.pages.dev
+[play]: https://nightgrave.com
