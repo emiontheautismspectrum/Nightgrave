@@ -31,3 +31,12 @@ BACKGROUNDS = {
     "arena_ground": (480, 270), "forest_far": (480, 270), "forest_mid": (480, 270), "forest_mist": (480, 270),
     "forest_near": (480, 270), "forest_overhang": (480, 270), "fog_overlay": (480, 270), "vignette": (480, 270), "vignette_outer": (480, 270),
 }
+
+# The phone-portrait shell (tools/nglib/shell.py): small tiles assembled at runtime (src/render/shellParts.ts).
+# Own colour rule (validate_palette.py): body colours + amber / gold / teal lamps only, never red, ember or violet.
+SHELL = {
+    "shell_fill": (8, 8, 1), "shell_bezel_h": (8, 5, 2), "shell_bezel_v": (5, 8, 2), "shell_bezel_corner": (5, 5, 4),
+    "shell_rivet": (3, 3, 1), "shell_screw": (5, 5, 1), "shell_rune": (10, 10, 1), "shell_grille": (4, 4, 1),
+    "shell_pause": (19, 11, 1), "shell_plate_end": (4, 9, 2), "shell_plate_mid": (1, 9, 1),
+    "shell_cap_l": (11, 12, 2), "shell_cap_s": (9, 10, 2), "shell_lamp": (11, 11, 10), "shell_glyph": (3, 5, 37),
+}
