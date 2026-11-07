@@ -78,6 +78,7 @@ async function device(b, label, w, h, csp) {
   ok(S && !out.length, `${label}: the submit frame contains every text and field`, out.join(', '));
   ok(S && S.frame[0] >= 0 && S.frame[1] >= 0 && S.frame[0] + S.frame[2] <= W && S.frame[1] + S.frame[3] <= H, `${label}: the frame is inside the screen`, S && S.frame.join(','));
   ok(S && d.panelBox && !overlap(S.frame, d.panelBox), `${label}: the frame does not overlap the death panel text`, d.panelBox && d.panelBox.join(','));
+  ok(S && d.boardBtnBox && !overlap(S.frame, d.boardBtnBox), `${label}: the frame does not overlap the [ BOARD ] button (tap area)`, d.boardBtnBox && d.boardBtnBox.map(Math.round).join(','));
   const fontPx = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('input[data-ng="1"]')).fontSize));
   ok(fontPx >= 16, `${label}: field font >= 16 CSS px (no iOS zoom on focus)`, String(fontPx));
 
@@ -118,6 +119,14 @@ async function device(b, label, w, h, csp) {
   ok(f && f.mark === 'NAME' && f.connected, `${label}: a rotation while focused keeps the NAME field`, JSON.stringify(f));
   const d2 = await dbg();
   ok(d2 && d2.submitBoxes && d2.submitBoxes.fields.every((fb) => inside(fb, d2.submitBoxes.frame)), `${label}: after the rotation the fields sit in the new frame`);
+  // submit by Enter from a focused field: the field is left before it is disabled (game keys and re-measures free)
+  await page.locator('input[data-ng="1"]').first().tap();
+  await sleep(200);
+  await page.keyboard.type('Tester');
+  await page.keyboard.press('Enter');
+  await sleep(900);
+  const after = await page.evaluate(() => { const a = document.activeElement; const f = document.querySelector('input[data-ng="1"]'); return { onField: !!(a && a.dataset && a.dataset.ng === '1'), disabled: f && f.disabled, status: window.__ngDebug.submitStatus }; });
+  ok(!after.onField && after.disabled && /SUBMITTED/.test(after.status || ''), `${label}: Enter submits, the field is left and disabled`, JSON.stringify(after));
   ok(errs.length === 0, `${label}: no page errors / CSP messages`, errs.join(' | '));
   await ctx.close();
 }

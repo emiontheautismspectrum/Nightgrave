@@ -1072,6 +1072,7 @@ export class GameScene extends Phaser.Scene {
       submitStatus: this.submit?.statusText() ?? null,
       submitBoxes: this.submit?.debugBoxes() ?? null,
       panelBox: this.panel.visible ? (() => { const b = this.panelText.getBounds(); return [b.x, b.y, b.width, b.height]; })() : null,
+      boardBtnBox: this.boardBtn?.active ? (() => { const b = this.boardBtn.getBounds(); const pd = hitPad(b.width, b.height, 6); return [b.x - pd.x, b.y - pd.y, b.width + 2 * pd.x, b.height + 2 * pd.y]; })() : null,
       stick: this.input2.touch.opts.stick && this.input2.touch.stickLayout ? { ...this.input2.touch.stickLayout } : null,
       mult: st.multiplier, guard: st.hero.guardCharges, aim: [st.hero.aimX, st.hero.aimY], trail: st.trail.length, dbl: st.tick < st.doubleUntil, pickup: st.pickup ? { x: st.pickup.x, y: st.pickup.y, kind: st.pickup.kind } : null,
       proj: st.projectiles.map((pr) => [pr.x, pr.y, pr.vx, pr.vy, pr.radius, pr.parryable ? 1 : 0]),

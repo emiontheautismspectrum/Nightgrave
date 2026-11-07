@@ -212,7 +212,12 @@ async function boot(): Promise<void> {
   // mobile browser bars showing / hiding change the visual viewport (not always the window): lay out again
   window.visualViewport?.addEventListener('resize', resize);
   window.visualViewport?.addEventListener('scroll', resize);
-  addEventListener('orientationchange', () => relayout(true));
+  // a rotation: forced, and again shortly after (browsers report the new size a little after orientationchange)
+  addEventListener('orientationchange', () => {
+    relayout(true);
+    setTimeout(() => relayout(true), 300);
+    setTimeout(() => relayout(true), 800);
+  });
   // back from the bfcache / an installed web app brought to the front: measure again
   addEventListener('pageshow', resize);
   // iOS can settle the viewport after the first frames without any event: measure again shortly after boot, and keep a

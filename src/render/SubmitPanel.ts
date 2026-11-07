@@ -89,9 +89,15 @@ export class SubmitPanel {
       setTimeout(() => {
         const vv = window.visualViewport;
         const r = el.getBoundingClientRect();
-        if (document.activeElement === el && vv && (r.bottom > vv.offsetTop + vv.height || r.top < vv.offsetTop)) el.scrollIntoView({ block: 'center', inline: 'nearest' });
+        if (document.activeElement !== el || !vv || (r.bottom <= vv.offsetTop + vv.height && r.top >= vv.offsetTop)) return;
+        el.scrollIntoView({ block: 'center', inline: 'nearest' });
+        // still hidden (a fixed field on a non-scrolling page, e.g. a short landscape screen on Android): lift only this
+        // field to the top of the visible area while it is focused; place() puts it back when it is left
+        const r2 = el.getBoundingClientRect();
+        if (r2.bottom > vv.offsetTop + vv.height || r2.top < vv.offsetTop) el.style.top = `${Math.round(vv.offsetTop + 8)}px`;
       }, 350);
     });
+    el.addEventListener('blur', () => this.place());
     document.body.appendChild(el);
     this.inputs.push(el);
     return el;
@@ -131,7 +137,10 @@ export class SubmitPanel {
     }
     const fields = this.wantsMessage ? 2 : 1;
     const content = 12 + fields * (fh + 4) + 2 + 14 + 20 + 20; // label, fields, buttons, status (2 lines), note (2 lines)
-    const top = Math.max(4, Math.round(H / 2 - 52 - content - 12)); // the death panel box spans H/2 +- 48
+    // above the death panel (its box spans H/2 +- 48) AND above its [ BOARD ] button (centred at H/2 - 62, a >= 44 CSS px
+    // tap target): the frame ends clear of that target
+    const bottom = Math.round(H / 2 - 62 - Math.ceil(22 / this.k()) - 4);
+    const top = Math.max(4, bottom - (content + 16));
     const y0 = top + 6;
     const fw = W - 16;
     const f1 = y0 + 12;
@@ -273,6 +282,10 @@ export class SubmitPanel {
       // shown on the board only after the replay is re-simulated by the verifier
       setTextColor(setTextValue(this.status, res.provisionalRank ? `SUBMITTED (RANK ${res.provisionalRank}). ON THE BOARD AFTER` : 'SUBMITTED. ON THE BOARD AFTER'), C.gold);
       this.note?.setText('VERIFICATION (USUALLY WITHIN 20 MINUTES)');
+      // leave the field BEFORE disabling it (a disabled focused input fires no focusout: the owed re-measure and the
+      // game keys would stay blocked)
+      for (const el of this.inputs) el.blur();
+      textFocusEnded();
       for (const el of this.inputs) el.disabled = true;
     } else setTextColor(setTextValue(this.status, reasonText(res.reason)), C.ember);
   }
