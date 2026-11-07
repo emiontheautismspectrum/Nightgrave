@@ -185,6 +185,31 @@ API_BASE=https://nightgrave-api.emiontheautismspectrum.workers.dev VERIFIER_TOKE
   `/api/verify/` or `/api/admin/`, 20 requests per 10 seconds per IP -> Block. Rules do not apply to the workers.dev
   address.
 
+## GitHub and account settings (check once, then yearly)
+
+GitHub repository **Settings**:
+
+- **Code security**: Secret scanning ON, Push protection ON, Dependabot alerts ON, Dependabot security updates ON.
+- **Private vulnerability reporting** ON (SECURITY.md relies on it). Check: the repository's **Security** tab shows a
+  **Report a vulnerability** button (look while logged out or in a private window).
+- **Rules** -> **Rulesets** (or Branches -> branch protection) for `main`: require a pull request, require status
+  checks to pass, block force pushes, block deletion.
+- **Secrets and variables** -> **Actions**: exactly `API_BASE` and `VERIFIER_TOKEN`. Repository secrets are readable
+  only by workflows of this repository (never by pull requests from forks) and by nobody through the UI.
+
+Cloudflare:
+
+- Pages -> **nightgrave** -> **Settings** -> **Variables and Secrets**: only `VITE_API_BASE` (the workers.dev
+  address). `VITE_SITE_URL` unset (a leftover overrides the canonical address).
+- **My Profile** -> **API Tokens**: delete tokens you do not use; Wrangler's login token can be revoked and renewed with
+  `npx wrangler logout` / `npx wrangler login`.
+
+Accounts: two-factor authentication on GitHub AND Cloudflare (a passkey or an authenticator app, not SMS).
+
+Local files: never keep a token in a file inside the repository (for example a text file in `server/`). Run
+`git status` before every commit, read the untracked files, and never `git add .` without reading what it adds.
+`.dev.vars`, `.env*` and `*.sql` backups are git-ignored.
+
 ## Postmortem template
 
 ```text
