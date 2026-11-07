@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, handle, LIMITS, type Env } from '../src/index';
+import { cleanup, handle, LIMITS, resetAuthFailState, type Env } from '../src/index';
 import { dailySeed } from '../../src/shared/daily';
 import { maxPossibleScore } from '../../src/shared/maxScore';
 import { encodeInputLog } from '../../src/shared/replayCodec';
@@ -16,6 +16,7 @@ let raw: ReturnType<typeof makeD1>['raw'];
 let ipN = 0;
 
 beforeEach(() => {
+  resetAuthFailState(); // per-isolate memory (over-limit keys, failed-token saturation) from earlier tests
   const d = makeD1();
   raw = d.raw;
   env = { DB: d.DB as Env['DB'], ADMIN_TOKEN: 'secret-admin-token-0123456789abcdef', IP_SALT: 'salt-0123456789abcdef', VERIFIER_TOKEN: VTOKEN, ALLOWED_ORIGINS: `${ORIGIN},http://localhost:5173` };
@@ -301,10 +302,22 @@ describe('admin', () => {
     env.ADMIN_TOKEN = undefined;
     expect((await admin('DELETE', '/api/admin/entry/1', '')).status).toBe(404);
   });
-  it('admin attempts are rate limited per IP', async () => {
+  it('an authenticated admin is rate limited per IP; wrong guesses write no per-IP row (only the hourly aggregate)', async () => {
     let last = 0;
-    for (let i = 0; i < LIMITS.adminPerMinutePerIp + 1; i++) last = (await admin('DELETE', '/api/admin/entry/1', 'guess')).status;
+    for (let i = 0; i < LIMITS.adminPerMinutePerIp + 1; i++) last = (await admin('DELETE', '/api/admin/entry/999999', 'secret-admin-token-0123456789abcdef')).status;
     expect(last).toBe(429);
+    const before = (raw.prepare("SELECT COUNT(*) AS n FROM ratelimit WHERE key LIKE 'admin:%'").get() as { n: number }).n;
+    for (let i = 0; i < 30; i++) expect((await admin('DELETE', '/api/admin/entry/1', 'guess')).status).toBe(404);
+    expect((raw.prepare("SELECT COUNT(*) AS n FROM ratelimit WHERE key LIKE 'admin:%'").get() as { n: number }).n).toBe(before);
+  });
+  it('entry ids are decimal digits only (no hex, exponent, sign, padding or traversal)', async () => {
+    await post(body());
+    const id = (raw.prepare('SELECT id FROM entries').get() as { id: number }).id;
+    const T = 'secret-admin-token-0123456789abcdef';
+    for (const bad of [`0x${id.toString(16)}`, `${id}e0`, `+${id}`, `0${id}`, `${id}.0`, '..', '%2e%2e', `${id}%20`, '1234567890123456'])
+      expect((await admin('POST', `/api/admin/clear-message/${bad}`, T)).status).toBe(404);
+    expect((await admin('POST', `/api/admin/clear-message/${id}/x`, T)).status).toBe(404);
+    expect((await admin('POST', `/api/admin/clear-message/${id}`, T)).status).toBe(200);
   });
 });
 

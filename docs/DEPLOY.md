@@ -265,12 +265,35 @@ board is new, so as few pending runs as possible are caught between versions.
 
 ## Free-plan limits to keep in mind
 
-- Workers: 100,000 requests per day. Each title visit costs 1-2 GETs (edge-cached for 30 s), each submit 1 POST.
-- D1: 5 GB storage, 5 million rows read and 100,000 rows written per day. The daily cron deletes entries older than
-  30 days and rate-limit rows older than 1 day; replays are stored for a later verification stage (up to ~256 KB each,
-  but typically a few KB).
-- Pages: 500 builds per month.
-- Cron triggers: included. If you exceed a limit, requests fail and the game falls back to "Board unavailable".
+Checked on 2026-11-07 against the Cloudflare docs: [Workers limits](https://developers.cloudflare.com/workers/platform/limits/),
+[D1 limits](https://developers.cloudflare.com/d1/platform/limits/),
+[D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/) and the
+[D1 free-tier enforcement changelog](https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/).
+Limits change: re-check those pages before relying on the numbers.
+
+- Workers Free: 100,000 requests per day (reset 00:00 UTC; above it Cloudflare answers with error 1027), 10 ms CPU per
+  request, 50 subrequests per request (this Worker makes none).
+- D1 Free: 5 million rows read and 100,000 rows written per day (reset 00:00 UTC; since 2026-09-01 queries FAIL above
+  either limit until the reset, stored data is untouched), 500 MB per database, Time Travel 7 days.
+- Pages: 500 builds per month. Cron triggers: included.
+
+What one attacker can consume with the current limits (`LIMITS` in `server/src/index.ts`):
+
+| Route | Cost per request | Bound per attacker IP |
+| --- | --- | --- |
+| `GET /api/daily`, `GET /api/health` | edge-cached 30 s: no D1 on a hit; a miss = 1 counter write + 1 read | about 2 misses per minute per data centre |
+| `POST /api/daily/me` | 1 counter write + 1-2 reads | 10 per minute = at most ~14,400 writes per day |
+| `POST /api/submit` | 2 counter writes + a few reads + 1 write when accepted | 10 per hour |
+| wrong verifier / admin token | ONE aggregate audit row per hour and kind | at most 100 writes per hour per kind (then no D1 work) |
+| any request past its limit | answered 429 from the isolate's memory: no D1 write | - |
+
+The Worker REQUEST quota (100,000 per day) cannot be protected in code: every request counts, even a 404. Anyone can
+spend it with a loop; the D1 quota is protected far better. When either quota is exhausted, the API fails until 00:00
+UTC and the game degrades gracefully: the board shows "board unavailable" / offline, runs and local best scores keep
+working (covered by `tests/api_client.test.ts`: a non-JSON answer such as Cloudflare's error page, a timeout or a
+network failure all end as "no board"). A stronger shield needs either Workers Paid or the API on a custom domain of
+the zone (for example `api.nightgrave.com`), where a Cloudflare rate-limiting rule can drop floods before they reach
+the Worker (see docs/RUNBOOK.md).
 
 ## Upgrading the game
 

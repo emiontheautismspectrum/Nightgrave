@@ -8,6 +8,8 @@ import { DATE_RE } from '../shared/daily';
 export const API_BASE: string = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, '') ?? '';
 export const online = (): boolean => API_BASE.length > 0;
 const TIMEOUT_MS = 4000;
+/** GET only: one retry after this pause (with a little jitter) when the network fails or times out. POST is never retried. */
+export const GET_RETRY_MS = 700;
 
 export interface BoardEntry {
   rank: number;
@@ -85,11 +87,25 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
   }
 }
 
+/**
+ * A GET with ONE retry after a short pause when the request itself fails (offline, timeout, a non-JSON answer such as
+ * an HTML error page). GETs are idempotent; POSTs are never retried (a submission must not be sent twice by the client;
+ * the server would refuse the copy anyway).
+ */
+async function getWithRetry(path: string): Promise<unknown> {
+  try {
+    return await request(path);
+  } catch {
+    await new Promise((r) => setTimeout(r, GET_RETRY_MS + Math.floor(Math.random() * 300)));
+    return await request(path);
+  }
+}
+
 /** Fetch a day's board (default: the server's today). Null on any error (offline, timeout, bad data). */
 export async function fetchBoard(date?: string): Promise<Board | null> {
   if (!online()) return null;
   try {
-    const b = parseBoard(await request(`/api/daily${date ? `?date=${encodeURIComponent(date)}` : ''}`));
+    const b = parseBoard(await getWithRetry(`/api/daily${date ? `?date=${encodeURIComponent(date)}` : ''}`));
     if (b) {
       const t = Date.parse(b.serverNow);
       if (Number.isFinite(t)) clockOffset = t - Date.now();

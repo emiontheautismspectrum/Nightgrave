@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { handle, type Env } from '../src/index';
+import { handle, resetAuthFailState, type Env } from '../src/index';
 import { dailySeed } from '../../src/shared/daily';
 import { encodeInputLog } from '../../src/shared/replayCodec';
 import { CLIENT_VERSION, tuningFingerprint } from '../../src/shared/version';
@@ -17,6 +17,7 @@ let env: Env;
 let ip = 0;
 
 beforeEach(() => {
+  resetAuthFailState(); // per-isolate memory (over-limit keys, failed-token saturation) from earlier tests
   env = { DB: makeD1().DB as Env['DB'], ADMIN_TOKEN: 'a'.repeat(40), IP_SALT: 'salt-0123456789abcdef', VERIFIER_TOKEN: VTOKEN, ALLOWED_ORIGINS: ORIGIN };
 });
 
