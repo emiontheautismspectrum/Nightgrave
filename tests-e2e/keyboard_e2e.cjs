@@ -127,7 +127,7 @@ async function device(b, label, w, h, csp) {
   await page.keyboard.press('Enter');
   await sleep(900);
   const after = await page.evaluate(() => { const a = document.activeElement; const f = document.querySelector('input[data-ng="1"]'); return { onField: !!(a && a.dataset && a.dataset.ng === '1'), disabled: f && f.disabled, status: window.__ngDebug.submitStatus }; });
-  ok(!after.onField && after.disabled && /SUBMITTED/.test(after.status || ''), `${label}: Enter submits, the field is left and disabled`, JSON.stringify(after));
+  ok(!after.onField && after.disabled && (after.status || '').startsWith(lab('SUBMITTED')), `${label}: Enter submits, the field is left and disabled`, JSON.stringify(after));
   ok(errs.length === 0, `${label}: no page errors / CSP messages`, errs.join(' | '));
   await ctx.close();
 }
