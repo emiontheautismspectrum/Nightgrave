@@ -18,6 +18,7 @@ Chrome: menu -> Add to Home screen / Install app) opens the game fullscreen with
 
 More: [Lich Mage](docs/screenshots/boss_lich.png), [phone in portrait](docs/screenshots/phone_portrait.png),
 [the phone-portrait console shell](docs/screenshots/shell.png),
+[the Russian UI](docs/screenshots/ru.png),
 [phone board](docs/screenshots/phone_board.png),
 [multiplier label](docs/screenshots/multiplier_hud.png), [Double Score](docs/screenshots/double_score.png),
 [heroes: Knight shield arc and Wisp ember trail](docs/screenshots/heroes.png).
