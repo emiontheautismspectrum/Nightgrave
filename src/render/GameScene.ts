@@ -229,6 +229,11 @@ export class GameScene extends Phaser.Scene {
         frames: this.textures.get(ATLAS).getFrameNames().filter((n) => n.startsWith('shell_')).map((n) => { const f = this.textures.getFrame(ATLAS, n); return [n, f.cutX, f.cutY, f.cutWidth, f.cutHeight]; }),
         panel: this.panel.visible ? this.panel.getBounds() : null,
         body: getComputedStyle(document.body).backgroundColor,
+        // HUD texts (non-empty, visible) and the pause target: the per-language overlap check (tests-e2e/layout.cjs)
+        hud: [this.hudScore, this.hudMult, this.hudX2, this.hudWave, this.hudDaily].filter((o) => o.visible && o.text.trim() !== '').map((o) => { const b = o.getBounds(); return { text: o.text, box: [b.x, b.y, b.width, b.height] }; }),
+        pauseHit: this.pauseHitRect(),
+        W: this.scale.width,
+        H: this.scale.height,
         base: { x: this.shellView.debugBase().x, y: this.shellView.debugBase().y, w: this.shellView.debugBase().width },
       });
     this.buildHud();
