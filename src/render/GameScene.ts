@@ -436,6 +436,7 @@ export class GameScene extends Phaser.Scene {
     this.input2.touch.rebase(); // a finger held across the switch must not jump by the change of screen space
     this.syncShell();
     this.layoutHud();
+    this.relayoutHint();
     requestRelayout();
   }
 
@@ -615,6 +616,15 @@ export class GameScene extends Phaser.Scene {
    * First run on this device: one card with the controls of the active device and the colour rule. Dismissed by any
    * input after 250 ms; the dismissing press is never used as a parry or dash (the run is paused, presses cleared).
    */
+  /** The first-run card was laid out for the previous screen (e.g. the switch to the portrait view): lay it out again. */
+  private relayoutHint(): void {
+    if (!this.hint) return;
+    if (this.hintDismiss) this.input.keyboard?.off('keydown', this.hintDismiss);
+    this.hint.destroy();
+    this.hint = null;
+    this.showTouchHint();
+  }
+
   private showTouchHint(): void {
     if (this.hint) return;
     this.driver.pause('hint');

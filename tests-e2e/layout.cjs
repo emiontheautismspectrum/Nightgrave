@@ -22,7 +22,7 @@ let failed = 0;
  * width and visible at SOME scroll position, at least 44 CSS px in both directions, targets never closer than 4 px.
  */
 function checkTouch(name, L) {
-  const errs = [];
+  const errs = [...headErrs(L)];
   if (!L) errs.push('no layout');
   else {
     const [W] = L.screen;
@@ -93,9 +93,17 @@ function checkTouch(name, L) {
   console.log(`${errs.length ? 'FAIL' : 'ok  '} ${name}${errs.length ? ': ' + [...new Set(errs)].slice(0, 4).join('; ') : ''}`);
 }
 
+/** The page title never runs into BACK (any language). */
+function headErrs(L) {
+  const h = (L && L.head) || [];
+  if (h.length < 2) return [];
+  const [a, b] = [h[0].box, h[1].box];
+  return a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3] ? [`title overlaps BACK: "${h[0].text}"`] : [];
+}
+
 function check(name, L) {
   if (L && L.touch) return checkTouch(name, L);
-  const errs = [];
+  const errs = [...headErrs(L)];
   if (!L) errs.push('no layout');
   else {
     const [px, py, pw, ph] = L.panel;
@@ -203,7 +211,7 @@ async function runHud(page, label) {
     const BOARD = { date: now.toISOString().slice(0, 10), serverNow: now.toISOString(), champion: { name: 'WWWWWWWWWWWWWWWW', message: 'Supercalifragilistic parries forever and ever, night' }, top: [] };
     // every layout in every UI language (the stored setting; no URL parameter or debug hook for the language)
     for (const lang of ['en', 'ru'])
-    for (const [label0, opts, ins] of runs) {
+    for (const [label0, opts, ins] of runs.filter(([n]) => !process.env.LAYOUT_ONLY || n.startsWith(process.env.LAYOUT_ONLY))) {
       const label = `${lang} ${label0}`;
       const ctx = await b.newContext(opts);
       await ctx.route('http://localhost:8787/api/daily**', (r) => r.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify(BOARD) }));

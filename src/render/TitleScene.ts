@@ -262,7 +262,8 @@ export class TitleScene extends Phaser.Scene {
     const sv = save();
     const page: MenuPage = {
       title: TITLE.toUpperCase(),
-      top: 76,
+      top: 72,
+      gap: 13, // nine rows with the language switch (desktop: the panel stays inside the 270 px screen)
       items: [
         { label: () => t('title.play'), onActivate: () => this.cfg.startRun(this) },
         {

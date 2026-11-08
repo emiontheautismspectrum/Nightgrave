@@ -152,6 +152,8 @@ export class MenuView {
   private list: Phaser.GameObjects.Container | null = null;
   private pressRect: Phaser.GameObjects.Rectangle | null = null;
   private deco: Phaser.GameObjects.GameObject[] = [];
+  /** The page title and BACK (the layout check: they never overlap). */
+  private head: UIText[] = [];
   private page: MenuPage | null = null;
   private g: Geo | null = null;
   private targets: Target[] = [];
@@ -273,10 +275,15 @@ export class MenuView {
     // the title (and BACK) stay on top of the scrolling list
     const titleBg = g.touch ? s.add.rectangle(0, 0, g.W, g.listTop - 2, 0x0b0d12, 0.85).setOrigin(0).setDepth(this.depth + 0.9) : null;
     if (titleBg) this.objs.push(titleBg);
-    this.objs.push(snap(addText(s, g.W / 2, g.titleY, page.title, { size: 16, color: C.bone }).setOrigin(0.5).setDepth(this.depth + 1)));
+    const titleText = snap(addText(s, g.W / 2, g.titleY, page.title, { size: 16, color: C.bone }).setOrigin(0.5).setDepth(this.depth + 1));
+    this.objs.push(titleText);
+    this.head = [titleText];
     if (page.onBack) {
       const back = addText(s, g.touch ? g.mx + 4 : 8, g.touch ? g.titleY - 4 : 8, t('common.back'), { color: C.dim }).setDepth(this.depth + 1);
       this.objs.push(back);
+      this.head.push(back);
+      // a long title (another language) would run into BACK: the 8 px font, still centred, never below 8 px
+      if (g.touch && g.W / 2 - titleText.width / 2 < back.x + back.width + 6) snap(titleText.setFontSize(8));
       const bw = Math.max(back.width + 8, g.backW);
       const bh = Math.max(back.height + 8, g.backW);
       this.targets.push({ kind: 'back', i: -1, x: back.x - 4, y: back.y + back.height / 2 - bh / 2, w: bw, h: bh, scrolls: false });
@@ -389,6 +396,7 @@ export class MenuView {
     for (const o of this.objs) o.destroy();
     this.objs = [];
     this.footTexts = [];
+    this.head = [];
     this.footPanel = null;
     this.rows = [];
     this.lineTexts = [];
@@ -650,6 +658,7 @@ export class MenuView {
     (window as unknown as { __ngLayout?: object }).__ngLayout = {
       title: this.page?.title,
       lang: getLang(),
+      head: this.head.filter((o) => o.active).map((o) => ({ box: box(o), text: o.text })),
       // leak checks (tests-e2e/i18n.cjs): scene objects and language listeners
       objects: this.scene.children.list.length,
       langListeners: langListenerCount(),

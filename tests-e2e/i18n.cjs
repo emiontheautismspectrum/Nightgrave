@@ -99,8 +99,7 @@ async function session(b, dev, o = {}) {
       let l = await s.L();
       const objs0 = l.objects;
       const lis0 = l.langListeners;
-      const rows = l.targets.filter((t) => t.kind === 'row').length;
-      await s.key('ArrowDown', rows); // the language row is the last row: reachable like the others
+      await s.key('ArrowUp'); // the language row is the LAST row of the focus order (up from the first wraps to it)
       l = await s.L();
       const focus = l.focus;
       ok(/\[EN\]/.test(l.targets.find((t) => t.i === focus)?.label ?? ''), 'keyboard: the language row is in the focus order', l.targets.find((t) => t.i === focus)?.label);

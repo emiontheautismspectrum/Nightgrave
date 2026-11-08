@@ -173,7 +173,7 @@ export const ru: Catalog = {
   'submit.newHigh': 'ЛУЧШИЙ СЧЁТ ДНЯ! ТВОЁ ПОСЛАНИЕ:',
   'submit.rank': 'ТОП-10 ДНЯ: МЕСТО {rank}',
   'submit.namePh': 'ИМЯ',
-  'submit.messagePh': 'ПОСЛАНИЕ (НЕОБЯЗАТЕЛЬНО)',
+  'submit.messagePh': 'ПОСЛАНИЕ (ПО ЖЕЛАНИЮ)',
   'submit.submit': 'ОТПРАВИТЬ',
   'submit.skip': 'ПРОПУСТИТЬ',
   'submit.nameErr': 'ИМЯ: {err}',
