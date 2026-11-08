@@ -6,6 +6,7 @@
  * Screenshots (assets/preview/): phone_title, phone_settings, phone_hero, phone_run, phone_death (iPhone 14 portrait),
  * phone_landscape_menu (Pixel 7 landscape). Run: node tests-e2e/phone_menus.cjs
  */
+const { LANG, L } = require('./lang.cjs');
 const { chromium, devices } = require('playwright');
 const { spawn, execSync } = require('node:child_process');
 const path = require('node:path');
@@ -44,7 +45,7 @@ const DEVICES = [
 async function session(b, dev, url = URL0, manual = false) {
   const ctx = await b.newContext({ ...dev });
   await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} });
-  await ctx.addInitScript(() => localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'hard', settings: { touchHintSeen: true, hintsDone: true }, best: { hard: [{ score: 4321, hero: 'knight', date: '2026-11-01', secs: 77 }] }, daily: [] })));
+  await ctx.addInitScript((lg) => localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'hard', settings: { touchHintSeen: true, hintsDone: true, language: lg }, best: { hard: [{ score: 4321, hero: 'knight', date: '2026-11-01', secs: 77 }] }, daily: [] })), LANG);
   if (manual) await ctx.addInitScript(() => { window.__ngManual = true; });
   await ctx.route(`${API}/api/daily**`, (r) => r.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify(BOARD) }));
   await ctx.route(`${API}/api/daily/me`, (r) => r.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify({ verifiedScore: null, verifiedRank: null, pending: false, serverNow: now.toISOString() }) }));
@@ -128,23 +129,23 @@ function targetsOk(l) {
       if (shots) await s.page.screenshot({ path: path.join(OUT, 'phone_title.png') });
       if (label === 'Pixel 7 landscape') await s.page.screenshot({ path: path.join(OUT, 'phone_landscape_menu.png') });
       // hero: tap WISP
-      ok(await s.tap('HERO'), 'tap HERO');
+      ok(await s.tap(L('HERO')), 'tap HERO');
       l = await s.L();
-      ok(l.title === 'HERO' && !targetsOk(l), 'hero page by tap, targets >= 44', targetsOk(l));
+      ok(l.title === L('HERO') && !targetsOk(l), 'hero page by tap, targets >= 44', targetsOk(l));
       if (shots) {
         await s.page.screenshot({ path: path.join(OUT, 'phone_hero.png') });
         await s.page.screenshot({ path: path.join(OUT, 'hero_select_phone.png') }); // the heroes pass: stat lines from HeroDef
       }
-      ok(await s.tap('WISP'), 'tap WISP');
+      ok(await s.tap(L('WISP')), 'tap WISP');
       l = await s.L();
       const hero = await s.page.evaluate(() => JSON.parse(localStorage.getItem('nightgrave.v1')).hero);
       ok(l.title === 'NIGHTGRAVE' && hero === 'wisp', 'picked the Wisp by tap', hero);
       // settings: a toggle by tap on the row, a volume by tap on the > arrow, back
-      ok(await s.tap('SETTINGS'), 'tap SETTINGS');
+      ok(await s.tap(L('SETTINGS')), 'tap SETTINGS');
       l = await s.L();
-      ok(l.title === 'SETTINGS' && !targetsOk(l), 'settings by tap, targets >= 44', targetsOk(l));
+      ok(l.title === L('SETTINGS') && !targetsOk(l), 'settings by tap, targets >= 44', targetsOk(l));
       const shake0 = l.targets.find((t) => t.label.startsWith('SCREEN SHAKE')).label;
-      await s.tap('SCREEN SHAKE');
+      await s.tap(L('SCREEN SHAKE'));
       const master0 = (await s.L()).targets.find((t) => t.label.startsWith('MASTER')).label;
       await s.tap('MASTER', 'left');
       l = await s.L();
@@ -152,25 +153,25 @@ function targetsOk(l) {
       const master1 = l.targets.find((t) => t.label.startsWith('MASTER')).label;
       ok(shake1 !== shake0 && master1 !== master0, 'settings change by tap (row and < arrow)', `${shake0} -> ${shake1}, ${master0.replace(/ +/g, ' ')} -> ${master1.replace(/ +/g, ' ')}`);
       // Stick (default): the drag-only rows are hidden; switching to DRAG shows them, and the choice persists
-      ok(l.targets.some((t) => t.label === 'TOUCH CONTROLS STICK') && !l.targets.some((t) => t.label.startsWith('TOUCH SMOOTHING')), 'settings: TOUCH CONTROLS STICK, drag-only rows hidden');
+      ok(l.targets.some((t) => t.label === L('TOUCH CONTROLS STICK')) && !l.targets.some((t) => t.label.startsWith('TOUCH SMOOTHING')), 'settings: TOUCH CONTROLS STICK, drag-only rows hidden');
       await s.tap('TOUCH CONTROLS', 'right');
       l = await s.L();
       const smooth = l.targets.find((t) => t.label.startsWith('TOUCH SMOOTHING'));
       const mode = await s.page.evaluate(() => JSON.parse(localStorage.getItem('nightgrave.v1')).settings.touchControls);
-      ok(!!smooth && l.targets.some((t) => t.label === 'TOUCH CONTROLS DRAG') && mode === 'drag', 'settings: DRAG shows sensitivity / smoothing and is saved', mode);
+      ok(!!smooth && l.targets.some((t) => t.label === L('TOUCH CONTROLS DRAG')) && mode === 'drag', 'settings: DRAG shows sensitivity / smoothing and is saved', mode);
       await s.tap('TOUCH CONTROLS', 'right');
       l = await s.L();
-      ok(l.targets.some((t) => t.label === 'TOUCH CONTROLS STICK'), 'settings: back to STICK');
+      ok(l.targets.some((t) => t.label === L('TOUCH CONTROLS STICK')), 'settings: back to STICK');
       if (shots) await s.page.screenshot({ path: path.join(OUT, 'phone_settings.png') });
       ok(await s.tap('BACK', 'back'), 'tap BACK');
       ok((await s.L()).title === 'NIGHTGRAVE', 'back to the title');
       // best scores
-      ok(await s.tap('BEST SCORES'), 'tap BEST SCORES');
+      ok(await s.tap(L('BEST SCORES')), 'tap BEST SCORES');
       l = await s.L();
-      ok(l.title === 'BEST SCORES' && l.texts.some((t) => t.text.includes('4321')), 'best scores by tap (the saved run is listed)');
+      ok(l.title === L('BEST SCORES') && l.texts.some((t) => t.text.includes('4321')), 'best scores by tap (the saved run is listed)');
       await s.tap('BACK', 'back');
       // the board overlay
-      ok(await s.tap('BOARD'), 'tap BOARD');
+      ok(await s.tap(L('BOARD')), 'tap BOARD');
       const ov = await s.page.evaluate(() => { const o = document.querySelector('.bover'); const bk = o && o.querySelector('.bover-back').getBoundingClientRect(); return o && !o.hidden ? { rows: o.querySelectorAll('.bp-row').length, bw: bk.width, bh: bk.height } : null; });
       ok(ov && ov.rows >= 9 && ov.bw >= 44 && ov.bh >= 44, 'board overlay by tap (BACK >= 44 px)', JSON.stringify(ov));
       const bb = await s.page.evaluate(() => { const r = document.querySelector('.bover-back').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
@@ -180,7 +181,7 @@ function targetsOk(l) {
       await sleep(300);
       ok(await s.page.evaluate(() => document.querySelector('.bover').hidden), 'board overlay closed by tapping BACK');
       // a run by tap
-      ok(await s.tap('PLAY'), 'tap PLAY');
+      ok(await s.tap(L('PLAY')), 'tap PLAY');
       await sleep(600);
       let d = await s.dbg();
       ok(d && d.alive && !d.menu, 'run started by tap (no menu, alive)');

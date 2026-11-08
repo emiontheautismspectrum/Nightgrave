@@ -30,7 +30,8 @@
     "shots:heroes": "node tests-e2e/hero_shots.cjs",
     "e2e:knight-arc": "node tests-e2e/knight_arc.cjs",
     "e2e:phone-stick": "node tests-e2e/phone_stick.cjs",
-    "e2e:keyboard": "node tests-e2e/keyboard_e2e.cjs"
+    "e2e:keyboard": "node tests-e2e/keyboard_e2e.cjs",
+    "e2e:i18n": "node tests-e2e/i18n.cjs"
   },
   "dependencies": {
     "@fontsource/press-start-2p": "5.3.0",

@@ -6,6 +6,7 @@
  * Screenshots: assets/preview/phone_portrait.png, phone_landscape.png, phone_board.png.
  * Run: npm run e2e:phone
  */
+const { LANG, L } = require('./lang.cjs');
 const { chromium, devices } = require('playwright');
 const { spawn, execSync } = require('node:child_process');
 const path = require('node:path');
@@ -33,7 +34,7 @@ const ok = (cond, name, extra = '') => {
 async function open(b, device, { manual = false, url = URL0 } = {}) {
   const ctx = await b.newContext({ ...device });
   await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} });
-  await ctx.addInitScript(() => localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'hard', settings: { touchHintSeen: true, hintsDone: true }, best: {}, daily: [] })));
+  await ctx.addInitScript((lg) => localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'hard', settings: { touchHintSeen: true, hintsDone: true, language: lg }, best: {}, daily: [] })), LANG);
   if (manual) await ctx.addInitScript(() => { window.__ngManual = true; });
   await ctx.route(`${API}/api/daily**`, (r) => r.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify(BOARD) }));
   await ctx.route(`${API}/api/daily/me`, (r) => r.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify({ verifiedScore: 31250, verifiedRank: 4, pending: false }) }));
