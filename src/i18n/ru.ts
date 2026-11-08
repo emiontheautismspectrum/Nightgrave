@@ -110,6 +110,8 @@ export const ru: Catalog = {
   'settings.secondFinger': 'ОТБИВ ВТОРЫМ ПАЛЬЦЕМ: {v}',
   'settings.haptics': 'ВИБРАЦИЯ: {v}',
   'settings.tips': 'ПОКАЗАТЬ ПОДСКАЗКИ СНОВА',
+  'settings.language': 'ЯЗЫК: {v}',
+  'settings.langAuto': 'АВТО ({lang})',
 
   // ---- controls page
   'controlsPage.title': 'УПРАВЛЕНИЕ',

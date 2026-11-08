@@ -15,7 +15,8 @@ import { HERO_IDS, HEROES } from '../src/data/heroes';
 import { save } from '../src/storage';
 import type { MenuPage } from '../src/render/ui';
 
-const labels = (p: MenuPage) => ({ title: p.title, items: p.items.map((i) => i.label()), lines: p.lines?.() ?? [], foot: p.foot?.() ?? [] });
+// the LANGUAGE row is new with the localisation layer: everything else is the frozen text
+const labels = (p: MenuPage) => ({ title: p.title, items: p.items.map((i) => i.label()).filter((l) => !l.startsWith('LANGUAGE ')), lines: p.lines?.() ?? [], foot: p.foot?.() ?? [] });
 const ctx = (touch: boolean): MenuCtx => ({ menu: { show: () => undefined } as unknown as MenuCtx['menu'], isTouch: () => touch });
 
 describe('English UI output (frozen)', () => {

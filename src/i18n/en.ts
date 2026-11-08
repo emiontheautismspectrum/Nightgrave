@@ -111,6 +111,8 @@ export const en = {
   'settings.secondFinger': 'SECOND-FINGER PARRY {v}',
   'settings.haptics': 'HAPTICS {v}',
   'settings.tips': 'SHOW TIPS AGAIN',
+  'settings.language': 'LANGUAGE {v}',
+  'settings.langAuto': 'AUTO ({lang})',
 
   // ---- controls page
   'controlsPage.title': 'CONTROLS',

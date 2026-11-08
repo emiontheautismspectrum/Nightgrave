@@ -10,7 +10,7 @@ import { emitAudioEvent } from './events';
 import { setDevice } from './hints';
 import { boardOverlayOpen, closeBoardOverlay } from '../web/boardOverlay';
 import { getScreen } from '../web/screen';
-import { t } from '../i18n';
+import { getLang, langListenerCount, t } from '../i18n';
 
 export const FONT = '"Press Start 2P", monospace';
 export const C = { bone: '#d9d2c0', gold: '#ffd86b', dim: '#7f93b8', stone: '#3a4558', ember: '#ff7a2f', violet: '#9b6bff', teal: '#4fd1c5' };
@@ -649,6 +649,12 @@ export class MenuView {
     const g = this.g;
     (window as unknown as { __ngLayout?: object }).__ngLayout = {
       title: this.page?.title,
+      lang: getLang(),
+      // leak checks (tests-e2e/i18n.cjs): scene objects and language listeners
+      objects: this.scene.children.list.length,
+      langListeners: langListenerCount(),
+      htmlLang: document.documentElement.lang,
+      focus: this.focus,
       touch: g.touch,
       screen: [g.W, g.H],
       cssPerPx: 1 / g.css,

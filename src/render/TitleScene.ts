@@ -14,7 +14,7 @@ import { DIFFICULTIES, persist, save } from '../storage';
 import { audio } from './audio';
 import { ARENA_PROPS, ATLAS, MANIFEST, bgKey, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
 import { bestPage, creditsPage, DIFF_LABEL, heroName, heroPage, heroShort, settingsPage, type MenuCtx } from './menus';
-import { t, type Key } from '../i18n';
+import { chooseLang, getLang, LANGS, OWN_NAME, t, type Key } from '../i18n';
 import { fmtDate, fmtInt } from '../i18n/format';
 import { boardHeader, boardRow } from './boardTable';
 import { controlsLine, getDevice } from './hints';
@@ -286,12 +286,23 @@ export class TitleScene extends Phaser.Scene {
         // phones: the full-screen board overlay (same content as the desktop side panel)
         { label: () => t(this.cfg.isTouch() ? 'title.board' : 'title.todaysBest'), onActivate: () => (this.cfg.isTouch() ? openBoardOverlay() : this.showBoard()) },
         { label: () => t('title.credits'), onActivate: () => this.menu.show(creditsPage(() => this.showMain(7))) },
+        // the language switch: each language's OWN short name, the current one in brackets; reachable like any row
+        // (keys, pad, mouse, touch). A pick here is a manual choice and is stored
+        { label: () => langSwitchLabel(), onLeft: () => this.switchLang(-1), onRight: () => this.switchLang(1), onActivate: () => this.switchLang(1) },
       ],
       // the controls hint for the active device and the champion block: the footer (pinned at the bottom in portrait)
       lines: () => [],
       foot: () => [controlsLine(getDevice(), save().settings.touchControls !== 'drag'), '', ...this.boardLines()],
     };
     this.menu.show(page, focus);
+  }
+
+  /** Switch to the previous / next language and rebuild the title page in it (the switch keeps the focus). */
+  private switchLang(d: number): void {
+    const i = LANGS.indexOf(getLang());
+    const next = LANGS[(i + d + LANGS.length) % LANGS.length]!;
+    chooseLang(next, (v) => ((save().settings.language = v), persist()));
+    this.showMain(TITLE_LANG_ROW);
   }
 
   private showBest(): void {
@@ -315,3 +326,11 @@ export class TitleScene extends Phaser.Scene {
 }
 
 export { C, FONT };
+
+/** The title page's language row (its index: the focus after a switch). */
+const TITLE_LANG_ROW = 8;
+
+/** "[EN]  RU": every language by its own short name, the current one in brackets (language-neutral). */
+export function langSwitchLabel(): string {
+  return LANGS.map((l) => (l === getLang() ? `[${OWN_NAME[l].short}]` : ` ${OWN_NAME[l].short} `)).join(' ');
+}

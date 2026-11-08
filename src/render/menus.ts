@@ -12,7 +12,7 @@ import { HERO_IDS, HEROES, type HeroId } from '../data/heroes';
 import { ATLAS, frame } from './assets';
 import { BEST_HEADER, fmtBestRow, fmtEntry } from './bestFormat';
 import { C, FONT, type MenuPage, type MenuView } from './ui';
-import { t, type Key } from '../i18n';
+import { chooseLang, getLang, LANG_SETTINGS_LIST, OWN_NAME, t, type Key, type LangSetting } from '../i18n';
 import { fmtDate, fmtDec, fmtInt } from '../i18n/format';
 
 export interface MenuCtx {
@@ -22,6 +22,8 @@ export interface MenuCtx {
   onSettings?: () => void;
   /** Re-show the touch controls overlay (title: next run; pause: right away). */
   onShowTouchHint?: () => void;
+  /** Settings opened from the pause menu: the language cannot change during a run (the row is hidden). */
+  inRun?: boolean;
 }
 
 /** Difficulties are always named EASY / MEDIUM / HARD (internal ids unchanged). */
@@ -105,6 +107,21 @@ export function settingsPage(ctx: MenuCtx, back: () => void): MenuPage {
     items.push(toggle('settings.leftHanded', 'leftHanded'));
     if (drag) items.push(toggle('settings.secondFinger', 'secondFingerParry'));
     items.push(toggle('settings.haptics', 'haptics'));
+  }
+  if (!ctx.inRun) {
+    // the language: its own name whatever the current language is; 'AUTO' shows what it resolved to
+    const at = items.length;
+    const step = (d: number) => {
+      const list = LANG_SETTINGS_LIST;
+      const next = list[(list.indexOf(s().language) + d + list.length) % list.length]!;
+      chooseLang(next, (v: LangSetting) => ((s().language = v), persist()));
+      ctx.menu.show(settingsPage(ctx, back), at); // the same page, the same row, in the new language
+    };
+    items.push({
+      label: () => t('settings.language', { v: s().language === 'auto' ? t('settings.langAuto', { lang: OWN_NAME[getLang()].long }) : OWN_NAME[s().language as 'en'].long }),
+      onLeft: () => step(-1),
+      onRight: () => step(1),
+    });
   }
   items.push({ label: () => t('settings.tips'), onActivate: () => ((s().touchHintSeen = false), (s().hintsDone = false), (s().hintParrySeen = false), (s().hintDashSeen = false), persist(), ctx.onShowTouchHint?.()) });
   return { title: t('settings.title'), items, onBack: back, top: 52, gap: 13 };

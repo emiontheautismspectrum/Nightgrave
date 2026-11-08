@@ -10,6 +10,7 @@ import { detectLang } from './detect';
 import { HTML_LANG, isLang, LANGS, type Lang, type LangSetting } from './langs';
 
 export { LANGS, OWN_NAME, type Lang, type LangSetting } from './langs';
+export { LANG_SETTINGS as LANG_SETTINGS_LIST } from './langs';
 export type { Key } from './en';
 
 const CATALOG: Record<Lang, Partial<Catalog>> = { en, ru };
@@ -40,10 +41,19 @@ export function setLang(l: Lang): void {
   for (const f of [...listeners]) f(lang);
 }
 
+/** How many listeners are registered (tests: a language switch must not leak any). */
+export const langListenerCount = (): number => listeners.size;
+
 /** Called after the language changed. Returns an unsubscribe function. */
 export function onLangChange(f: (l: Lang) => void): () => void {
   listeners.add(f);
   return () => listeners.delete(f);
+}
+
+/** The stored setting changed by the player: store it (only a MANUAL choice; 'auto' stays 'auto') and apply it. */
+export function chooseLang(setting: LangSetting, store: (s: LangSetting) => void): void {
+  store(setting);
+  setLang(resolveLang(setting));
 }
 
 /** <html lang> (screen readers, hyphenation, fonts). The page title stays the game's name in every language. */

@@ -574,7 +574,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private menuCtx(): MenuCtx {
-    return { menu: this.menu, isTouch: this.cfg.isTouch, onSettings: () => this.applySettings(), onShowTouchHint: () => (this.closePause(), this.showTouchHint()) };
+    return { menu: this.menu, isTouch: this.cfg.isTouch, inRun: true, onSettings: () => this.applySettings(), onShowTouchHint: () => (this.closePause(), this.showTouchHint()) };
   }
 
   private closePause(): void {
