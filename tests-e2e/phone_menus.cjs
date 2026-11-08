@@ -147,19 +147,19 @@ function targetsOk(l) {
       const shake0 = l.targets.find((t) => t.label.startsWith(lab('SCREEN SHAKE'))).label;
       await s.tap(lab('SCREEN SHAKE'));
       const master0 = (await s.L()).targets.find((t) => t.label.startsWith(lab('MASTER'))).label;
-      await s.tap('MASTER', 'left');
+      await s.tap(lab('MASTER'), 'left');
       l = await s.L();
       const shake1 = l.targets.find((t) => t.label.startsWith(lab('SCREEN SHAKE'))).label;
       const master1 = l.targets.find((t) => t.label.startsWith(lab('MASTER'))).label;
       ok(shake1 !== shake0 && master1 !== master0, 'settings change by tap (row and < arrow)', `${shake0} -> ${shake1}, ${master0.replace(/ +/g, ' ')} -> ${master1.replace(/ +/g, ' ')}`);
       // Stick (default): the drag-only rows are hidden; switching to DRAG shows them, and the choice persists
       ok(l.targets.some((t) => t.label === lab('TOUCH CONTROLS STICK')) && !l.targets.some((t) => t.label.startsWith(lab('TOUCH SMOOTHING'))), 'settings: TOUCH CONTROLS STICK, drag-only rows hidden');
-      await s.tap('TOUCH CONTROLS', 'right');
+      await s.tap(lab('TOUCH CONTROLS'), 'right');
       l = await s.L();
       const smooth = l.targets.find((t) => t.label.startsWith(lab('TOUCH SMOOTHING')));
       const mode = await s.page.evaluate(() => JSON.parse(localStorage.getItem('nightgrave.v1')).settings.touchControls);
       ok(!!smooth && l.targets.some((t) => t.label === lab('TOUCH CONTROLS DRAG')) && mode === 'drag', 'settings: DRAG shows sensitivity / smoothing and is saved', mode);
-      await s.tap('TOUCH CONTROLS', 'right');
+      await s.tap(lab('TOUCH CONTROLS'), 'right');
       l = await s.L();
       ok(l.targets.some((t) => t.label === lab('TOUCH CONTROLS STICK')), 'settings: back to STICK');
       if (shots) await s.page.screenshot({ path: path.join(OUT, 'phone_settings.png') });
@@ -168,7 +168,7 @@ function targetsOk(l) {
       // best scores
       ok(await s.tap(lab('BEST SCORES')), 'tap BEST SCORES');
       l = await s.L();
-      ok(l.title === lab('BEST SCORES') && l.texts.some((t) => t.text.includes('4321')), 'best scores by tap (the saved run is listed)');
+      ok(l.title === lab('BEST SCORES') && l.texts.some((t) => t.text.replace(/[\s\u00a0]/g, '').includes('4321')), 'best scores by tap (the saved run is listed)');
       await s.tap('BACK', 'back');
       // the board overlay
       ok(await s.tap(lab('BOARD')), 'tap BOARD');
