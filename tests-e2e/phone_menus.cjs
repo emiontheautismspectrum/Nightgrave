@@ -144,19 +144,19 @@ function targetsOk(l) {
       ok(await s.tap(lab('SETTINGS')), 'tap SETTINGS');
       l = await s.L();
       ok(l.title === lab('SETTINGS') && !targetsOk(l), 'settings by tap, targets >= 44', targetsOk(l));
-      const shake0 = l.targets.find((t) => t.label.startsWith('SCREEN SHAKE')).label;
+      const shake0 = l.targets.find((t) => t.label.startsWith(lab('SCREEN SHAKE'))).label;
       await s.tap(lab('SCREEN SHAKE'));
-      const master0 = (await s.L()).targets.find((t) => t.label.startsWith('MASTER')).label;
+      const master0 = (await s.L()).targets.find((t) => t.label.startsWith(lab('MASTER'))).label;
       await s.tap('MASTER', 'left');
       l = await s.L();
-      const shake1 = l.targets.find((t) => t.label.startsWith('SCREEN SHAKE')).label;
-      const master1 = l.targets.find((t) => t.label.startsWith('MASTER')).label;
+      const shake1 = l.targets.find((t) => t.label.startsWith(lab('SCREEN SHAKE'))).label;
+      const master1 = l.targets.find((t) => t.label.startsWith(lab('MASTER'))).label;
       ok(shake1 !== shake0 && master1 !== master0, 'settings change by tap (row and < arrow)', `${shake0} -> ${shake1}, ${master0.replace(/ +/g, ' ')} -> ${master1.replace(/ +/g, ' ')}`);
       // Stick (default): the drag-only rows are hidden; switching to DRAG shows them, and the choice persists
-      ok(l.targets.some((t) => t.label === lab('TOUCH CONTROLS STICK')) && !l.targets.some((t) => t.label.startsWith('TOUCH SMOOTHING')), 'settings: TOUCH CONTROLS STICK, drag-only rows hidden');
+      ok(l.targets.some((t) => t.label === lab('TOUCH CONTROLS STICK')) && !l.targets.some((t) => t.label.startsWith(lab('TOUCH SMOOTHING'))), 'settings: TOUCH CONTROLS STICK, drag-only rows hidden');
       await s.tap('TOUCH CONTROLS', 'right');
       l = await s.L();
-      const smooth = l.targets.find((t) => t.label.startsWith('TOUCH SMOOTHING'));
+      const smooth = l.targets.find((t) => t.label.startsWith(lab('TOUCH SMOOTHING')));
       const mode = await s.page.evaluate(() => JSON.parse(localStorage.getItem('nightgrave.v1')).settings.touchControls);
       ok(!!smooth && l.targets.some((t) => t.label === lab('TOUCH CONTROLS DRAG')) && mode === 'drag', 'settings: DRAG shows sensitivity / smoothing and is saved', mode);
       await s.tap('TOUCH CONTROLS', 'right');

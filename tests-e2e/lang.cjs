@@ -5,7 +5,7 @@
 const LANG = process.env.NG_LANG === 'ru' ? 'ru' : 'en';
 const RU = {
   PLAY: 'ИГРАТЬ', HERO: 'ГЕРОЙ', WISP: 'ОГОНЁК', SETTINGS: 'НАСТРОЙКИ', 'SCREEN SHAKE': 'ТРЯСКА ЭКРАНА', 'BEST SCORES': 'РЕКОРДЫ',
-  BOARD: 'РЕЙТИНГ', RESUME: 'ПРОДОЛЖИТЬ', 'TOUCH CONTROLS STICK': 'СЕНСОР: СТИК', 'TOUCH CONTROLS DRAG': 'СЕНСОР: ВЕДЕНИЕ ПАЛЬЦЕМ',
+  BOARD: 'РЕЙТИНГ', RESUME: 'ПРОДОЛЖИТЬ', MASTER: 'ГРОМКОСТЬ', 'TOUCH SMOOTHING': 'СГЛАЖИВАНИЕ', 'QUIT TO TITLE': 'В ГЛАВНОЕ МЕНЮ', 'TOUCH CONTROLS STICK': 'СЕНСОР: СТИК', 'TOUCH CONTROLS DRAG': 'СЕНСОР: ВЕДЕНИЕ ПАЛЬЦЕМ',
 };
 /** A label as the game shows it in the run's language. */
 const L = (s) => (LANG === 'ru' ? (RU[s] ?? s) : s);
