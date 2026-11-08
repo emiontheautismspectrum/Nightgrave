@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardLines, ContextHints, controlsLine, HINT_TEXT } from '../src/render/hints';
+import { cardLines, ContextHints, controlsLine, hintText } from '../src/render/hints';
 import { makeParams } from '../src/sim/params';
 import { createState, spawnProjectile } from '../src/sim/sim';
 
@@ -30,6 +30,6 @@ describe('controls explanation', () => {
     expect(h.tick(s)).toBe('dash');
     expect(h.done).toBe(true);
     expect(new ContextHints(false).tick(s)).toBeNull(); // disabled after the first time
-    expect(HINT_TEXT.dash).toBe("CAN'T PARRY - DASH!");
+    expect(hintText('dash')).toBe("CAN'T PARRY - DASH!");
   });
 });

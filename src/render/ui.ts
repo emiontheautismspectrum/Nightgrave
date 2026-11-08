@@ -10,6 +10,7 @@ import { emitAudioEvent } from './events';
 import { setDevice } from './hints';
 import { boardOverlayOpen, closeBoardOverlay } from '../web/boardOverlay';
 import { getScreen } from '../web/screen';
+import { t } from '../i18n';
 
 export const FONT = '"Press Start 2P", monospace';
 export const C = { bone: '#d9d2c0', gold: '#ffd86b', dim: '#7f93b8', stone: '#3a4558', ember: '#ff7a2f', violet: '#9b6bff', teal: '#4fd1c5' };
@@ -274,7 +275,7 @@ export class MenuView {
     if (titleBg) this.objs.push(titleBg);
     this.objs.push(snap(addText(s, g.W / 2, g.titleY, page.title, { size: 16, color: C.bone }).setOrigin(0.5).setDepth(this.depth + 1)));
     if (page.onBack) {
-      const back = addText(s, g.touch ? g.mx + 4 : 8, g.touch ? g.titleY - 4 : 8, '< BACK', { color: C.dim }).setDepth(this.depth + 1);
+      const back = addText(s, g.touch ? g.mx + 4 : 8, g.touch ? g.titleY - 4 : 8, t('common.back'), { color: C.dim }).setDepth(this.depth + 1);
       this.objs.push(back);
       const bw = Math.max(back.width + 8, g.backW);
       const bh = Math.max(back.height + 8, g.backW);

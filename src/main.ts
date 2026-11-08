@@ -10,6 +10,7 @@ import { setDevice } from './render/hints';
 import { GameScene, type RunConfig } from './render/GameScene';
 import { TitleScene, type TitleConfig } from './render/TitleScene';
 import { save } from './storage';
+import { resolveLang, setLang, t } from './i18n';
 import { isHeroId, type HeroId } from './data/heroes';
 import { BoardPanel } from './web/boardPanel';
 import { computeLayout } from './web/layout';
@@ -19,6 +20,9 @@ import { portraitGameSize, setScreen } from './web/screen';
 import { installTextFocusWatch, layoutGate, onTextFocusEnd, textFieldFocused } from './web/textFocus';
 
 document.title = TITLE;
+// the language first (the stored choice, else the browser's): every scene, the first-run card and the board panel are
+// built in it. 'auto' is never replaced by the detected language in storage
+setLang(resolveLang(save().settings.language));
 
 /** URL parameters that change behaviour (?wave, ?play) only work in dev and in the smoke-test build. */
 const DEV_PARAMS = import.meta.env.DEV || import.meta.env.VITE_SMOKE === '1';
@@ -146,7 +150,7 @@ async function boot(): Promise<void> {
           ? () => {
               // the server's date when the API answered (a wrong local clock cannot shift the seed), else local UTC
               const key = getServerDate() ?? utcDateKey(new Date());
-              return { seed: dailySeed(key), label: `HARD - DAILY ${key}`, date: key };
+              return { seed: dailySeed(key), label: t('run.dailyLabel', { date: key }), date: key };
             }
           : () => ({ seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 1, label: '' }),
       ...(devWave ? { startWave: devWave } : {}),

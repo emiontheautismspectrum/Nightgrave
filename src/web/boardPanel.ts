@@ -7,6 +7,8 @@ import { fetchBoard, fetchMe, getServerDate, hasServerClock, online, serverNowMs
 import { addDays, utcDateKey } from '../shared/daily';
 import { save } from '../storage';
 import { isInRun } from './runFlag';
+import { onLangChange, t, type Key } from '../i18n';
+import { fmtDate, fmtInt } from '../i18n/format';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
@@ -37,23 +39,46 @@ export class BoardPanel {
   private shownDate = '';
   private timer = 0;
   private lastFetch = 0;
+  private title: HTMLElement;
+  /** What is shown, kept so a language switch re-renders it without a new fetch. */
+  private last: { b: Board | null; yesterday: Board | null; me: MyStanding | null; status: Key } = { b: null, yesterday: null, me: null, status: 'panel.note' };
 
   constructor(cls: string) {
     this.root = el('aside', cls);
-    this.root.setAttribute('aria-label', "Today's Hard best");
     const head = el('div', 'bp-head');
-    head.append(el('div', 'bp-title', "TODAY'S HARD BEST"), (this.date = el('div', 'bp-dim')), (this.countdown = el('div', 'bp-dim')));
+    head.append((this.title = el('div', 'bp-title')), (this.date = el('div', 'bp-dim')), (this.countdown = el('div', 'bp-dim')));
     const champ = el('div', 'bp-champ');
-    this.champTitle = el('div', 'bp-dim', 'CHAMPION OF THE NIGHT');
+    this.champTitle = el('div', 'bp-dim');
     this.champScore = el('div', 'bp-score');
     this.champName = el('div', 'bp-name');
     this.champMsg = el('div', 'bp-msg');
     champ.append(this.champTitle, this.champScore, this.champName, el('div', 'bp-sep'), this.champMsg);
     this.rows = el('ol', 'bp-rows');
     this.you = el('div', 'bp-you');
-    this.status = el('div', 'bp-note', 'ONLY HARD - REPLAY-VERIFIED - NEW RUNS APPEAR IN ~20 MIN');
+    this.status = el('div', 'bp-note');
     this.root.append(head, champ, this.rows, this.you, this.status);
     this.skeleton();
+    this.labels();
+    this.fill(null, null, null);
+    // the panel lives as long as the page: a language switch re-renders what it shows (no fetch)
+    onLangChange(() => {
+      this.labels();
+      this.fill(this.last.b, this.last.yesterday, this.last.me);
+      this.countdown.textContent = t('panel.resets', { time: untilReset(this.now()) });
+      if (this.shownDate) this.date.textContent = t('panel.date', { date: fmtDate(this.shownDate) });
+    });
+  }
+
+  /** The fixed texts in the current language. */
+  private labels(): void {
+    this.root.setAttribute('aria-label', t('panel.aria'));
+    this.title.textContent = t('panel.title');
+    this.status.textContent = t(this.last.status);
+  }
+
+  private setStatus(k: Key): void {
+    this.last.status = k;
+    this.status.textContent = t(k);
   }
 
   /** Start the 1 s countdown and the 60 s refresh (idempotent). */
@@ -74,7 +99,7 @@ export class BoardPanel {
   }
 
   private tick(): void {
-    this.countdown.textContent = `RESETS IN ${untilReset(this.now())}`;
+    this.countdown.textContent = t('panel.resets', { time: untilReset(this.now()) });
     const today = getServerDate() ?? utcDateKey(new Date());
     // a new UTC day on an open page: switch by itself; otherwise refresh every 60 s, never during a run
     // the day switch retries at most every 15 s (a failing API is not hammered once per second after midnight)
@@ -95,43 +120,44 @@ export class BoardPanel {
 
   async refresh(): Promise<void> {
     this.lastFetch = Date.now();
-    this.countdown.textContent = `RESETS IN ${untilReset(this.now())}`;
+    this.countdown.textContent = t('panel.resets', { time: untilReset(this.now()) });
     if (!online()) {
       this.shownDate = utcDateKey(new Date());
-      this.date.textContent = `${this.shownDate} UTC`;
+      this.date.textContent = t('panel.date', { date: fmtDate(this.shownDate) });
       this.fill(null, null, null);
-      this.status.textContent = 'BOARD OFFLINE';
+      this.setStatus('panel.offline');
       return;
     }
     const b = await fetchBoard();
     if (!b) {
       this.fill(null, null, null);
-      this.status.textContent = 'BOARD UNAVAILABLE';
+      this.setStatus('panel.unavailable');
       return;
     }
     this.shownDate = b.date;
-    this.date.textContent = `${b.date} UTC`;
+    this.date.textContent = t('panel.date', { date: fmtDate(b.date) });
     let yesterday: Board | null = null;
     if (!b.champion) yesterday = await fetchBoard(addDays(b.date, -1));
     const me = await fetchMe(b.date, save().playerId);
     this.fill(b, yesterday, me);
-    this.status.textContent = 'ONLY HARD - REPLAY-VERIFIED - NEW RUNS APPEAR IN ~20 MIN';
+    this.setStatus('panel.note');
   }
 
   private fill(b: Board | null, yesterday: Board | null, me: MyStanding | null): void {
+    this.last = { ...this.last, b, yesterday, me };
     const c = b?.champion ?? yesterday?.champion ?? null;
     const top = b?.top ?? [];
-    this.champTitle.textContent = b?.champion ? 'CHAMPION OF THE NIGHT' : yesterday?.champion ? "YESTERDAY'S CHAMPION" : 'CHAMPION OF THE NIGHT';
+    this.champTitle.textContent = t(!b?.champion && yesterday?.champion ? 'panel.yesterday' : 'panel.champion');
     if (c) {
       const first = (b?.champion ? top : (yesterday?.top ?? []))[0];
-      this.champScore.textContent = first ? String(first.score) : '';
-      this.champName.textContent = `${c.name}${first ? ` - ${first.hero.toUpperCase()}` : ''}`;
-      this.champMsg.textContent = c.message ? `"${c.message}"` : 'NO MESSAGE';
+      this.champScore.textContent = first ? fmtInt(first.score) : '';
+      this.champName.textContent = `${c.name}${first ? ` - ${t(`hero.${first.hero}.name`)}` : ''}`;
+      this.champMsg.textContent = c.message ? `"${c.message}"` : t('panel.noMessage');
       this.champMsg.classList.toggle('bp-empty', !c.message);
     } else {
       this.champScore.textContent = '';
-      this.champName.textContent = b ? 'NO CHAMPION YET. BE THE FIRST!' : '';
-      this.champMsg.textContent = 'NO MESSAGE';
+      this.champName.textContent = b ? t('panel.noChampion') : '';
+      this.champMsg.textContent = t('panel.noMessage');
       this.champMsg.classList.add('bp-empty');
     }
     this.rows.replaceChildren();
@@ -146,11 +172,11 @@ export class BoardPanel {
         n.append(icon);
         if (e.view === 'zoomed') n.append(el('span', 'bp-icon bp-phone'));
       }
-      li.append(n, el('span', 'bp-s', e ? String(e.score) : ''));
+      li.append(n, el('span', 'bp-s', e ? fmtInt(e.score) : ''));
       this.rows.append(li);
     }
     this.you.textContent = me
-      ? `YOU - BEST TODAY  ${me.verifiedScore ?? '-'}${me.verifiedRank ? ` (#${me.verifiedRank})` : ''}${me.pending ? ' (PENDING)' : ''}`
-      : 'YOU - BEST TODAY  -';
+      ? `${t('panel.you', { score: me.verifiedScore === null ? '-' : fmtInt(me.verifiedScore) })}${me.verifiedRank ? t('panel.rank', { rank: me.verifiedRank }) : ''}${me.pending ? t('panel.pending') : ''}`
+      : t('panel.you', { score: '-' });
   }
 }

@@ -5,6 +5,7 @@
  */
 import { BoardPanel } from './boardPanel';
 import { isInRun, onRunChange } from './runFlag';
+import { onLangChange, t } from '../i18n';
 
 let root: HTMLDivElement | null = null;
 let panel: BoardPanel | null = null;
@@ -22,14 +23,19 @@ export function openBoardOverlay(): void {
     root = document.createElement('div');
     root.className = 'bover';
     root.setAttribute('role', 'dialog');
-    root.setAttribute('aria-label', "Today's Hard best");
+    root.setAttribute('aria-label', t('panel.aria'));
     const bar = document.createElement('div');
     bar.className = 'bover-bar';
     const back = document.createElement('button');
     back.type = 'button';
     back.className = 'bover-back';
-    back.textContent = '< BACK';
+    back.textContent = t('overlay.back');
     back.addEventListener('click', closeBoardOverlay);
+    // the overlay lives as long as the page: a language switch re-labels it (the panel re-renders itself)
+    onLangChange(() => {
+      root?.setAttribute('aria-label', t('panel.aria'));
+      back.textContent = t('overlay.back');
+    });
     bar.append(back);
     const scroll = document.createElement('div');
     scroll.className = 'bover-scroll';
