@@ -36,7 +36,13 @@ const CONFUSABLE: Record<string, string> = {
 };
 
 const LEET: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', $: 's', '!': 'i', '|': 'l' };
-const WORDS: string[] = (profanity as { words: string[] }).words.map((w) => w.toLowerCase());
+/** A Cyrillic word as its Latin look-alike ("хуй" -> "xyй"): a mix of scripts is caught either way. */
+const latinize = (w: string): string => [...w].map((c) => CONFUSABLE[c] ?? c).join('');
+const ALL = (profanity as { words: string[] }).words.map((w) => w.toLowerCase().replace(/ё/g, 'е'));
+/** Matched anywhere in the name. */
+const WORDS: string[] = [...new Set(ALL.filter((w) => !w.startsWith('^')).flatMap((w) => [w, latinize(w)]))];
+/** Matched only at the start of a word or of the whole name ('^' in profanity.json). */
+const START_WORDS: string[] = [...new Set(ALL.filter((w) => w.startsWith('^')).map((w) => w.slice(1)).flatMap((w) => [w, latinize(w)]))];
 
 /** Lowercase, map leetspeak, drop separators and everything that is not a letter. Two variants for 1 -> i / l. */
 function skeletons(s: string): string[] {
@@ -57,8 +63,12 @@ function skeletons(s: string): string[] {
 }
 
 export function hasProfanity(s: string): boolean {
-  const sk = skeletons(normalizeText(s));
-  return WORDS.some((w) => sk.some((k) => k.includes(w.replace(/ё/g, 'е'))));
+  const v = normalizeText(s);
+  const sk = skeletons(v);
+  if (WORDS.some((w) => sk.some((k) => k.includes(w)))) return true;
+  // start-only words: the whole name (separators dropped: "s.u.k.a") or any word of it ("suka_bot", "Mr Suka")
+  const starts = [...sk, ...v.split(/[\s_.\-!?,':]+/u).filter(Boolean).flatMap(skeletons)];
+  return START_WORDS.some((w) => starts.some((k) => k.startsWith(w)));
 }
 
 export function validateName(raw: unknown): { ok: true; value: string } | { ok: false; error: TextError } {

@@ -364,3 +364,23 @@ describe('review hardening', () => {
     expect(await reason(await post(body({ name: 'fück you' })))).toBe('words');
   });
 });
+
+describe('Cyrillic names (the shared validator is the authority)', () => {
+  it('accepts a Cyrillic name and message, shows them on the board after verification, as valid UTF-8 JSON', async () => {
+    const r = await post(body({ name: 'Пётр Ёлкин', message: 'Парируй ночь, друг!', score: 900, playerId: pid(77) }));
+    expect(r.status).toBe(200);
+    expect(((await r.json()) as { accepted: boolean }).accepted).toBe(true);
+    await promoteAll();
+    const g = await get();
+    expect(g.headers.get('Content-Type')).toBe('application/json; charset=utf-8');
+    const b = (await g.json()) as { top: { name: string }[]; champion: { name: string; message: string | null } | null };
+    expect(b.top[0]?.name).toBe('Пётр Ёлкин');
+    expect(b.champion).toEqual({ name: 'Пётр Ёлкин', message: 'Парируй ночь, друг!' });
+  });
+  it('rejects Russian profanity in Cyrillic, in transliteration and in a look-alike mix (a reason code, no text)', async () => {
+    for (const name of ['Сука', 'suka_bot', 'Xу1ня', 'pizda']) {
+      const r = await post(body({ name, playerId: pid(78) }));
+      expect(await reason(r), name).toBe('words');
+    }
+  });
+});
