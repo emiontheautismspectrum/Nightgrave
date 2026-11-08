@@ -5,7 +5,9 @@ Inspired by the "one input, instantly addictive" feel of mousedash.net, with a d
 The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial to rename. Alternative: Nightspire.
 
 ## Design summary
-- Genre: fixed single arena, endless survival, no story, English-only UI.
+- Genre: fixed single arena, endless survival, no story. UI languages: en and ru (uz planned); code, comments,
+  identifiers, commits and docs stay English; UI strings only through `t()` (src/i18n; docs/I18N.md: adding a language,
+  glossary, fit rules). Replays, scores and the board never depend on the language; the Worker sends codes only.
 - Hero is a small pixel character. 2 heroes with DIFFERENT mechanics (the heroes pass; this replaced the old
   "cosmetic only" rule). All hero numbers live in `src/data/heroes.ts` (HeroDef: parry radius / arc / kills, dash
   distance, a typed `ability`); the sim dispatches on `ability.kind`, never on a hero name:
@@ -267,7 +269,7 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - After every meaningful change run an adversarial review: a fresh, read-only reviewer that tries to break it
   (determinism, edge cases, input handling, security of the backend). Fix real findings before the next stage.
 - Keep context small; do not re-read large files needlessly.
-- Code, comments, commits and configs in English only. No copyrighted characters, music or assets.
+- Code, comments, commits and configs in English only (UI text lives in src/i18n catalogs). No copyrighted characters, music or assets.
 
 ## Stages
 0. Art pipeline + style board (palette, hero, arena, projectiles) so the style can be approved early.

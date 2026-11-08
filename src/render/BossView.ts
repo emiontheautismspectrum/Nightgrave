@@ -3,7 +3,7 @@
  * visuals can never desync from the simulation.
  */
 import Phaser from 'phaser';
-import { addText, snap, type UIText } from './text';
+import { addText, setTextValue, snap, type UIText } from './text';
 import { TICK_RATE } from '../data/tuning';
 import { ticks } from '../sim/params';
 import type { SimParams } from '../sim/params';
@@ -11,6 +11,7 @@ import { parryActiveTicks } from '../sim/sim';
 import type { Boss, SimEvent, SimState } from '../sim/state';
 import { ATLAS, frame, type SpriteName } from './assets';
 import { save } from '../storage';
+import { t } from '../i18n';
 
 const BAR_H = 10;
 /** Full view: the classic bar under the arena; zoomed phone portrait: above the touch buttons, screen width. */
@@ -82,7 +83,7 @@ export class BossView {
   onEvent(e: SimEvent, st: SimState): void {
     switch (e.type) {
       case 'boss_intro':
-        snap(this.banner.setText(e.kind === 'eye' ? 'EYE SENTINEL' : 'LICH MAGE').setAlpha(1));
+        snap(setTextValue(this.banner, t(e.kind === 'eye' ? 'boss.eye' : 'boss.lich')).setAlpha(1));
         this.scene.tweens.killTweensOf(this.banner);
         this.scene.tweens.add({ targets: this.banner, alpha: 0, delay: 1500, duration: 400 });
         // the screen edges darken for the intro, then settle back
@@ -97,7 +98,7 @@ export class BossView {
         const s = this.scene.add.sprite(Math.round(e.x), Math.round(e.y), ATLAS, frame('death_burst')).setScale(2).setDepth(this.depth.fog - 1);
         s.play('death_burst').once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => s.destroy());
         if (save().settings.shake) this.scene.cameras.main.shake(200, 0.006);
-        snap(this.banner.setText(`+${e.points}  EMBER CHARGE`).setAlpha(1));
+        snap(setTextValue(this.banner, t('banner.ember', { points: e.points })).setAlpha(1));
         this.scene.tweens.killTweensOf(this.banner);
         this.scene.tweens.add({ targets: this.banner, alpha: 0, delay: 1200, duration: 400 });
         break;

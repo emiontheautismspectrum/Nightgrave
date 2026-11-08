@@ -13,7 +13,10 @@ import { addDays } from '../shared/daily';
 import { DIFFICULTIES, persist, save } from '../storage';
 import { audio } from './audio';
 import { ARENA_PROPS, ATLAS, MANIFEST, bgKey, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
-import { bestPage, creditsPage, DIFF_LABEL, heroPage, settingsPage, type MenuCtx } from './menus';
+import { bestPage, creditsPage, DIFF_LABEL, heroName, heroPage, heroShort, settingsPage, type MenuCtx } from './menus';
+import { chooseLang, getLang, LANGS, OWN_NAME, t, type Key } from '../i18n';
+import { fmtDate, fmtInt } from '../i18n/format';
+import { boardHeader, boardRow } from './boardTable';
 import { controlsLine, getDevice } from './hints';
 import { C, FONT, MenuView, type MenuPage } from './ui';
 import { addText } from './text';
@@ -48,7 +51,7 @@ export class TitleScene extends Phaser.Scene {
   /** Board state for the title: lines are rendered only with Phaser text objects. */
   private board: Board | null = null;
   private boardState: 'offline' | 'loading' | 'error' | 'ready' = online() ? 'loading' : 'offline';
-  private champion: { label: string; name: string; message: string | null } | null = null;
+  private champion: { label: Key; name: string; message: string | null } | null = null;
   private onBoardPage = false;
   private shownDevice = getDevice();
 
@@ -200,11 +203,11 @@ export class TitleScene extends Phaser.Scene {
     } else {
       this.board = b;
       this.boardState = 'ready';
-      if (b.champion) this.champion = { label: "TODAY'S CHAMPION", ...b.champion };
+      if (b.champion) this.champion = { label: 'champ.today', ...b.champion };
       else {
         const y = await fetchBoard(addDays(b.date, -1));
         if (!this.scene.isActive()) return;
-        if (y?.champion) this.champion = { label: "YESTERDAY'S CHAMPION", ...y.champion };
+        if (y?.champion) this.champion = { label: 'champ.yesterday', ...y.champion };
       }
     }
     if (this.onBoardPage) this.showBoard();
@@ -216,13 +219,13 @@ export class TitleScene extends Phaser.Scene {
    * lines with a clean "..." (portrait phones: as wide as the screen allows; desktop: one 40-char line fits).
    */
   private boardLines(): string[] {
-    if (this.boardState === 'offline') return ['ONLINE BOARD: OFFLINE'];
-    if (this.boardState === 'loading') return ['ONLINE BOARD: LOADING'];
-    if (this.boardState === 'error') return ['BOARD UNAVAILABLE'];
+    if (this.boardState === 'offline') return [t('board.footOffline')];
+    if (this.boardState === 'loading') return [t('board.footLoading')];
+    if (this.boardState === 'error') return [t('board.unavailable')];
     const c = this.champion;
-    if (!c) return ['NO CHAMPION YET TODAY'];
+    if (!c) return [t('champ.none')];
     const chars = Math.floor((this.scale.width - 48) / 8);
-    return [c.label, ...clampLines(c.name, chars, 1), ...(c.message ? clampLines(`"${c.message}"`, chars, 2) : [])];
+    return [t(c.label), ...clampLines(c.name, chars, 1), ...(c.message ? clampLines(`"${c.message}"`, chars, 2) : [])];
   }
 
   private showBoard(): void {
@@ -230,17 +233,17 @@ export class TitleScene extends Phaser.Scene {
     const b = this.board;
     const lines: string[] = [];
     // nothing to show: a short centred message (the panel sizes itself to it)
-    if (this.boardState === 'loading') lines.push('LOADING...');
-    else if (this.boardState === 'offline') lines.push('BOARD OFFLINE.', 'YOUR HARD RUNS ARE SAVED LOCALLY.');
-    else if (!b) lines.push('BOARD UNAVAILABLE.');
-    else if (!b.top.length) lines.push('NO VERIFIED RUNS YET TODAY.', 'BE THE FIRST!');
+    if (this.boardState === 'loading') lines.push(t('board.loading'));
+    else if (this.boardState === 'offline') lines.push(t('board.offline1'), t('board.offline2'));
+    else if (!b) lines.push(t('board.unavailableDot'));
+    else if (!b.top.length) lines.push(t('board.empty1'), t('board.empty2'));
     else {
-      lines.push(`HARD ${b.date} UTC`, '', '#  NAME              SCORE  HERO    TIME');
+      lines.push(t('board.dateLine', { date: fmtDate(b.date) }), '', boardHeader());
       for (const e of b.top)
-        lines.push(`${String(e.rank).padStart(2)} ${e.name.padEnd(16)} ${String(e.score).padStart(7)}  ${e.hero.toUpperCase().padEnd(6)} ${String(Math.floor(e.durationTicks / 60)).padStart(4)}S`);
+        lines.push(boardRow(String(e.rank), e.name, fmtInt(e.score, undefined, 7), heroShort(e.hero), t('unit.seconds', { n: Math.floor(e.durationTicks / 60) })));
     }
     this.menu.show({
-      title: "TODAY'S BEST",
+      title: t('title.todaysBest'),
       items: [],
       top: 48,
       lines: () => lines,
@@ -259,11 +262,12 @@ export class TitleScene extends Phaser.Scene {
     const sv = save();
     const page: MenuPage = {
       title: TITLE.toUpperCase(),
-      top: 76,
+      top: 72,
+      gap: 13, // nine rows with the language switch (desktop: the panel stays inside the 270 px screen)
       items: [
-        { label: () => 'PLAY', onActivate: () => this.cfg.startRun(this) },
+        { label: () => t('title.play'), onActivate: () => this.cfg.startRun(this) },
         {
-          label: () => `DIFFICULTY ${DIFF_LABEL(sv.difficulty)}`,
+          label: () => t('title.difficulty', { diff: DIFF_LABEL(sv.difficulty) }),
           onLeft: () => ((sv.difficulty = DIFFICULTIES[(DIFFICULTIES.indexOf(sv.difficulty) + 2) % 3]!), persist()),
           onRight: () => ((sv.difficulty = DIFFICULTIES[(DIFFICULTIES.indexOf(sv.difficulty) + 1) % 3]!), persist()),
         },
@@ -273,22 +277,33 @@ export class TitleScene extends Phaser.Scene {
           label: () => {
             if (sv.difficulty !== 'hard') return '';
             const d = getServerDate() ?? utcDateKey(new Date());
-            return this.cfg.isTouch() ? `DAILY SEED ${d}\nONLINE BOARD` : `DAILY SEED ${d} - ONLINE BOARD`;
+            return t(this.cfg.isTouch() ? 'title.dailySeedTouch' : 'title.dailySeed', { date: fmtDate(d) });
           },
           disabled: true,
         },
-        { label: () => `HERO ${sv.hero.toUpperCase()}`, onActivate: () => this.menu.show(heroPage(() => this.showMain(3), () => this.showMain(3))) },
-        { label: () => 'SETTINGS', onActivate: () => this.menu.show(settingsPage(this.ctx(), () => this.showMain(4))) },
-        { label: () => 'BEST SCORES', onActivate: () => this.showBest() },
+        { label: () => t('title.hero', { hero: heroName(sv.hero) }), onActivate: () => this.menu.show(heroPage(() => this.showMain(3), () => this.showMain(3))) },
+        { label: () => t('title.settings'), onActivate: () => this.menu.show(settingsPage(this.ctx(), () => this.showMain(4))) },
+        { label: () => t('title.bestScores'), onActivate: () => this.showBest() },
         // phones: the full-screen board overlay (same content as the desktop side panel)
-        { label: () => (this.cfg.isTouch() ? 'BOARD' : "TODAY'S BEST"), onActivate: () => (this.cfg.isTouch() ? openBoardOverlay() : this.showBoard()) },
-        { label: () => 'CREDITS', onActivate: () => this.menu.show(creditsPage(() => this.showMain(7))) },
+        { label: () => t(this.cfg.isTouch() ? 'title.board' : 'title.todaysBest'), onActivate: () => (this.cfg.isTouch() ? openBoardOverlay() : this.showBoard()) },
+        { label: () => t('title.credits'), onActivate: () => this.menu.show(creditsPage(() => this.showMain(7))) },
+        // the language switch: each language's OWN short name, the current one in brackets; reachable like any row
+        // (keys, pad, mouse, touch). A pick here is a manual choice and is stored
+        { label: () => langSwitchLabel(), onLeft: () => this.switchLang(-1), onRight: () => this.switchLang(1), onActivate: () => this.switchLang(1) },
       ],
       // the controls hint for the active device and the champion block: the footer (pinned at the bottom in portrait)
       lines: () => [],
       foot: () => [controlsLine(getDevice(), save().settings.touchControls !== 'drag'), '', ...this.boardLines()],
     };
     this.menu.show(page, focus);
+  }
+
+  /** Switch to the previous / next language and rebuild the title page in it (the switch keeps the focus). */
+  private switchLang(d: number): void {
+    const i = LANGS.indexOf(getLang());
+    const next = LANGS[(i + d + LANGS.length) % LANGS.length]!;
+    chooseLang(next, (v) => ((save().settings.language = v), persist()));
+    this.showMain(TITLE_LANG_ROW);
   }
 
   private showBest(): void {
@@ -312,3 +327,11 @@ export class TitleScene extends Phaser.Scene {
 }
 
 export { C, FONT };
+
+/** The title page's language row (its index: the focus after a switch). */
+const TITLE_LANG_ROW = 8;
+
+/** "[EN]  RU": every language by its own short name, the current one in brackets (language-neutral). */
+export function langSwitchLabel(): string {
+  return LANGS.map((l) => (l === getLang() ? `[${OWN_NAME[l].short}]` : ` ${OWN_NAME[l].short} `)).join(' ');
+}

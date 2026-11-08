@@ -4,6 +4,7 @@
  */
 import { isHeroId, type HeroId } from '../data/heroes';
 import { DATE_RE } from '../shared/daily';
+import { t } from '../i18n';
 
 export const API_BASE: string = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, '') ?? '';
 export const online = (): boolean => API_BASE.length > 0;
@@ -150,32 +151,12 @@ export async function submitRun(body: Record<string, unknown>): Promise<SubmitRe
   }
 }
 
-/** Friendly words for each server reason code (never the raw server text). */
+const REASONS = ['outdated', 'rate', 'date', 'name', 'message', 'words', 'too_high', 'paused', 'busy', 'not_best'] as const;
+
+/** Friendly words for each server reason code (never the raw server text), in the current language. */
 export function reasonText(reason: string | undefined): string {
-  switch (reason) {
-    case 'outdated':
-      return 'GAME UPDATED: RELOAD THE PAGE';
-    case 'rate':
-      return 'TOO MANY TRIES: WAIT A BIT';
-    case 'date':
-      return 'THAT DAY IS OVER';
-    case 'name':
-      return 'INVALID NAME';
-    case 'message':
-      return 'INVALID MESSAGE';
-    case 'words':
-      return 'NOT ALLOWED WORDS';
-    case 'too_high':
-      return 'SCORE NOT PLAUSIBLE';
-    case 'paused':
-      return 'SUBMISSIONS ARE PAUSED';
-    case 'busy':
-      return 'BOARD BUSY: TRY AGAIN LATER';
-    case 'not_best':
-      return 'YOUR BEST (OR PENDING) TODAY IS HIGHER';
-    default:
-      return 'COULD NOT SUBMIT';
-  }
+  // the Worker sends CODES only; each known code has a catalog entry, anything else is the generic text
+  return REASONS.includes(reason as never) ? t(`reason.${reason as (typeof REASONS)[number]}`) : t('reason.other');
 }
 
 /** Would `score` enter this board's top 10, and at which rank (ties: the earlier entry stays ahead)? */

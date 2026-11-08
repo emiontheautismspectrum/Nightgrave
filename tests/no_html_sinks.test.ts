@@ -35,8 +35,9 @@ describe('no HTML sinks', () => {
     expect(src).toMatch(/el\.maxLength = max;/);
     expect(src).toMatch(/el\.autocomplete = 'off';/);
     expect(src).toMatch(/el\.spellcheck = false;/);
-    expect(src).toMatch(/this\.field\('NAME', 16,/);
-    expect(src).toMatch(/this\.field\('MESSAGE \(OPTIONAL\)', 40,/);
+    // the placeholders come from the catalog (src/i18n); the length caps stay 16 and 40
+    expect(src).toMatch(/this\.field\(t\('submit\.namePh'\), 16,/);
+    expect(src).toMatch(/this\.field\(t\('submit\.messagePh'\), 40,/);
     expect(src).not.toMatch(/textContent\s*=\s*[^;]*\.value/);
   });
 });

@@ -6,6 +6,7 @@
  */
 import { TOUCH_INPUT, type TouchControls, type TouchSmoothing } from './data/input';
 import { HERO_IDS, isHeroId, type HeroId } from './data/heroes';
+import { LANG_SETTINGS, type LangSetting } from './i18n/langs';
 export const STORAGE_KEY = 'nightgrave.v1';
 export const BEST_PER_DIFFICULTY = 5;
 export const DAILY_DAYS = 7;
@@ -38,6 +39,8 @@ export interface Settings {
   hintsDone: boolean;
   hintParrySeen: boolean;
   hintDashSeen: boolean;
+  /** UI language: 'auto' follows the browser (src/i18n/detect.ts) and is never replaced by the detected value. */
+  language: LangSetting;
 }
 
 export interface BestEntry {
@@ -90,6 +93,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hintsDone: false,
   hintParrySeen: false,
   hintDashSeen: false,
+  language: 'auto',
 };
 
 export function defaultSave(): SaveData {
@@ -149,6 +153,8 @@ export function validateSave(raw: unknown): SaveData {
     hintsDone: bool(s.hintsDone, d.hintsDone),
     hintParrySeen: bool(s.hintParrySeen, d.hintParrySeen),
     hintDashSeen: bool(s.hintDashSeen, d.hintDashSeen),
+    // older saves have no language: 'auto'. Anything else that is not a known language is ignored ('auto')
+    language: oneOf(s.language, LANG_SETTINGS, d.language),
   };
   out.hero = oneOf(raw.hero, HEROES, 'knight');
   out.difficulty = oneOf(raw.difficulty, DIFFICULTIES, 'medium');

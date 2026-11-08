@@ -3,7 +3,7 @@
  * Rendering only READS sim state (and the per-tick event list); it never mutates it.
  */
 import Phaser from 'phaser';
-import { addText, setTextColor, snap, type UIText } from './text';
+import { addText, setTextColor, setTextValue, snap, type UIText } from './text';
 import { TITLE, VIEW_HEIGHT, VIEW_WIDTH } from '../config';
 import { TICK_RATE, type Difficulty } from '../data/tuning';
 import { utcDateKey } from '../daily';
@@ -37,7 +37,9 @@ import { emitAudioEvent } from './events';
 import { InputCollector } from './input';
 import { settingsPage, type MenuCtx } from './menus';
 import { canRestart, isPortraitView, RunDriver, type PauseReason } from './runDriver';
-import { cardLines, ContextHints, getDevice, HINT_TEXT } from './hints';
+import { cardLines, ContextHints, getDevice, hintText } from './hints';
+import { t as tr } from '../i18n';
+import { fmtDayMonth, fmtDec, fmtInt } from '../i18n/format';
 import { TouchModel, touchStick, type TouchButton, type TouchStick } from './touch';
 import { C, hitPad, MenuView, onTap, type MenuPage } from './ui';
 
@@ -227,6 +229,11 @@ export class GameScene extends Phaser.Scene {
         frames: this.textures.get(ATLAS).getFrameNames().filter((n) => n.startsWith('shell_')).map((n) => { const f = this.textures.getFrame(ATLAS, n); return [n, f.cutX, f.cutY, f.cutWidth, f.cutHeight]; }),
         panel: this.panel.visible ? this.panel.getBounds() : null,
         body: getComputedStyle(document.body).backgroundColor,
+        // HUD texts (non-empty, visible) and the pause target: the per-language overlap check (tests-e2e/layout.cjs)
+        hud: [this.hudScore, this.hudMult, this.hudX2, this.hudWave, this.hudDaily].filter((o) => o.visible && o.text.trim() !== '').map((o) => { const b = o.getBounds(); return { text: o.text, box: [b.x, b.y, b.width, b.height] }; }),
+        pauseHit: this.pauseHitRect(),
+        W: this.scale.width,
+        H: this.scale.height,
         base: { x: this.shellView.debugBase().x, y: this.shellView.debugBase().y, w: this.shellView.debugBase().width },
       });
     this.buildHud();
@@ -429,6 +436,7 @@ export class GameScene extends Phaser.Scene {
     this.input2.touch.rebase(); // a finger held across the switch must not jump by the change of screen space
     this.syncShell();
     this.layoutHud();
+    this.relayoutHint();
     requestRelayout();
   }
 
@@ -557,14 +565,14 @@ export class GameScene extends Phaser.Scene {
 
   private showPauseMenu(focus = 0): void {
     const page: MenuPage = {
-      title: 'PAUSED',
+      title: tr('pause.title'),
       top: 90,
       items: [
-        { label: () => 'RESUME', onActivate: () => this.closePause() },
+        { label: () => tr('pause.resume'), onActivate: () => this.closePause() },
         // restart or quit from pause discards the run: it is never saved as a best score
-        { label: () => 'RESTART', onActivate: () => (this.menu.hide(), this.newRun()) },
-        { label: () => 'SETTINGS', onActivate: () => this.menu.show(settingsPage(this.menuCtx(), () => this.showPauseMenu(2))) },
-        { label: () => 'QUIT TO TITLE', onActivate: () => this.cfg.quit(this) },
+        { label: () => tr('pause.restart'), onActivate: () => (this.menu.hide(), this.newRun()) },
+        { label: () => tr('pause.settings'), onActivate: () => this.menu.show(settingsPage(this.menuCtx(), () => this.showPauseMenu(2))) },
+        { label: () => tr('pause.quit'), onActivate: () => this.cfg.quit(this) },
       ],
       onBack: () => this.closePause(),
     };
@@ -572,7 +580,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private menuCtx(): MenuCtx {
-    return { menu: this.menu, isTouch: this.cfg.isTouch, onSettings: () => this.applySettings(), onShowTouchHint: () => (this.closePause(), this.showTouchHint()) };
+    return { menu: this.menu, isTouch: this.cfg.isTouch, inRun: true, onSettings: () => this.applySettings(), onShowTouchHint: () => (this.closePause(), this.showTouchHint()) };
   }
 
   private closePause(): void {
@@ -608,6 +616,15 @@ export class GameScene extends Phaser.Scene {
    * First run on this device: one card with the controls of the active device and the colour rule. Dismissed by any
    * input after 250 ms; the dismissing press is never used as a parry or dash (the run is paused, presses cleared).
    */
+  /** The first-run card was laid out for the previous screen (e.g. the switch to the portrait view): lay it out again. */
+  private relayoutHint(): void {
+    if (!this.hint) return;
+    if (this.hintDismiss) this.input.keyboard?.off('keydown', this.hintDismiss);
+    this.hint.destroy();
+    this.hint = null;
+    this.showTouchHint();
+  }
+
   private showTouchHint(): void {
     if (this.hint) return;
     this.driver.pause('hint');
@@ -657,8 +674,8 @@ export class GameScene extends Phaser.Scene {
       out.push(snap(addText(this, x, above ? y - hh - 7 : y + hh + 7, label, { color: C.gold }).setOrigin(0.5)));
     };
     const S = t.stickLayout;
-    if (t.opts.stick && S) mark(S.x, S.y, S.r, 'MOVE');
-    for (const b of t.buttons()) mark(b.x, b.y, b.r, b.id === 'parry' ? 'PARRY' : 'DASH', b);
+    if (t.opts.stick && S) mark(S.x, S.y, S.r, tr('label.move'));
+    for (const b of t.buttons()) mark(b.x, b.y, b.r, tr(b.id === 'parry' ? 'label.parry' : 'label.dash'), b);
     return out;
   }
 
@@ -682,7 +699,7 @@ export class GameScene extends Phaser.Scene {
         x = this.pl.W / 2;
         y = sy < v.y + v.h / 2 ? v.y + v.h - 16 : v.y + 16;
       }
-      const t = snap(addText(this, x, y, HINT_TEXT[k], { color: k === 'parry' ? C.violet : '#d12b3a' }).setOrigin(0.5).setDepth(D_HUD));
+      const t = snap(addText(this, x, y, hintText(k), { color: k === 'parry' ? C.violet : '#d12b3a' }).setOrigin(0.5).setDepth(D_HUD));
       this.ctxText = t;
       this.tweens.add({ targets: t, alpha: 0, delay: 1400, duration: 300, onComplete: () => t.destroy() });
       // each hint is remembered on its own (a player who never meets a blade still sees 'PARRY!' only once)
@@ -734,7 +751,7 @@ export class GameScene extends Phaser.Scene {
     // one baseline (y 9), fixed gaps
     this.hudScore = addText(this, HUD_X.score, 9, '');
     this.hudMult = addText(this, HUD_X.mult, 9, '', { color: C.bone });
-    this.hudX2 = addText(this, 0, 9, 'X2', { color: C.gold }).setVisible(false);
+    this.hudX2 = addText(this, 0, 9, tr('hud.x2'), { color: C.gold }).setVisible(false);
     this.dblGfx = this.add.graphics().setDepth(D_FOG + 1.5);
     // the HUD is as bright as the menu text (bone), crisp 8 px BitmapText on whole pixels, nothing drawn above it
     this.hudWave = addText(this, HUD_X.wave, 9, '', { color: C.bone });
@@ -778,7 +795,7 @@ export class GameScene extends Phaser.Scene {
     this.runSeed = run.seed;
     this.submit?.close();
     this.submit = null;
-    this.hudDaily.setText(run.label);
+    setTextValue(this.hudDaily, run.label);
     for (const s of this.orbs.values()) s.destroy();
     this.orbs.clear();
     for (const v of this.casterViews.values()) for (const o of [v.body, v.tele, v.fx]) o.destroy();
@@ -904,7 +921,7 @@ export class GameScene extends Phaser.Scene {
         // the full guard absorbed a hit: the projectile shatters, a short shake (the hero blinks through the i-frames)
         this.parried.add(e.id);
         this.burst('parry_spark', e.x, e.y);
-        this.floatLabel('GUARD', h.x, h.y - 18, LABEL.step);
+        this.floatLabel(tr('label.guard'), h.x, h.y - 18, LABEL.step);
         if (save().settings.shake) this.cameras.main.shake(90, this.reducedFx() ? 0.003 : 0.006);
         this.vibrate(40);
         break;
@@ -924,7 +941,8 @@ export class GameScene extends Phaser.Scene {
       }
       case 'mult_step': {
         // a small label near the hero, away from the nearest projectile; the HUD multiplier pulses
-        const txt = `${e.perfect ? 'PERFECT ' : ''}X${e.multiplier.toFixed(2)}`;
+        const m = fmtDec(e.multiplier, 2);
+        const txt = e.perfect ? tr('label.perfect', { m }) : tr('label.mult', { m });
         const at = labelSpot(this.sim.state, this.labelBounds(), this.killsThisTick, txt.length * 8);
         this.floatLabel(txt, at.x, at.y, e.perfect ? LABEL.perfect : LABEL.step);
         this.killsThisTick.push({ x: at.x, y: at.y, w: txt.length * 8 }); // the points popup keeps clear of it
@@ -955,7 +973,7 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'wave':
         if (e.wave > 0) {
-          snap(this.banner.setText(`WAVE ${e.wave + 1}`).setAlpha(1));
+          snap(setTextValue(this.banner, tr('banner.wave', { n: e.wave + 1 })).setAlpha(1));
           this.tweens.add({ targets: this.banner, alpha: 0, delay: 900, duration: 400 });
         }
         break;
@@ -1028,18 +1046,18 @@ export class GameScene extends Phaser.Scene {
     const best = Math.max(prevBest, this.cfg.startWave ? 0 : score);
     this.panelText.setText(
       [
-        isNew ? 'NEW RECORD!' : `SCORE ${score}`,
-        isNew ? `SCORE ${score}` : `BEST ${best}`,
-        `TIME ${secs.toFixed(1)}S  PARRIES ${st.parryCount}`,
-        `BOSSES ${st.bossesDefeated}`,
-        this.cfg.isTouch() ? 'TAP TO RETRY' : 'CLICK / SPACE / A TO RETRY',
+        isNew ? tr('death.newRecord') : tr('death.score', { score: fmtInt(score) }),
+        isNew ? tr('death.score', { score: fmtInt(score) }) : tr('death.best', { best: fmtInt(best) }),
+        tr('death.time', { secs: fmtDec(secs, 1), parries: st.parryCount }),
+        tr('death.bosses', { n: st.bossesDefeated }),
+        this.cfg.isTouch() ? tr('death.tapRetry') : tr('death.keyRetry'),
       ].join('\n'),
     );
     snap(setTextColor(this.panelText, isNew ? C.gold : C.bone));
     this.panel.setVisible(true);
     // phones: a Board button above the death panel opens the full-screen board overlay
     if (this.cfg.isTouch() && online()) {
-      const b = snap(addText(this, this.scale.width / 2, this.panelCenterY() - 62, '[ BOARD ]', { color: C.gold }).setOrigin(0.5).setDepth(D_HUD + 6));
+      const b = snap(addText(this, this.scale.width / 2, this.panelCenterY() - 62, tr('death.board'), { color: C.gold }).setOrigin(0.5).setDepth(D_HUD + 6));
       const pd = hitPad(b.width, b.height, 6);
       b.setInteractive({ hitArea: new Phaser.Geom.Rectangle(-pd.x, -pd.y, b.width + 2 * pd.x, b.height + 2 * pd.y), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
       onTap(b, () => openBoardOverlay(), (down) => b.setAlpha(down ? 0.6 : 1));
@@ -1120,11 +1138,11 @@ export class GameScene extends Phaser.Scene {
     const ptr = this.input.activePointer;
     const cur = this.input2.cursorPos();
     this.reticle.setVisible(!!cur && st.alive && !this.driver.paused).setPosition(Math.round(cur?.x ?? ptr.worldX), Math.round(cur?.y ?? ptr.worldY));
-    this.hudScore.setText(`${this.sim.score}`);
-    this.hudMult.setText(`X${(st.multiplier / 100).toFixed(2)}`);
+    this.hudScore.setText(fmtInt(this.sim.score, undefined, 8)); // the HUD score column: 8 characters
+    this.hudMult.setText(tr('hud.mult', { m: fmtDec(st.multiplier / 100, 2) }));
     this.drawScoreFeedback();
-    this.hudWave.setText(st.wave >= 0 ? `WAVE ${st.wave + 1}` : '');
-    this.hudDaily.setText(this.cfg.difficulty === 'hard' ? `HARD ${this.runDate.slice(5)}` : '');
+    setTextValue(this.hudWave, st.wave >= 0 ? tr('hud.wave', { n: st.wave + 1 }) : '');
+    setTextValue(this.hudDaily, this.cfg.difficulty === 'hard' ? tr('hud.daily', { date: fmtDayMonth(this.runDate) }) : '');
     const touch = this.cfg.isTouch();
     for (const o of Object.values(this.icons)) o.setVisible(!touch);
     if (!touch) {

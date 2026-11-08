@@ -22,7 +22,7 @@ let failed = 0;
  * width and visible at SOME scroll position, at least 44 CSS px in both directions, targets never closer than 4 px.
  */
 function checkTouch(name, L) {
-  const errs = [];
+  const errs = [...headErrs(L)];
   if (!L) errs.push('no layout');
   else {
     const [W] = L.screen;
@@ -93,9 +93,17 @@ function checkTouch(name, L) {
   console.log(`${errs.length ? 'FAIL' : 'ok  '} ${name}${errs.length ? ': ' + [...new Set(errs)].slice(0, 4).join('; ') : ''}`);
 }
 
+/** The page title never runs into BACK (any language). */
+function headErrs(L) {
+  const h = (L && L.head) || [];
+  if (h.length < 2) return [];
+  const [a, b] = [h[0].box, h[1].box];
+  return a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3] ? [`title overlaps BACK: "${h[0].text}"`] : [];
+}
+
 function check(name, L) {
   if (L && L.touch) return checkTouch(name, L);
-  const errs = [];
+  const errs = [...headErrs(L)];
   if (!L) errs.push('no layout');
   else {
     const [px, py, pw, ph] = L.panel;
@@ -159,6 +167,26 @@ async function runShell(page, label, ins) {
   console.log(`${errs.length ? 'FAIL' : 'ok  '} ${label} run screen (shell)${errs.length ? `: ${errs.join('; ')}` : ''}`);
 }
 
+/** The run HUD in any layout and language: every readout on the screen, none overlapping another or the pause target. */
+async function runHud(page, label) {
+  const h = await page.evaluate(() => { const s = window.__ngShell && window.__ngShell(); return s && JSON.parse(JSON.stringify({ hud: s.hud, pauseHit: s.pauseHit, W: s.W, H: s.H, layout: s.visible ? { plateH: s.layout.shell.plateH } : null })); });
+  const errs = [];
+  if (!h) errs.push('no HUD snapshot');
+  else {
+    const ov = (a, b) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
+    const p = h.pauseHit;
+    for (const t of h.hud) {
+      const [x, y, w, hh] = t.box;
+      if (x < -0.5 || y < -0.5 || x + w > h.W + 0.5 || y + hh > h.H + 0.5) errs.push(`off screen: "${t.text}"`);
+      if (h.layout && y + hh > h.layout.plateH + 0.5) errs.push(`below the top plate: "${t.text}"`);
+      if (ov(t.box, [p.x, p.y, p.w, p.h])) errs.push(`under the pause target: "${t.text}"`);
+    }
+    for (let i = 0; i < h.hud.length; i++) for (let j = i + 1; j < h.hud.length; j++) if (ov(h.hud[i].box, h.hud[j].box)) errs.push(`overlap: "${h.hud[i].text}" / "${h.hud[j].text}"`);
+  }
+  if (errs.length) failed++;
+  console.log(`${errs.length ? 'FAIL' : 'ok  '} ${label} run HUD${errs.length ? `: ${errs.join('; ')}` : ''}`);
+}
+
 (async () => {
   // the board API is mocked (a long champion name and message): the title's champion block is laid out for real
   execSync('npx vite build', { cwd: ROOT, stdio: 'ignore', env: { ...process.env, VITE_SMOKE: '1', VITE_API_BASE: 'http://localhost:8787' } });
@@ -169,6 +197,9 @@ async function runShell(page, label, ins) {
     const phone = (w, h, dpr) => ({ viewport: { width: w, height: h }, deviceScaleFactor: dpr, isMobile: true, hasTouch: true });
     const runs = [
       ['desktop', { viewport: { width: 1440, height: 810 } }],
+      ['desktop 1280x720', { viewport: { width: 1280, height: 720 } }],
+      // the narrowest supported portrait phone
+      ['portrait 320x568', phone(320, 568, 2)],
       ['phone', { ...devices['Pixel 7 landscape'] }],
       ['landscape 667x375', phone(667, 375, 3)],
     ];
@@ -178,7 +209,10 @@ async function runShell(page, label, ins) {
     runs.push(['landscape 844x390 insets 47/34', phone(844, 390, 3), [0, 21]]);
     const now = new Date();
     const BOARD = { date: now.toISOString().slice(0, 10), serverNow: now.toISOString(), champion: { name: 'WWWWWWWWWWWWWWWW', message: 'Supercalifragilistic parries forever and ever, night' }, top: [] };
-    for (const [label, opts, ins] of runs) {
+    // every layout in every UI language (the stored setting; no URL parameter or debug hook for the language)
+    for (const lang of ['en', 'ru'])
+    for (const [label0, opts, ins] of runs.filter(([n]) => !process.env.LAYOUT_ONLY || n.startsWith(process.env.LAYOUT_ONLY))) {
+      const label = `${lang} ${label0}`;
       const ctx = await b.newContext(opts);
       await ctx.route('http://localhost:8787/api/daily**', (r) => r.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify(BOARD) }));
       await ctx.route('http://localhost:8787/api/daily/me', (r) => r.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify({ verifiedScore: null, verifiedRank: null, pending: false, serverNow: now.toISOString() }) }));
@@ -191,7 +225,7 @@ async function runShell(page, label, ins) {
           });
         }, ins);
       await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} }); // tests skip the site intro
-      await ctx.addInitScript(() => localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'hard', settings: { touchHintSeen: true, hintsDone: true }, best: {}, daily: [] })));
+      await ctx.addInitScript((lg) => localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'hard', settings: { touchHintSeen: true, hintsDone: true, language: lg }, best: {}, daily: [] })), lang);
       const page = await ctx.newPage();
       const L = () => page.evaluate(() => window.__ngLayout);
       const key = async (k, n = 1) => {
@@ -200,7 +234,10 @@ async function runShell(page, label, ins) {
       };
       await page.goto('http://localhost:4183/');
       await sleep(1800);
-      check(`${label} title`, { ...(await L()), balance: label.startsWith('portrait') });
+      check(`${label} title`, { ...(await L()), balance: label0.startsWith('portrait') });
+      const lg = (await L()).lang;
+      if (lg !== lang) failed++;
+      console.log(`${lg === lang ? 'ok  ' : 'FAIL'} ${label} language is ${lg}, <html lang> ${(await L()).htmlLang}`);
       if (ins) {
         // the canvas sits inside the simulated insets: nothing under the status bar or the home indicator
         const r = await page.evaluate(() => { const c = document.querySelector('#game canvas').getBoundingClientRect(); return [c.top, c.bottom, innerHeight]; });
@@ -216,7 +253,7 @@ async function runShell(page, label, ins) {
         await key('Enter');
         if (sub) {
           // settings -> CONTROLS: the last focusable item before the touch-only ones
-          const n = label === 'phone' ? 7 : 7;
+          const n = 7;
           await key('ArrowDown', n);
           await key('Enter');
         }
@@ -226,7 +263,8 @@ async function runShell(page, label, ins) {
       await sleep(1500);
       await key('Enter'); // play
       await sleep(400);
-      if (label.startsWith('portrait')) await runShell(page, label, ins);
+      if (label0.startsWith('portrait')) await runShell(page, label, ins);
+      await runHud(page, label);
       await key('KeyP'); // pause
       check(`${label} pause`, await L());
       await ctx.close();

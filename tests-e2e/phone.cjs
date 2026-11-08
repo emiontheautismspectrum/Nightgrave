@@ -6,6 +6,7 @@
  * Screenshots: assets/preview/phone_portrait.png, phone_landscape.png, phone_board.png.
  * Run: npm run e2e:phone
  */
+const { LANG, L: lab } = require('./lang.cjs');
 const { chromium, devices } = require('playwright');
 const { spawn, execSync } = require('node:child_process');
 const path = require('node:path');
@@ -33,7 +34,7 @@ const ok = (cond, name, extra = '') => {
 async function open(b, device, { manual = false, url = URL0 } = {}) {
   const ctx = await b.newContext({ ...device });
   await ctx.addInitScript(() => { try { sessionStorage.setItem('nightgrave.intro', '1'); } catch {} });
-  await ctx.addInitScript(() => localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'hard', settings: { touchHintSeen: true, hintsDone: true }, best: {}, daily: [] })));
+  await ctx.addInitScript((lg) => localStorage.setItem('nightgrave.v1', JSON.stringify({ v: 1, difficulty: 'hard', settings: { touchHintSeen: true, hintsDone: true, language: lg }, best: {}, daily: [] })), LANG);
   if (manual) await ctx.addInitScript(() => { window.__ngManual = true; });
   await ctx.route(`${API}/api/daily**`, (r) => r.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify(BOARD) }));
   await ctx.route(`${API}/api/daily/me`, (r) => r.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify({ verifiedScore: 31250, verifiedRank: 4, pending: false }) }));
@@ -116,7 +117,7 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
         return { ta: cs.touchAction, us: cs.userSelect || cs.webkitUserSelect, sh: document.documentElement.scrollHeight, ih: innerHeight, display: m.display, orientation: m.orientation, theme: m.theme_color };
       });
       ok(mob.ta === 'none' && mob.us === 'none' && mob.sh <= mob.ih + 1 && mob.display === 'fullscreen' && mob.orientation === 'any' && mob.theme === '#0b0d12', 'mobile: no pan / zoom / select, no page scroll, fullscreen manifest', JSON.stringify(mob));
-      ok(await s.tapText('BOARD'), 'title: BOARD item tapped');
+      ok(await s.tapText(lab('BOARD')), 'title: BOARD item tapped');
       await sleep(600);
       const ov = await s.page.evaluate(() => {
         const o = document.querySelector('.bover');
@@ -179,20 +180,20 @@ async function open(b, device, { manual = false, url = URL0 } = {}) {
       await sleep(700);
       d = await s.dbg();
       ok(d.paused && d.menu && d.zoomed === !portrait, 'rotation pauses (pause menu on the new layout)');
-      ok(await s.tapText('RESUME'), 'RESUME tapped');
+      ok(await s.tapText(lab('RESUME')), 'RESUME tapped');
       await sleep(400);
       d = await s.dbg();
       ok(!d.paused && d.zoomed === !portrait, 'RESUME continues in the new orientation', `zoomed ${d.zoomed}`);
       await s.page.setViewportSize(vp);
       await sleep(700);
-      await s.tapText('RESUME');
+      await s.tapText(lab('RESUME'));
       await sleep(300);
       if (portrait) {
         // quit to the title and play again: the HUD camera must be rebuilt (the old one died with the scene)
         await s.tapGame(...PAUSE); // pause button (zoomed HUD)
-        ok(await s.tapText('QUIT TO TITLE'), 'QUIT TO TITLE tapped');
+        ok(await s.tapText(lab('QUIT TO TITLE')), 'QUIT TO TITLE tapped');
         await sleep(700);
-        ok(await s.tapText('PLAY'), 'PLAY tapped again');
+        ok(await s.tapText(lab('PLAY')), 'PLAY tapped again');
         await sleep(900);
         d = await s.dbg();
         ok(d && d.zoomed && d.uiCam && d.game[1] > d.game[0], 'after quit + play: zoomed view with a live HUD camera', d && `uiCam ${d.uiCam}`);

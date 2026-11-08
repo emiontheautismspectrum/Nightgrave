@@ -18,6 +18,7 @@ import type { InputFrame } from '../sim/input';
 import { C, FONT, hitPad, onTap } from './ui';
 import { textFieldFocused, textFocusEnded } from '../web/textFocus';
 import { getScreen } from '../web/screen';
+import { t } from '../i18n';
 
 export interface RunResult {
   date: string;
@@ -29,7 +30,8 @@ export interface RunResult {
   log: readonly InputFrame[];
 }
 
-const ERR: Record<TextError, string> = { empty: 'TYPE A NAME', short: 'TOO SHORT', long: 'TOO LONG', chars: 'INVALID CHARACTERS', words: 'NOT ALLOWED WORDS' };
+/** A validation error code (src/shared/text.ts) in the current language. */
+const errText = (e: TextError): string => t(`textErr.${e}`);
 
 /** True while one of our fields has the keyboard focus (game keys must not act then). One source of truth. */
 export const fieldFocused = (): boolean => textFieldFocused();
@@ -189,11 +191,11 @@ export class SubmitPanel {
     this.frame = s.add.rectangle(fx, fy, fw, fhh, 0x0b0d12, 0.92).setOrigin(0).setStrokeStyle(1, 0x3a4558).setDepth(this.depth - 1);
     this.objs.push(this.frame);
     // rank 1 is a new high score of the day and the only one that may leave a message (shown on the title and board)
-    this.objs.push(label(G.x, y0, rank === 1 ? 'NEW HIGH SCORE! YOUR MESSAGE:' : `TODAY'S TOP 10: RANK ${rank}`, C.gold));
+    this.objs.push(label(G.x, y0, rank === 1 ? t('submit.newHigh') : t('submit.rank', { rank }), C.gold));
     // the DOM fields exist once per panel: a relayout keeps (and only moves) them
     if (!this.inputs.length) {
-      this.field('NAME', 16, save().boardName);
-      if (this.wantsMessage) this.field('MESSAGE (OPTIONAL)', 40, '');
+      this.field(t('submit.namePh'), 16, save().boardName);
+      if (this.wantsMessage) this.field(t('submit.messagePh'), 40, '');
     }
     const btn = (x: number, t: string, fn: () => void) => {
       const o = addText(s, x, G.btnY, t, { color: C.bone }).setDepth(this.depth);
@@ -203,8 +205,8 @@ export class SubmitPanel {
       this.rects.push([o.x - pd.x, o.y - pd.y, o.x + o.width + pd.x, o.y + o.height + pd.y]);
       this.objs.push(o);
     };
-    btn(G.btnX[0], 'SUBMIT', () => void this.submit());
-    btn(G.btnX[1], 'SKIP', () => this.close());
+    btn(G.btnX[0], t('submit.submit'), () => void this.submit());
+    btn(G.btnX[1], t('submit.skip'), () => this.close());
     this.status = label(G.x, G.statusY, '');
     this.note = label(G.x, G.noteY, '', C.gold);
     for (const t of [this.status, this.note]) t.setMaxWidth(G.textW); // inside the frame (two lines at most in portrait)
@@ -236,13 +238,13 @@ export class SubmitPanel {
     const n = validateName(this.inputs[0]?.value ?? '');
     let msg = '';
     let ok = n.ok;
-    if (!n.ok) msg = `NAME: ${ERR[n.error]}`;
+    if (!n.ok) msg = t('submit.nameErr', { err: errText(n.error) });
     const m = this.inputs[1];
     if (ok && m && m.value.trim()) {
       const r = validateMessage(m.value);
       if (!r.ok) {
         ok = false;
-        msg = `MESSAGE: ${ERR[r.error]}`;
+        msg = t('submit.messageErr', { err: errText(r.error) });
       }
     }
     if (!this.busy && !this.done && this.status) setTextColor(setTextValue(this.status, msg), C.ember);
@@ -252,7 +254,7 @@ export class SubmitPanel {
   private async submit(): Promise<void> {
     if (this.busy || this.done || !this.validate()) return;
     this.busy = true;
-    setTextColor(setTextValue(this.status, 'SENDING...'), C.dim);
+    setTextColor(setTextValue(this.status, t('submit.sending')), C.dim);
     const name = validateName(this.inputs[0]?.value ?? '');
     const msgRaw = this.inputs[1]?.value.trim() ?? '';
     const r = this.run;
@@ -277,12 +279,12 @@ export class SubmitPanel {
     });
     this.busy = false;
     if (!this.objs.length) return; // closed meanwhile
-    if (!res) setTextColor(setTextValue(this.status, 'BOARD UNAVAILABLE'), C.ember);
+    if (!res) setTextColor(setTextValue(this.status, t('submit.unavailable')), C.ember);
     else if (res.accepted) {
       this.done = true;
       // shown on the board only after the replay is re-simulated by the verifier
-      setTextColor(setTextValue(this.status, res.provisionalRank ? `SUBMITTED (RANK ${res.provisionalRank}). ON THE BOARD AFTER` : 'SUBMITTED. ON THE BOARD AFTER'), C.gold);
-      this.note?.setText('VERIFICATION (USUALLY WITHIN 20 MINUTES)');
+      setTextColor(setTextValue(this.status, res.provisionalRank ? t('submit.doneRank', { rank: res.provisionalRank }) : t('submit.done')), C.gold);
+      if (this.note) setTextValue(this.note, t('submit.note'));
       // leave the field BEFORE disabling it (a disabled focused input fires no focusout: the owed re-measure and the
       // game keys would stay blocked)
       for (const el of this.inputs) el.blur();

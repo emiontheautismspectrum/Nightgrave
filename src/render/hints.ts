@@ -4,6 +4,7 @@
  * state and never change the sim or the replay.
  */
 import type { SimState } from '../sim/state';
+import { t } from '../i18n';
 
 export type Device = 'desktop' | 'touch' | 'gamepad';
 let device: Device = 'desktop';
@@ -14,26 +15,27 @@ export function setDevice(d: Device): void {
 
 /** `stick`: the touch movement mode (the fixed joystick, default) or the drag trackpad. */
 export function controlsLine(d: Device, stick = true): string {
-  if (d === 'touch') return stick ? 'STICK MOVE - PARRY - DASH' : 'DRAG MOVE - PARRY - DASH';
-  if (d === 'gamepad') return 'STICK MOVE - A PARRY - B/RT DASH';
-  return 'MOUSE MOVE - LMB PARRY - RMB/SPACE DASH';
+  if (d === 'touch') return stick ? t('controls.touchStick') : t('controls.touchDrag');
+  if (d === 'gamepad') return t('controls.gamepad');
+  return t('controls.desktop');
 }
 
 export function cardLines(d: Device, leftHanded: boolean, stick = true): string[] {
-  const side = leftHanded ? 'LEFT' : 'RIGHT';
+  const side = t(leftHanded ? 'side.left' : 'side.right');
   const how =
     d === 'touch'
       ? stick
-        ? [`STICK (${leftHanded ? 'RIGHT' : 'LEFT'}): MOVE`, `PARRY: BIG BUTTON (${side})`, 'DASH: THE SMALL ONE']
-        : ['DRAG ANYWHERE TO MOVE', `PARRY: BIG BUTTON (${side}), DASH ABOVE IT`, 'SECOND FINGER TAP = PARRY']
+        ? [t('card.stick', { side: t(leftHanded ? 'side.right' : 'side.left') }), t('card.parryBig', { side }), t('card.dashSmall')]
+        : [t('card.drag'), t('card.parryBigDrag', { side }), t('card.secondFinger')]
       : d === 'gamepad'
-        ? ['LEFT STICK: MOVE', 'A: PARRY   B / RT: DASH', 'START: PAUSE']
-        : ['MOUSE: MOVE   LEFT CLICK: PARRY', 'RIGHT CLICK / SPACE: DASH', 'KEYS: WASD MOVE, J PARRY, K DASH'];
-  return [...how, '', 'VIOLET: PARRY IT.', 'RED: DODGE OR DASH.', '', d === 'touch' ? 'TAP TO START' : 'PRESS ANY KEY TO START'];
+        ? [t('card.padMove'), t('card.padButtons'), t('card.padPause')]
+        : [t('card.mouse1'), t('card.mouse2'), t('card.keys')];
+  return [...how, '', t('card.violet'), t('card.red'), '', d === 'touch' ? t('card.tapStart') : t('card.keyStart')];
 }
 
 export type HintKind = 'parry' | 'dash';
-export const HINT_TEXT: Record<HintKind, string> = { parry: 'PARRY!', dash: "CAN'T PARRY - DASH!" };
+/** The contextual hint texts (the current language). */
+export const hintText = (k: HintKind): string => t(k === 'parry' ? 'hint.parry' : 'hint.dash');
 
 /** One-time contextual hints: the first violet (parryable) and the first red projectile closing in on the hero. */
 export class ContextHints {
