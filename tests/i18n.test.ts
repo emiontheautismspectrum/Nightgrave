@@ -164,9 +164,11 @@ describe('language selection', () => {
 describe('formatting', () => {
   it('English is unchanged; Russian groups thousands, uses a decimal comma and DD.MM.YYYY', () => {
     expect(fmtInt(1234567, 'en')).toBe('1234567');
-    expect(fmtInt(1234567, 'ru')).toBe('1 234 567');
+    expect(fmtInt(1234567, 'ru')).toBe('1\u00a0234\u00a0567');
+    expect(fmtInt(1234567, 'ru', 7)).toBe('1234567'); // a 7-wide column: plain digits
+    expect(fmtInt(123456, 'ru', 7)).toBe('123\u00a0456');
     expect(fmtInt(999, 'ru')).toBe('999');
-    expect(fmtInt(-12345, 'ru')).toBe('-12 345');
+    expect(fmtInt(-12345, 'ru')).toBe('-12\u00a0345');
     expect(fmtDec(2.5, 2, 'en')).toBe('2.50');
     expect(fmtDec(2.5, 2, 'ru')).toBe('2,50');
     expect(fmtDate('2026-11-08', 'en')).toBe('2026-11-08');

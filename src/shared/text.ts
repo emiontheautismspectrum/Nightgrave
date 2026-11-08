@@ -40,9 +40,11 @@ const LEET: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '
 const latinize = (w: string): string => [...w].map((c) => CONFUSABLE[c] ?? c).join('');
 const ALL = (profanity as { words: string[] }).words.map((w) => w.toLowerCase().replace(/ё/g, 'е'));
 /** Matched anywhere in the name. */
-const WORDS: string[] = [...new Set(ALL.filter((w) => !w.startsWith('^')).flatMap((w) => [w, latinize(w)]))];
+const WORDS: string[] = [...new Set(ALL.filter((w) => !/^[\^=]/.test(w)).flatMap((w) => [w, latinize(w)]))];
 /** Matched only at the start of a word or of the whole name ('^' in profanity.json). */
 const START_WORDS: string[] = [...new Set(ALL.filter((w) => w.startsWith('^')).map((w) => w.slice(1)).flatMap((w) => [w, latinize(w)]))];
+/** Matched only as a whole word or the whole name ('=' in profanity.json). */
+const WHOLE_WORDS: string[] = [...new Set(ALL.filter((w) => w.startsWith('=')).map((w) => w.slice(1)).flatMap((w) => [w, latinize(w)]))];
 
 /** Lowercase, map leetspeak, drop separators and everything that is not a letter. Two variants for 1 -> i / l. */
 function skeletons(s: string): string[] {
@@ -58,6 +60,9 @@ function skeletons(s: string): string[] {
       if (/\p{L}/u.test(m)) r += m;
     }
     out.push(r);
+    // stretched letters ("suuuka", "сууука"): the same with every run of one letter collapsed
+    const squeezed = r.replace(/(\p{L})\1+/gu, '$1');
+    if (squeezed !== r) out.push(squeezed);
   }
   return out;
 }
@@ -68,7 +73,8 @@ export function hasProfanity(s: string): boolean {
   if (WORDS.some((w) => sk.some((k) => k.includes(w)))) return true;
   // start-only words: the whole name (separators dropped: "s.u.k.a") or any word of it ("suka_bot", "Mr Suka")
   const starts = [...sk, ...v.split(/[\s_.\-!?,':]+/u).filter(Boolean).flatMap(skeletons)];
-  return START_WORDS.some((w) => starts.some((k) => k.startsWith(w)));
+  if (START_WORDS.some((w) => starts.some((k) => k.startsWith(w)))) return true;
+  return WHOLE_WORDS.some((w) => starts.some((k) => k === w));
 }
 
 export function validateName(raw: unknown): { ok: true; value: string } | { ok: false; error: TextError } {

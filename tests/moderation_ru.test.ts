@@ -12,11 +12,20 @@ describe('Cyrillic names', () => {
       expect(validateName(n), n).toEqual({ ok: true, value: n.normalize('NFKC') });
   });
 
+  it('no false positives across word joins, in real names (Russian, Vietnamese, Chinese, Dutch, Indonesian, French) or "speedrun"', () => {
+    const fine = ['Себастьян', 'Себастиан', 'Ребане', 'Небалуев', 'Huynh', 'Huizinga', 'Huiying', 'Huijsmans', 'Sukarno', 'Sukanya', 'Sukaina', 'Ebanks', 'Gandoni',
+      'Annabelle', 'Kassandra', 'Hallo', 'Ассоль', 'Аллилуйя', 'Спидран', 'Спидраннер'];
+    for (const n of fine) expect(validateName(n), n).toEqual({ ok: true, value: n });
+    for (const m of ['ЕЩЕ БАЛЛ', 'В НЕБЕ БАЛ', 'ТЕБЕ БАНАН', 'ЛУЧШЕ БАТИ', 'СИЛЬНЕЕ БАНДЫ', 'МОРЕ БАЛТИКИ', 'КРАСИВЕЕ БАЛЕРИН', 'СПИДРАНЫ ТУТ'])
+      expect(validateMessage(m), m).toEqual({ ok: true, value: m });
+  });
+
   it('Russian profanity is rejected: Cyrillic, transliterated, leet, separators, look-alike mixes, ё', () => {
     const bad = [
-      'Сука', 'сука', 'С.у.к.а', 'Хуй', 'ХУЁВО', 'пиздец', 'блять', 'Ебать', 'мудак', 'пидор', 'залупа', 'шлюха', 'гандон', 'гондон', 'долбоёб', 'уёбок', 'шалава', 'дрочер',
+      'Сука', 'сука', 'С.у.к.а', 'Хуй', 'ХУЁВО', 'пиздец', 'блять', 'Ебать', 'заебал', 'наебать', 'ебанутый', 'мудак', 'пидор', 'залупа', 'шлюха', 'гандон', 'гондон', 'долбоёб', 'уёбок', 'шалава', 'дрочер',
       'huy', 'Hui', 'xuy', 'xyi', 'Xу1', 'xуй', 'pizda', 'p1zd', 'blyat', 'blya', 'suka', 's.u.k.a', 'SUKA_bot', 'Mr Suka', 'cyka', 'cука',
       'ebat', 'eban', 'ebal', 'mudak', 'pidor', 'pidar', 'zalupa', 'gandon', 'shlyuha', 'p!zd@', '5uka',
+      'nahuy', 'pohuy', 'nahui', 'xuesos', 'eblan', 'dolboeb', 'dolboyob', 'zaebal', 'naebal', 'shalava', 'droch', 'mudilo', 'suchara', 'ebuchiy', 'pidr', 'suuuka', 'сууука', 'ёба'.toUpperCase(),
     ];
     for (const n of bad) expect(hasProfanity(n), n).toBe(true);
     expect(validateName('Сука')).toEqual({ ok: false, error: 'words' });

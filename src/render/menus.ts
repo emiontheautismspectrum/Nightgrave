@@ -166,7 +166,7 @@ export function bestPage(back: () => void, show: (p: MenuPage) => void, d: Diffi
       if (d === 'hard') {
         const today = utcDateKey(new Date());
         const tb = todaysBest(save(), today);
-        out.push('', t('best.today', { date: fmtDate(today) }).padEnd(BEST_HEADER().length), tb ? fmtBestRow('1', fmtInt(tb.score), heroShort(tb.hero), fmtDate(today), t('unit.seconds', { n: tb.secs.toFixed(0) })) : fmtBestRow('', '-', '', '', ''));
+        out.push('', t('best.today', { date: fmtDate(today) }).padEnd(BEST_HEADER().length), tb ? fmtBestRow('1', fmtInt(tb.score, undefined, 7), heroShort(tb.hero), fmtDate(today), t('unit.seconds', { n: tb.secs.toFixed(0) })) : fmtBestRow('', '-', '', '', ''));
       }
       return out;
     },

@@ -80,7 +80,7 @@ export const ru: Catalog = {
   'card.keyStart': 'НАЖМИ ЛЮБУЮ КЛАВИШУ',
   'side.left': 'СЛЕВА',
   'side.right': 'СПРАВА',
-  'hint.parry': 'ПАРИРУЙ!',
+  'hint.parry': 'ОТБИВАЙ!',
   'hint.dash': 'НЕ ОТБИТЬ - РЫВОК!',
   'label.move': 'ДВИЖЕНИЕ',
   'label.parry': 'ОТБИТЬ',
@@ -197,7 +197,7 @@ export const ru: Catalog = {
   'reason.too_high': 'НЕПРАВДОПОДОБНЫЙ СЧЁТ',
   'reason.paused': 'ПРИЁМ РЕЗУЛЬТАТОВ ПРИОСТАНОВЛЕН',
   'reason.busy': 'РЕЙТИНГ ПЕРЕГРУЖЕН: ПОПРОБУЙ ПОЗЖЕ',
-  'reason.not_best': 'ТВОЙ РЕЗУЛЬТАТ ЗА СЕГОДНЯ (ИЛИ НА ПРОВЕРКЕ) ВЫШЕ',
+  'reason.not_best': 'ТВОЙ РЕЗУЛЬТАТ ДНЯ (ИЛИ ЗАЯВКА) ВЫШЕ',
   'reason.other': 'НЕ УДАЛОСЬ ОТПРАВИТЬ',
 
   // ---- the HTML board panel and overlay

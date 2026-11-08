@@ -1138,7 +1138,7 @@ export class GameScene extends Phaser.Scene {
     const ptr = this.input.activePointer;
     const cur = this.input2.cursorPos();
     this.reticle.setVisible(!!cur && st.alive && !this.driver.paused).setPosition(Math.round(cur?.x ?? ptr.worldX), Math.round(cur?.y ?? ptr.worldY));
-    this.hudScore.setText(fmtInt(this.sim.score));
+    this.hudScore.setText(fmtInt(this.sim.score, undefined, 8)); // the HUD score column: 8 characters
     this.hudMult.setText(tr('hud.mult', { m: fmtDec(st.multiplier / 100, 2) }));
     this.drawScoreFeedback();
     setTextValue(this.hudWave, st.wave >= 0 ? tr('hud.wave', { n: st.wave + 1 }) : '');

@@ -5,13 +5,21 @@
  */
 import { getLang, type Lang } from './index';
 
-/** An integer score: en "12345" (as today), ru "12 345". */
-export function fmtInt(n: number, l: Lang = getLang()): string {
+/**
+ * An integer score: en "12345" (as today), ru "12 345" with a NO-BREAK space (U+00A0, in the bitmap font; the HTML
+ * board never wraps a score). `maxLen`: a fixed column; a grouped number longer than it falls back to plain digits.
+ */
+export function fmtInt(n: number, l: Lang = getLang(), maxLen = Infinity): string {
   const s = String(Math.trunc(n));
   if (l !== 'ru') return s;
+  const g = groupDigits(s);
+  return g.length > maxLen ? s : g;
+}
+
+function groupDigits(s: string): string {
   const neg = s.startsWith('-');
   const d = neg ? s.slice(1) : s;
-  return (neg ? '-' : '') + d.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (neg ? '-' : '') + d.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
 }
 
 /** A fixed-decimals number: en "2.50", ru "2,50". */

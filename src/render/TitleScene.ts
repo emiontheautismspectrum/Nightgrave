@@ -240,7 +240,7 @@ export class TitleScene extends Phaser.Scene {
     else {
       lines.push(t('board.dateLine', { date: fmtDate(b.date) }), '', boardHeader());
       for (const e of b.top)
-        lines.push(boardRow(String(e.rank), e.name, fmtInt(e.score), heroShort(e.hero), t('unit.seconds', { n: Math.floor(e.durationTicks / 60) })));
+        lines.push(boardRow(String(e.rank), e.name, fmtInt(e.score, undefined, 7), heroShort(e.hero), t('unit.seconds', { n: Math.floor(e.durationTicks / 60) })));
     }
     this.menu.show({
       title: t('title.todaysBest'),
