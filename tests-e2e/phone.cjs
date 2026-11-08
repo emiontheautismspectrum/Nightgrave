@@ -6,7 +6,7 @@
  * Screenshots: assets/preview/phone_portrait.png, phone_landscape.png, phone_board.png.
  * Run: npm run e2e:phone
  */
-const { LANG, L } = require('./lang.cjs');
+const { LANG, L: lab } = require('./lang.cjs');
 const { chromium, devices } = require('playwright');
 const { spawn, execSync } = require('node:child_process');
 const path = require('node:path');

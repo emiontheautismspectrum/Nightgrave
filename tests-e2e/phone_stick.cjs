@@ -7,7 +7,7 @@
  * verify:replay`. Screenshots (assets/preview/, untracked): phone_title2, phone_run_stick, phone_menu_short,
  * phone_landscape_stick, phone_standalone_sim. Run: npm run e2e:phone-stick
  */
-const { LANG, L } = require('./lang.cjs');
+const { LANG, L: lab } = require('./lang.cjs');
 const { chromium } = require('playwright');
 const { spawn, execSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -115,7 +115,7 @@ async function push(s, dx, dy, n = 12) {
         let s = await session(b, dev);
         if (portrait && name === 'iPhone 14') await s.page.screenshot({ path: path.join(OUT, 'phone_title2.png') });
         if (portrait && name === '375x667') await s.page.screenshot({ path: path.join(OUT, 'phone_menu_short.png') });
-        ok(await s.tap(L('PLAY')), `${label}: PLAY by tap`);
+        ok(await s.tap(lab('PLAY')), `${label}: PLAY by tap`);
         await sleep(500);
         let d = await s.dbg();
         ok(d && d.alive && d.stick, `${label}: a run with the stick`);
@@ -160,7 +160,7 @@ async function push(s, dx, dy, n = 12) {
         await s.touch('touchCancel', []);
         d = await s.dbg();
         ok(d.paused, `${label}: rotating mid-run pauses`);
-        ok(await s.tap(L('RESUME')), `${label}: RESUME by tap`);
+        ok(await s.tap(lab('RESUME')), `${label}: RESUME by tap`);
         await sleep(300);
         const before = await s.dbg();
         await s.step(30);
@@ -170,7 +170,7 @@ async function push(s, dx, dy, n = 12) {
         await s.ctx.close();
         // Left-handed: the stick and the buttons swap sides
         s = await session(b, dev, { leftHanded: true });
-        await s.tap(L('PLAY'));
+        await s.tap(lab('PLAY'));
         await sleep(500);
         d = await s.dbg();
         const W = d.game[0];
@@ -187,7 +187,7 @@ async function push(s, dx, dy, n = 12) {
     await s.ctx.close();
     // a Hard run played with the stick, submitted (mocked board): the captured submission verifies
     s = await session(b, phone(390, 844), { difficulty: 'hard', hero: 'knight' });
-    await s.tap(L('PLAY'));
+    await s.tap(lab('PLAY'));
     await sleep(500);
     let d = await s.dbg();
     const S = d.stick;

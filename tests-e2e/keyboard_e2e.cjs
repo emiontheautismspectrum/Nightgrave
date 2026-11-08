@@ -8,7 +8,7 @@
  * field lies inside the panel frame, the frame inside the screen, clear of the death panel text; portrait 390x844 /
  * 375x667, landscape 844x390 / 667x375. Zero CSP violations / page errors. Run: npm run e2e:keyboard
  */
-const { LANG, L } = require('./lang.cjs');
+const { LANG, L: lab } = require('./lang.cjs');
 const { chromium } = require('playwright');
 const { spawn, execSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -56,7 +56,7 @@ async function device(b, label, w, h, csp) {
   const dbg = () => page.evaluate(() => (window.__ngDebug ? JSON.parse(JSON.stringify(window.__ngDebug, (k, v) => (typeof v === 'function' ? undefined : v))) : null));
   // PLAY by tap (the menu target), then let the idle hero die (ticks stepped by the test)
   const L = await page.evaluate(() => window.__ngLayout);
-  const play = L.targets.find((t) => t.label.trim() === L('PLAY'));
+  const play = L.targets.find((t) => t.label.trim() === lab('PLAY'));
   const r0 = await page.evaluate(() => { const c = document.querySelector('#game canvas').getBoundingClientRect(); return { x: c.left, y: c.top, k: c.width / document.querySelector('#game canvas').width }; });
   await page.touchscreen.tap(r0.x + (play.box[0] + play.box[2] / 2) * r0.k, r0.y + (play.box[1] + play.box[3] / 2) * r0.k);
   await sleep(600);
