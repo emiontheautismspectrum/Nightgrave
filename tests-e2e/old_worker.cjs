@@ -14,6 +14,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const VITE_BIN = path.join(__dirname, '..', 'node_modules', 'vite', 'bin', 'vite.js');
+// the main checkout's own runner (never `npx`: inside the worktree a missing package would be downloaded)
+const VITE_NODE_BIN = path.join(__dirname, '..', 'node_modules', 'vite-node', 'dist', 'cli.mjs');
 
 const ROOT = path.join(__dirname, '..');
 // default: the Worker as it was before the CURRENT client version (the parent of the last commit that changed
@@ -72,7 +74,7 @@ console.log('RESULT ' + JSON.stringify({ status: r.status, ct: r.headers.get('Co
         sent = route.request().postData();
         const f = path.join(wt, 'body.json');
         fs.writeFileSync(f, sent);
-        const out = execSync(`npx vite-node old_submit.ts ${f}`, { cwd: wt }).toString();
+        const out = execFileSync(process.execPath, [VITE_NODE_BIN, 'old_submit.ts', f], { cwd: wt }).toString();
         old = JSON.parse(/RESULT (.*)/.exec(out)[1]);
         return route.fulfill({ status: old.status, contentType: old.ct ?? 'application/json', body: old.body });
       }
