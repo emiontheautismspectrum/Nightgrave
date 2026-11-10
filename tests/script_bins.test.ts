@@ -35,9 +35,9 @@ function parseCommand(cmd: string, where: 'root' | 'server', from: string, bins:
   let cwd = where;
   for (const seg of cmd.split(/&&|\|\||;|\|/)) {
     const words = seg.trim().split(/\s+/).filter((w) => w !== '');
-    while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words.shift(); // leading VAR=value
-    if (!words.length) continue;
+    while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0] ?? '')) words.shift(); // leading VAR=value
     const [first, ...rest] = words;
+    if (first === undefined) continue;
     if (first === 'cd') {
       cwd = rest[0] === '..' ? 'root' : /^server\/?$/.test(rest[0] ?? '') ? 'server' : cwd;
       continue;
@@ -71,13 +71,13 @@ function collect(): { bins: Use[]; scripts: ScriptRef[]; files: { file: string; 
   for (const wf of readdirSync(join(ROOT, '.github', 'workflows')).filter((f) => /\.ya?ml$/.test(f))) {
     const lines = read(join('.github', 'workflows', wf)).split('\n');
     for (let i = 0; i < lines.length; i++) {
-      const m = /^(\s*)(?:-\s+)?run:\s*(.*)$/.exec(lines[i]);
+      const m = /^(\s*)(?:-\s+)?run:\s*(.*)$/.exec(lines[i] ?? '');
       if (!m) continue;
-      let body = m[2].trim();
+      let body = (m[2] ?? '').trim();
       if (/^[|>][-+]?$/.test(body)) {
         const block: string[] = [];
-        const indent = m[1].length;
-        while (i + 1 < lines.length && (lines[i + 1].trim() === '' || lines[i + 1].search(/\S/) > indent)) block.push(lines[++i]);
+        const indent = (m[1] ?? '').length;
+        while (i + 1 < lines.length && (lines[i + 1]?.trim() === '' || (lines[i + 1]?.search(/\S/) ?? -1) > indent)) block.push(lines[++i] ?? '');
         body = block.join('\n');
       }
       for (const line of body.split('\n')) parseCommand(line.replace(/#.*$/, ''), 'root', `.github/workflows/${wf}`, bins, scripts);
@@ -89,11 +89,11 @@ function collect(): { bins: Use[]; scripts: ScriptRef[]; files: { file: string; 
     const src = read(join('tests-e2e', f));
     for (const m of src.matchAll(/\b(?:execSync|spawnSync|spawn|exec)\(\s*(['"`])((?:(?!\1).)*)\1(?:\s*,\s*\{\s*cwd:\s*([^}]*))?/g)) {
       const where = /'server'/.test(m[3] ?? '') ? 'server' : 'root';
-      parseCommand(m[2].replace(/\$\{[^}]*\}/g, 'X'), where, `tests-e2e/${f}`, bins, scripts);
+      parseCommand((m[2] ?? '').replace(/\$\{[^}]*\}/g, 'X'), where, `tests-e2e/${f}`, bins, scripts);
     }
-    for (const m of src.matchAll(/execFileSync\(\s*'([^']+)'/g)) parseCommand(m[1], 'root', `tests-e2e/${f}`, bins, scripts);
+    for (const m of src.matchAll(/execFileSync\(\s*'([^']+)'/g)) parseCommand(m[1] ?? '', 'root', `tests-e2e/${f}`, bins, scripts);
     for (const m of src.matchAll(/'node_modules'((?:\s*,\s*'[^']+')+)\s*\)/g)) {
-      const parts = [...m[1].matchAll(/'([^']+)'/g)].map((p) => p[1]);
+      const parts = [...(m[1] ?? '').matchAll(/'([^']+)'/g)].map((p) => p[1] ?? '');
       files.push({ file: join('node_modules', ...parts), from: `tests-e2e/${f}` });
     }
   }
@@ -108,7 +108,7 @@ function collect(): { bins: Use[]; scripts: ScriptRef[]; files: { file: string; 
   ].filter((p) => existsSync(join(ROOT, p)));
   for (const p of docs)
     for (const m of read(p).matchAll(/\bnpx\s+(?:-{1,2}[a-z-]+\s+)*([a-z@][a-z0-9@/._-]*)/g))
-      bins.push({ bin: m[1], where: m[1] === 'wrangler' ? 'server' : 'root', from: p });
+      bins.push({ bin: m[1] ?? '', where: m[1] === 'wrangler' ? 'server' : 'root', from: p });
   return { bins, scripts, files };
 }
 
