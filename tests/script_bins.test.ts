@@ -16,12 +16,28 @@ const serverPkg = JSON.parse(read('server/package.json')) as { scripts: Record<s
 // shell builtins and tools that come from the system, not from node_modules
 const SYSTEM = new Set(['cd', 'echo', 'test', 'exit', 'true', 'false', 'export', 'set', 'sh', 'bash', 'node', 'npm', 'git', 'python3', 'curl', 'cp', 'mv', 'rm', 'mkdir', 'grep', 'cat']);
 
-/** A binary is available when node_modules/.bin has it (root first; server/ for the Worker's own tools). */
+/** The binaries a package's DIRECT dependencies declare (their package.json `bin`): a transitive one never counts. */
+function directBins(dir: string): Set<string> {
+  const p = JSON.parse(readFileSync(join(ROOT, dir, 'package.json'), 'utf8')) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+  const out = new Set<string>();
+  for (const dep of Object.keys({ ...p.dependencies, ...p.devDependencies })) {
+    const f = join(ROOT, dir, 'node_modules', dep, 'package.json');
+    if (!existsSync(f)) continue;
+    const bin = (JSON.parse(readFileSync(f, 'utf8')) as { bin?: string | Record<string, string> }).bin;
+    if (typeof bin === 'string') out.add(dep.replace(/^@[^/]+\//, ''));
+    else for (const b of Object.keys(bin ?? {})) out.add(b);
+  }
+  return out;
+}
+const ROOT_BINS = directBins('.');
+const SERVER_BINS = directBins('server');
+
+/** Installed (node_modules/.bin) AND provided by a direct dependency of the package that runs it. */
 function hasBin(name: string, where: 'root' | 'server'): boolean {
-  if (existsSync(join(ROOT, 'node_modules', '.bin', name))) return true;
+  if (existsSync(join(ROOT, 'node_modules', '.bin', name)) && ROOT_BINS.has(name)) return true;
   if (where === 'server') {
     // the Worker's devDependencies are installed separately (npm --prefix server ci): a declared one counts
-    if (existsSync(join(ROOT, 'server', 'node_modules', '.bin', name))) return true;
+    if (existsSync(join(ROOT, 'server', 'node_modules', '.bin', name)) && SERVER_BINS.has(name)) return true;
     return Object.hasOwn({ ...serverPkg.dependencies, ...serverPkg.devDependencies }, name);
   }
   return false;
@@ -92,6 +108,9 @@ function collect(): { bins: Use[]; scripts: ScriptRef[]; files: { file: string; 
       parseCommand((m[2] ?? '').replace(/\$\{[^}]*\}/g, 'X'), where, `tests-e2e/${f}`, bins, scripts);
     }
     for (const m of src.matchAll(/execFileSync\(\s*'([^']+)'/g)) parseCommand(m[1] ?? '', 'root', `tests-e2e/${f}`, bins, scripts);
+    // spawn('npx', ['name', ...]) / execFileSync('npx', ['name', ...])
+    for (const m of src.matchAll(/\b(?:execFileSync|spawnSync|spawn)\(\s*'npx'\s*,\s*\[([^\]]*)\]/g))
+      parseCommand(`npx ${[...(m[1] ?? '').matchAll(/'([^']+)'/g)].map((q) => q[1]).join(' ')}`, 'root', `tests-e2e/${f}`, bins, scripts);
     for (const m of src.matchAll(/'node_modules'((?:\s*,\s*'[^']+')+)\s*\)/g)) {
       const parts = [...(m[1] ?? '').matchAll(/'([^']+)'/g)].map((p) => p[1] ?? '');
       files.push({ file: join('node_modules', ...parts), from: `tests-e2e/${f}` });
@@ -107,7 +126,7 @@ function collect(): { bins: Use[]; scripts: ScriptRef[]; files: { file: string; 
     ...readdirSync(join(ROOT, 'tools'), { recursive: true, encoding: 'utf8' }).filter((f) => /\.(ts|cjs|mjs|js)$/.test(f)).map((f) => join('tools', f)),
   ].filter((p) => existsSync(join(ROOT, p)));
   for (const p of docs)
-    for (const m of read(p).matchAll(/\bnpx\s+(?:-{1,2}[a-z-]+\s+)*([a-z@][a-z0-9@/._-]*)/g))
+    for (const m of read(p).matchAll(/\bnpx\s+(?:-{1,2}[a-z-]+(?:=\S+)?\s+)*([a-z@][a-z0-9@/._-]*)/g))
       bins.push({ bin: m[1] ?? '', where: m[1] === 'wrangler' ? 'server' : 'root', from: p });
   return { bins, scripts, files };
 }
@@ -122,7 +141,7 @@ describe('every script binary exists', () => {
     expect(scripts.map((s) => s.script)).toContain('verify:pending');
   });
 
-  it('each binary is installed (node_modules/.bin), not only reachable through another package', () => {
+  it('each binary is installed and declared by a direct dependency, never only reachable through another package', () => {
     const missing = bins.filter((b) => !hasBin(b.bin, b.where)).map((b) => `${b.bin} (${b.from})`);
     expect([...new Set(missing)]).toEqual([]);
   });
