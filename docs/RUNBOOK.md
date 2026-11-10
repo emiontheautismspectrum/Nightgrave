@@ -141,6 +141,8 @@ Order: merge -> wait for the Pages build -> pull (`--autostash`) -> migrations -
 - Analytics: the same Worker page (requests, errors, CPU); D1 -> **nightgrave** -> **Metrics** (rows read / written
   against the daily free limits).
 - GitHub emails you when a workflow run fails (Settings -> Notifications -> Actions).
+- After merging a Dependabot bump of vitest or vite, run **Actions** -> **verify-replays** -> **Run workflow** by hand
+  and check it is green (a red run also arrives as an email from GitHub); `tests/script_bins.test.ts` guards the binaries.
 - Uptime: a free monitor (for example UptimeRobot or Better Stack) on
   `https://nightgrave-api.emiontheautismspectrum.workers.dev/api/health` every 5-10 minutes, alerting when the body
   does not contain `"ok":true` (a keyword check) or the status is not 200. `"ok":false` with 200 = the verifier has not
