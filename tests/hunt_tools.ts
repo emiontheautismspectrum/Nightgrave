@@ -5,13 +5,18 @@
 import { withFeatures, type FeatureKey, type Features, type PackKey } from '../src/data/features';
 import type { Difficulty } from '../src/data/tuning';
 import type { InputFrame } from '../src/sim/input';
+import type { SimParams } from '../src/sim/params';
 import { Sim, type SimOptions } from '../src/sim/sim';
+import type { SimState } from '../src/sim/state';
+import { bloodSigil } from '../src/sim/waves';
+import type { SolveOptions } from './pack_tools';
 import type { Piece } from './pack_tools';
 
 export const KNOT: Features = withFeatures('knot');
+export const BRIAR: Features = withFeatures('briar');
 
-/** Every enabled combination of the hunt blocks with and without the pattern pack (bots and tests only). */
-export const COMBOS: readonly (readonly FeatureKey[])[] = [['knot'], ['knot', 'patternPack']];
+/** Every enabled combination of the hunt blocks, with and without the pattern pack (bots and tests only). */
+export const COMBOS: readonly (readonly FeatureKey[])[] = [['knot'], ['briar'], ['knot', 'briar'], ['knot', 'patternPack'], ['briar', 'patternPack'], ['knot', 'briar', 'patternPack']];
 
 const IDLE: InputFrame = { cursor: false, mx: 0, my: 0, buttons: 0 };
 
@@ -46,3 +51,36 @@ export function startKnots(seed: number, wave: number, hx: number, hy: number, c
   if (made < count) return null;
   return { key: 'knot' as unknown as PackKey, sim, start, projectiles: new Set(), casters: new Set() };
 }
+
+/**
+ * Start ONE briar line alone (the existing patterns weigh 0, the stream is off, no boss), the hero at (hx, hy).
+ * sigils = true: first up to two blood sigils are placed by the game's own rule (away from the hero), so the gap must
+ * avoid them; `sigilHook` then keeps adding sigils by that rule while the line is alive (the corridor rule applies).
+ * Returns null if the line could not start (every gap choice crossed a sigil).
+ */
+export function startLine(seed: number, wave: number, hx: number, hy: number, sigils = false, difficulty: Difficulty = 'hard', options: SimOptions = {}): Piece | null {
+  const sim = new Sim(seed, difficulty, { hero: 'wisp', ...options, features: options.features ?? BRIAR, startWave: wave, bosses: false });
+  onlyHunts(sim);
+  const s = sim.state;
+  s.streamTimer = 1e9;
+  s.hero.x = hx;
+  s.hero.y = hy;
+  if (sigils) for (let i = 0; i < 2; i++) bloodSigil(s, sim.params);
+  s.patternAt = sim.params.graceTicks;
+  for (let i = 0; i < sim.params.graceTicks + 3; i++) {
+    sim.step(IDLE);
+    if (s.events.some((e) => e.type === 'briar')) {
+      s.patternAt = 1e9;
+      return { key: 'briar' as unknown as PackKey, sim, start: s.tick - 1, projectiles: new Set(), casters: new Set() };
+    }
+  }
+  return null;
+}
+
+/** While a line is alive, a new blood sigil is attempted every 20 ticks (by the game's rule); done when all is clear. */
+export const sigilHook: SolveOptions = {
+  hook: (s: SimState, p: SimParams) => {
+    if (s.walls?.length && s.tick % 20 === 0) bloodSigil(s, p);
+  },
+  done: (s: SimState) => !s.walls?.length && !s.projectiles.length && !s.sigils.some((g) => s.tick < g.end),
+};

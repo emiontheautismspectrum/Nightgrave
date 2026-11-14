@@ -6,13 +6,18 @@
  * HEX KNOT (FEATURES.knot): a stationary hollow violet ring with fuse pips, far from the hero. Its body is harmless to
  * touch and a dash does not touch it. A pulse that covers it (THE parry zone, sim.ts) destroys it; otherwise it bursts
  * into rune shards when its fuse ends. Its life ends only at the burst or the parry.
+ *
+ * BRIAR LINE (FEATURES.briar): a `Wall`, a band of thorns across the arena with ONE gap, entering from the edge
+ * farther from the hero after a telegraph and creeping across. Red: unparryable, lethal on touch; the dash i-frames
+ * pass through it as through blades. O(1) collision per line per tick.
  */
 import type { HexKnot } from '../data/features';
 import { isBossWave } from './boss';
 import { dcos, dsin, PI } from './dmath';
 import { ticks, type SimParams } from './params';
 import { nextFloat, range } from './rng';
-import type { Knot, Projectile, ProjectileKind, SimState } from './state';
+import { TICK_RATE } from '../data/tuning';
+import type { Knot, Projectile, ProjectileKind, SimState, Wall } from './state';
 
 /** The spawner (waves.spawnProjectile), injected to avoid an import cycle (as for the bosses and the pattern pack). */
 export type HuntSpawn = (s: SimState, p: SimParams, kind: ProjectileKind, x: number, y: number, vx: number, vy: number, extra?: object, telegraphTicks?: number) => Projectile;
@@ -80,13 +85,104 @@ export function runKnots(s: SimState, p: SimParams, spawn: HuntSpawn): void {
   s.knots = keep;
 }
 
+// ------------------------------------------------------------------ briar line
+
+/** Coordinates of a point along / across the line's axis of motion. */
+const alongOf = (w: Pick<Wall, 'axis'>, x: number, y: number): number => (w.axis === 'x' ? x : y);
+const acrossOf = (w: Pick<Wall, 'axis'>, x: number, y: number): number => (w.axis === 'x' ? y : x);
+
+/** Does a circle of radius r at (x, y) overlap the corridor the gap sweeps (the whole length of its path)? */
+export const inGapCorridor = (w: Wall, x: number, y: number, r: number): boolean => Math.abs(acrossOf(w, x, y) - w.gap) < w.gapHalf + r;
+
 /**
- * A boss wave starts. By the creation rule no knot can still be alive here; should one be (a rule change, a test
- * forcing it), it is removed WITHOUT a burst: nothing of the waves is ever left inside a boss intro.
+ * The tick a line reaches a hero standing at (x, y) (its band touches the hero's circle), if nothing slows it. Used by
+ * the gap rule, the tests and the renderer's gap marker.
+ */
+export function wallArrival(w: Wall, x: number, y: number, heroRadius: number): number {
+  const dist = Math.abs(alongOf(w, x, y) - w.startPos) - (w.halfWidth + heroRadius);
+  return w.move + Math.max(0, dist) / w.speed;
+}
+
+/**
+ * Start a briar line now (the director picked the row). False: it could not (the cap, a curtain on the field, the
+ * boss lead, or every gap choice crosses a blood sigil); nothing was changed except, at most, PRNG draws.
+ */
+export function startBriar(s: SimState, p: SimParams, sp: number): boolean {
+  const c = p.briar;
+  if (!c) return false;
+  const walls = (s.walls ??= []);
+  if (walls.length >= c.maxActive) return false;
+  // never two gapped walls at once: no line while a pattern-pack curtain is alive (and no curtain while a line is)
+  if (s.projectiles.some((pr) => pr.pack === 'curtain')) return false;
+  const h = s.hero;
+  const o = p.spawnOffset;
+  const speed = (c.speed * p.diffSpeed * sp) / TICK_RATE; // px per tick, like a projectile
+  const tele = Math.max(p.fairTelegraph, ticks(c.telegraphSeconds));
+  const axis: Wall['axis'] = nextFloat(s) < 0.5 ? 'x' : 'y';
+  const lo = axis === 'x' ? p.x0 : p.y0;
+  const hi = axis === 'x' ? p.x1 : p.y1;
+  const dir: Wall['dir'] = (axis === 'x' ? h.x > p.cx : h.y > p.cy) ? 1 : -1; // it enters from the farther edge
+  const startPos = dir > 0 ? lo - o : hi + o;
+  const endPos = dir > 0 ? hi + o : lo - o;
+  const life = tele + Math.ceil(Math.abs(endPos - startPos) / speed);
+  if (reachesBoss(s, p, life, ticks(c.bossLeadSeconds))) return false;
+  const half = c.gapPx / 2;
+  const w: Wall = { id: 0, axis, dir, pos: startPos, startPos, endPos, start: s.tick, move: s.tick + tele, speed, gap: 0, gapHalf: half, halfWidth: c.halfWidth };
+  // the gap centre lies within reachFraction of the distance the hero can WALK before the line arrives
+  const reach = c.reachFraction * p.heroSpeed * (wallArrival(w, h.x, h.y, p.heroRadius) - s.tick);
+  const clo = axis === 'x' ? p.y0 : p.x0;
+  const chi = axis === 'x' ? p.y1 : p.x1;
+  const across = acrossOf(w, h.x, h.y);
+  const clamp = (g: number): number => Math.min(chi - half, Math.max(clo + half, g));
+  const off = range(s, -1, 1) * reach;
+  for (const g of [clamp(across + off), clamp(across - off), clamp(across)]) {
+    w.gap = g;
+    if (s.sigils.some((sg) => inGapCorridor(w, sg.x, sg.y, sg.r))) continue; // never a gap into a blood sigil
+    w.id = s.nextId++;
+    walls.push(w);
+    s.events.push({ type: 'briar', id: w.id, axis, dir, gap: g });
+    return true;
+  }
+  return false;
+}
+
+/** Move the lines (after the projectiles, by the same Slow Time factor `f`) and remove the ones that crossed. */
+export function moveWalls(s: SimState, f: number): void {
+  const walls = s.walls;
+  if (!walls || !walls.length) return;
+  const keep: Wall[] = [];
+  for (const w of walls) {
+    if (s.tick >= w.move) w.pos += w.dir * w.speed * f;
+    if (w.dir > 0 ? w.pos < w.endPos : w.pos > w.endPos) keep.push(w);
+    else s.events.push({ type: 'briar_end', id: w.id, how: 'crossed' });
+  }
+  s.walls = keep;
+}
+
+/** Is the hero touching a moving line outside its gap? (The id of that line, or 0.) Unparryable: only the dash i-frames help. */
+export function wallHits(s: SimState, p: SimParams): number {
+  const h = s.hero;
+  for (const w of s.walls ?? []) {
+    if (s.tick < w.move) continue; // the telegraph sits outside the arena
+    if (Math.abs(alongOf(w, h.x, h.y) - w.pos) >= w.halfWidth + p.heroRadius) continue;
+    if (Math.abs(acrossOf(w, h.x, h.y) - w.gap) <= w.gapHalf - p.heroRadius) continue; // inside the gap
+    return w.id;
+  }
+  return 0;
+}
+
+/**
+ * A boss wave starts. By the creation rules no knot and (unslowed) no line can still be alive here. A knot that is
+ * (a rule change, a test forcing it) is removed WITHOUT a burst; a line that is (Slow Time stretched it) withers.
+ * Nothing of the hunts is ever left inside a boss intro.
  */
 export function huntsAtBoss(s: SimState): void {
   if (s.knots && s.knots.length) {
     for (const k of s.knots) s.events.push({ type: 'knot_end', id: k.id, x: k.x, y: k.y, how: 'cancel' });
     s.knots = [];
+  }
+  if (s.walls && s.walls.length) {
+    for (const w of s.walls) s.events.push({ type: 'briar_end', id: w.id, how: 'withered' });
+    s.walls = [];
   }
 }

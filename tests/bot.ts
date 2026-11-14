@@ -19,6 +19,26 @@ export interface BotOptions {
   knots?: boolean;
 }
 
+/** A briar line ahead of the hero (FEATURES.briar): ticks until it touches the hero, and the gap error across it. */
+export function wallAhead(sim: Sim): { tc: number; err: number; w: NonNullable<Sim['state']['walls']>[number] } | null {
+  const s = sim.state;
+  const p = sim.params;
+  const h = s.hero;
+  let best: { tc: number; err: number; w: NonNullable<Sim['state']['walls']>[number] } | null = null;
+  for (const w of s.walls ?? []) {
+    const a = w.axis === 'x' ? h.x : h.y;
+    const c = w.axis === 'x' ? h.y : h.x;
+    const da = (a - w.pos) * w.dir - (w.halfWidth + p.heroRadius); // > 0: not touched yet
+    if (da < -(w.halfWidth + p.heroRadius) * 2) continue; // passed
+    const tc = Math.max(0, da) / w.speed + Math.max(0, w.move - s.tick);
+    if (!best || tc < best.tc) best = { tc, err: w.gap - c, w };
+  }
+  return best;
+}
+
+/** A briar line will reach the hero within `ticks` (the bots stop chasing pickups and turning then). */
+export const wallSoon = (sim: Sim, ticks: number): boolean => (sim.state.walls?.length ? (wallAhead(sim)?.tc ?? Infinity) < ticks : false);
+
 /** Ticks a knot hunt keeps in hand: a knot is chased only if the hero reaches it this long before its fuse ends. */
 export const KNOT_MARGIN = 12;
 
@@ -161,8 +181,34 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
   // gentle pull towards the centre so the bot does not hug the rim
   fx += (p.cx - h.x) * 0.002;
   fy += (p.cy - h.y) * 0.002;
+  // briar line (FEATURES.briar only): walk into the gap's lane before it arrives, back away if it cannot be reached
+  // in time, hold the lane while it passes, dash through the thorns as a last resort
+  const wa = s.walls && s.walls.length ? wallAhead(sim) : null;
+  let lane: { axis: 'x' | 'y'; gap: number } | null = null;
+  if (wa) {
+    const { tc, err, w } = wa;
+    const room = w.gapHalf - p.heroRadius;
+    const ax = w.axis === 'x' ? 1 : 0;
+    const ay = 1 - ax;
+    if (tc < 240) {
+      const k = Math.max(-4, Math.min(4, err / 6));
+      fx += ay * k; // across the line = the other axis
+      fy += ax * k;
+      if (Math.abs(err) > room - 3 && Math.abs(err) / p.heroSpeed > tc - 8) {
+        fx += ax * w.dir * 3; // buy time: walk away from the line
+        fy += ay * w.dir * 3;
+      }
+      if (Math.abs(err) <= room - 2 && tc < 40) lane = { axis: w.axis, gap: w.gap };
+    }
+    if (tc < 4 && Math.abs(err) > room - 1) dashAway = [-ax * w.dir, -ay * w.dir];
+  }
   let tx = h.x + fx * 400;
   let ty = h.y + fy * 400;
+  if (lane) {
+    // hold the lane: the cross coordinate of the target stays well inside the gap
+    if (lane.axis === 'x') ty = Math.max(lane.gap - 12, Math.min(lane.gap + 12, ty));
+    else tx = Math.max(lane.gap - 12, Math.min(lane.gap + 12, tx));
+  }
   if (dashAway && dashCooldownLeft(s, p) === 0) {
     buttons |= BTN_DASH;
     tx = h.x + dashAway[0] * 40;

@@ -191,6 +191,28 @@ export interface Knot {
   angle: number;
 }
 
+/**
+ * A briar line (FEATURES.briar): a band of thorns across the whole arena with ONE gap. `axis` is the axis it MOVES along
+ * ('x': a vertical band sweeping left / right; 'y': a horizontal band sweeping up / down), `dir` the direction. Its
+ * centre line is at `pos` on that axis; it is lethal (unparryable) where the hero is within halfWidth + the hero radius
+ * of it, except inside the gap: |cross - gap| <= gapHalf - the hero radius. [start, move) telegraph at the entering
+ * edge (outside the arena, harmless), then it creeps at `speed` px/tick (Slow Time slows it); removed past `endPos`.
+ */
+export interface Wall {
+  id: number;
+  axis: 'x' | 'y';
+  dir: 1 | -1;
+  pos: number;
+  startPos: number;
+  endPos: number;
+  start: number;
+  move: number;
+  speed: number;
+  gap: number;
+  gapHalf: number;
+  halfWidth: number;
+}
+
 /** A rune lighting up before it fires a radial ring of rune shards. */
 export interface Telegraph {
   id: number;
@@ -280,6 +302,9 @@ export type SimEvent =
    */
   | { type: 'knot'; id: number; x: number; y: number }
   | { type: 'knot_end'; id: number; x: number; y: number; how: 'burst' | 'parry' | 'cancel' }
+  /** A briar line was started / is gone (crossed the arena, or withered at a boss intro). Only with FEATURES.briar. */
+  | { type: 'briar'; id: number; axis: 'x' | 'y'; dir: 1 | -1; gap: number }
+  | { type: 'briar_end'; id: number; how: 'crossed' | 'withered' }
   /** A pattern-pack set piece started (only with FEATURES.patternPack). */
   | { type: 'pack'; key: PackKey }
   | { type: 'wave'; wave: number }
@@ -360,4 +385,6 @@ export interface SimState {
   packQueue?: PackEvent[];
   /** Hex knots on the field. The field exists only while FEATURES.knot is enabled. */
   knots?: Knot[];
+  /** Briar lines on the field. The field exists only while FEATURES.briar is enabled. */
+  walls?: Wall[];
 }

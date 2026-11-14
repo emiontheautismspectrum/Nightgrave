@@ -73,7 +73,7 @@ export function watch(s: SimState, piece: Pick<Piece, 'key' | 'projectiles' | 'c
 /** Nothing of the piece is left: no queued emission, telegraph, caster or projectile. */
 export const resolved = (s: SimState): boolean =>
   s.projectiles.length === 0 && s.casters.length === 0 && s.telegraphs.length === 0 && (s.packQueue?.length ?? 0) === 0 &&
-  (s.knots?.length ?? 0) === 0;
+  (s.knots?.length ?? 0) === 0 && (s.walls?.length ?? 0) === 0;
 
 type Policy = (s: SimState, p: SimParams) => InputFrame;
 
@@ -82,10 +82,20 @@ const walkTo = (x: number, y: number): Policy => () => ({ cursor: true, mx: x, m
 /** (It ignores hex knots entirely: it never walks to one; knots do not exist outside FEATURES.knot.) */
 const walkBot: Policy = (s, p) => ({ ...botInput({ state: s, params: p } as unknown as Sim, { parry: false, knots: false }), buttons: 0 });
 
+/** Extra rules of a solver run: `done` replaces `resolved`; `hook` runs before every step (tests add hazards there). */
+export interface SolveOptions {
+  done?: (s: SimState) => boolean;
+  hook?: (s: SimState, p: SimParams) => void;
+}
+
 /** Play a policy on a COPY of the state until the piece is resolved (survived), the hero dies or the time is up. */
-function play(s0: SimState, p: SimParams, opts: SimOptions, policy: Policy, limit: number): { ok: boolean; death: number } {
+function play(s0: SimState, p: SimParams, opts: SimOptions, policy: Policy, limit: number, so: SolveOptions = {}): { ok: boolean; death: number } {
   const s = structuredClone(s0);
-  while (s.alive && s.tick < limit && !resolved(s)) step(s, policy(s, p), p, opts);
+  const done = so.done ?? resolved;
+  while (s.alive && s.tick < limit && !done(s)) {
+    so.hook?.(s, p);
+    step(s, policy(s, p), p, opts);
+  }
   return { ok: s.alive, death: s.tick };
 }
 
@@ -103,13 +113,13 @@ export interface WalkResult {
  * bounded search over "walk in one of 8 directions for a while, then let the walking bot continue" (the override
  * search of tools/bot/dodge_search.test.ts, without the dash).
  */
-export function walkingSolver(piece: Piece, seconds = 15): WalkResult {
+export function walkingSolver(piece: Piece, seconds = 15, so: SolveOptions = {}): WalkResult {
   const s0 = piece.sim.state;
   const p = piece.sim.params;
   const opts = piece.sim.options;
   const limit = s0.tick + seconds * 60;
   let tries = 0;
-  const attempt = (policy: Policy): { ok: boolean; death: number } => (tries++, play(s0, p, opts, policy, limit));
+  const attempt = (policy: Policy): { ok: boolean; death: number } => (tries++, play(s0, p, opts, policy, limit, so));
   if (attempt(() => IDLE).ok) return { ok: true, how: 'stay', tries };
   const bot = attempt(walkBot);
   if (bot.ok) return { ok: true, how: 'bot', tries };

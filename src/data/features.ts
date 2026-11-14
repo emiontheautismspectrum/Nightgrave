@@ -100,9 +100,32 @@ export interface HexKnot {
   readonly bossLeadSeconds: number;
 }
 
+/**
+ * BRIAR LINE (package B1 "Hunts"): a band of thorns (red, unparryable, lethal on touch; the dash i-frames pass) across
+ * the whole arena with ONE gap of `gapPx`. It enters from the edge farther from the hero after `telegraphSeconds` of
+ * warning and creeps at `speed` px/s (x the difficulty and wave speed, slowed by Slow Time like projectiles). The gap
+ * centre lies within `reachFraction` of the distance the hero can WALK before the line arrives. At most `maxActive`;
+ * never with a pattern-pack curtain alive (both ways); none is started that would (unslowed) still be alive
+ * `bossLeadSeconds` before a boss wave, and a line still there at a boss intro withers.
+ */
+export interface BriarLine {
+  readonly enabled: boolean;
+  readonly weight: number;
+  readonly unlockWave: number;
+  readonly maxActive: number;
+  readonly telegraphSeconds: number;
+  readonly speed: number;
+  /** Half the thickness of the band (px). */
+  readonly halfWidth: number;
+  readonly gapPx: number;
+  readonly reachFraction: number;
+  readonly bossLeadSeconds: number;
+}
+
 export interface Features {
   readonly patternPack: PatternPack;
   readonly knot: HexKnot;
+  readonly briar: BriarLine;
 }
 export type FeatureKey = keyof Features;
 
@@ -131,6 +154,7 @@ export const FEATURES: Features = deepFreeze({
     stalkerPair: { weight: 1.2, unlockWave: 13, idleSeconds: 1.2, staggerSeconds: 0.7 },
   },
   knot: { enabled: false, weight: 1.5, unlockWave: 2, maxActive: 2, fuseSeconds: 4, shards: 8, minHeroDist: 90, edgeInset: 30, spacingPx: 40, radius: 5, trailProof: true, bossLeadSeconds: 1 },
+  briar: { enabled: false, weight: 1, unlockWave: 4, maxActive: 1, telegraphSeconds: 0.75, speed: 55, halfWidth: 3, gapPx: 44, reachFraction: 0.8, bossLeadSeconds: 1 },
 });
 
 /** A copy of the production flags with the named blocks enabled (bots and tests; never the game). */

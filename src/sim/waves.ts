@@ -5,7 +5,7 @@
 import { HOLLOWS, PORTAL, RUNES } from '../data/arena';
 import { dcos, dsin, PI, rotate } from './dmath';
 import { isBossWave, rotateBeams, runBoss, startBoss } from './boss';
-import { huntsAtBoss, startKnot } from './hunts';
+import { huntsAtBoss, inGapCorridor, startBriar, startKnot } from './hunts';
 import { packPick, packWeight, startPackPattern } from './patternPack';
 import type { SimParams } from './params';
 import { nextFloat, range } from './rng';
@@ -259,7 +259,7 @@ export function splitBurst(s: SimState, p: SimParams, pr: Projectile): void {
 }
 
 /** A blood sigil away from the hero and from other sigils (seeded), never more than maxActive at once. */
-function bloodSigil(s: SimState, p: SimParams): boolean {
+export function bloodSigil(s: SimState, p: SimParams): boolean {
   const c = p.newThreats.sigil;
   if (s.sigils.length >= c.maxActive) return false;
   const min2 = c.minHeroDist * c.minHeroDist;
@@ -268,6 +268,7 @@ function bloodSigil(s: SimState, p: SimParams): boolean {
     const y = range(s, p.y0 + c.edgeInset, p.y1 - c.edgeInset);
     if (dist2(x, y, s.hero.x, s.hero.y) < min2) continue;
     if (s.sigils.some((g) => dist2(g.x, g.y, x, y) < (4 * c.radius) * (4 * c.radius))) continue;
+    if (s.walls && s.walls.some((w) => inGapCorridor(w, x, y, c.radius))) continue; // FEATURES.briar: the gap stays clear
     const start = s.tick;
     const fill = start + Math.max(15, Math.round(c.telegraphSeconds * 60));
     const end = fill + Math.round(c.lethalSeconds * 60);
@@ -392,7 +393,8 @@ function pickPattern(s: SimState, p: SimParams): (s: SimState, p: SimParams, sp:
   if (p.pack) total += packWeight(p.pack, s.wave);
   // FEATURES.knot (enabled only): one more row after the pack's (pool order: existing, pack, knot)
   const knot = p.knot && s.wave >= p.knot.unlockWave ? p.knot.weight : 0;
-  total += knot;
+  const briar = p.briar && s.wave >= p.briar.unlockWave ? p.briar.weight : 0; // FEATURES.briar: after the knot
+  total += knot + briar;
   let r = nextFloat(s) * total;
   for (const [k, fn] of PATTERNS) {
     if (s.wave < p.patterns[k].unlockWave) continue;
@@ -407,6 +409,8 @@ function pickPattern(s: SimState, p: SimParams): (s: SimState, p: SimParams, sp:
   }
   // a knot that cannot be created (the cap, no free spot, the boss lead) falls back to an orb fan
   if (knot > 0 && (r -= knot) < 0) return (s2, p2, sp) => void (startKnot(s2, p2, sp) || orbFan(s2, p2, sp));
+  // a line that cannot start (the cap, a curtain, the boss lead, no sigil-free gap) falls back to an orb fan
+  if (briar > 0 && (r -= briar) < 0) return (s2, p2, sp) => void (startBriar(s2, p2, sp) || orbFan(s2, p2, sp));
   return orbFan;
 }
 
@@ -458,7 +462,7 @@ export function runDirector(s: SimState, p: SimParams, opts: DirectorOptions): v
     // the boss replaces this wave; the wave clock stays paused until it is defeated and the break is over
     s.bossWave = wave;
     startBoss(s, p, wave);
-    if (s.knots) huntsAtBoss(s); // the hunts never reach into a boss fight (FEATURES.knot)
+    if (s.knots || s.walls) huntsAtBoss(s); // the hunts never reach into a boss fight (FEATURES.knot, FEATURES.briar)
     s.waveClock = (wave - startWave + 1) * p.waveTicks;
     fireTelegraphs(s, p);
     runCasters(s, p, waveSpeed(p, wave));

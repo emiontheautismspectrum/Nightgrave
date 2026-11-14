@@ -253,6 +253,7 @@ const pincer: Start = (s, p, pack, sp, spawn) => {
 const curtain: Start = (s, p, pack, sp, spawn) => {
   const c = pack.curtain;
   if (s.projectiles.some((pr) => pr.pack === 'curtain')) return false; // at most one curtain at a time
+  if (s.walls && s.walls.length) return false; // FEATURES.briar: never two gapped walls at once
   const h = s.hero;
   const o = p.spawnOffset;
   const v = p.largeSpeed * sp * c.speedFactor;

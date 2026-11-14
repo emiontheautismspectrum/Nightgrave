@@ -10,7 +10,7 @@ import type { AnyHeroId } from '../data/heroes';
 import { FEATURES, type Features } from '../data/features';
 import { isFading, moveProjectile, runDirector, sigilHits, spawnProjectile, splitBurst, type DirectorOptions } from './waves';
 import { runPatternPack } from './patternPack';
-import { runKnots } from './hunts';
+import { moveWalls, runKnots, wallHits } from './hunts';
 
 export { spawnProjectile } from './waves';
 
@@ -97,6 +97,7 @@ export function createState(seed: number, difficulty: Difficulty, hero: AnyHeroI
     events: [],
     ...(p.pack ? { packQueue: [] } : {}), // new state only while the block is enabled
     ...(p.knot ? { knots: [] } : {}),
+    ...(p.briar ? { walls: [] } : {}),
   };
 }
 
@@ -255,6 +256,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   if (s.knots) runKnots(s, p, spawnProjectile); // FEATURES.knot: fuses that ended burst (also without the director)
   const f = isSlow(s) ? p.pickups.slowTime.factor : 1; // Slow Time: projectiles only (beams and timers unaffected)
   for (const pr of s.projectiles) moveProjectile(s, pr, f);
+  if (s.walls) moveWalls(s, f); // FEATURES.briar: Slow Time slows the lines like projectiles
 
   // 6. multiplier decay, then parry (parry is resolved before hits, so it always wins vs parryables)
   if (s.lastParryTick >= 0 && t - s.lastParryTick >= p.multReset && s.multiplier !== p.multStart) {
@@ -372,6 +374,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       s.deathTick = t;
       s.events.push({ type: 'death', x: h.x, y: h.y, by: -1 });
     }
+    if (s.alive && s.walls && wallHits(s, p)) die(s, -3); // FEATURES.briar: a thorn line (unparryable)
   }
 
   // 8. remove faded and far-away projectiles
@@ -506,6 +509,7 @@ function guardHits(s: SimState, p: SimParams): void {
   }
   if (sigilHits(s, p)) return die(s, -2);
   if (beamHits(s, p)) return die(s, -1);
+  if (s.walls && wallHits(s, p)) return die(s, -3);
   if (!parryHit) return;
   if (p.ability.kind === 'guard' && h.guardCharges >= p.ability.charges) {
     const pr = parryHit;
