@@ -46,16 +46,16 @@ describe('hex knot: dark and the pool', () => {
     expect('knots' in sim.state).toBe(false);
   });
 
-  it('the rows: wave 2+, at most 2, a 4 s fuse, 8 shards, 90 px from the hero, 30 px inside the edge, trail-proof', () => {
-    expect([KC.unlockWave, KC.maxActive, KC.fuseSeconds, KC.shards, KC.minHeroDist, KC.edgeInset, KC.trailProof]).toEqual([2, 2, 4, 8, 90, 30, true]);
+  it('the rows: wave 4+ (after the first boss), at most 2, a 4 s fuse, 8 shards, 90 px from the hero, 30 px inside the edge, trail-proof', () => {
+    expect([KC.unlockWave, KC.maxActive, KC.fuseSeconds, KC.shards, KC.minHeroDist, KC.edgeInset, KC.trailProof]).toEqual([4, 2, 4, 8, 90, 30, true]);
     expect(KC.maxActive * KC.shards).toBeLessThanOrEqual(16); // the entity cap of a burst
   });
 
-  it('the single draw is unchanged: before wave 2 a knot run is the production run (same PRNG, same spawns)', () => {
-    const a = new Sim(31337, 'hard', { hero: 'wisp' });
-    const b = new Sim(31337, 'hard', { hero: 'wisp', features: KNOT });
+  it('the single draw is unchanged: before wave 4 a knot run is the production run (same PRNG, same spawns)', () => {
+    const a = new Sim(31337, 'hard', { hero: 'wisp', startWave: 2, bosses: false });
+    const b = new Sim(31337, 'hard', { hero: 'wisp', features: KNOT, startWave: 2, bosses: false });
     const bot = new SkilledBot(4);
-    while (a.state.wave < KC.unlockWave && a.state.alive) {
+    while (a.state.wave < KC.unlockWave && a.state.alive && a.state.tick < 60 * 60) {
       const f = bot.input(a);
       a.step(f);
       b.step(f);
@@ -64,13 +64,14 @@ describe('hex knot: dark and the pool', () => {
       expect(JSON.stringify(rest)).toBe(JSON.stringify(a.state));
     }
     expect(a.state.tick).toBeGreaterThan(60 * 20);
+    expect(a.state.wave === KC.unlockWave || !a.state.alive).toBe(true);
   });
 
-  it('knots join the pool from wave 2: created >= 90 px from the hero, >= 30 px inside, spaced, at most 2, never in a boss fight', () => {
+  it('knots join the pool from wave 4: created >= 90 px from the hero, >= 30 px inside, spaced, at most 2, never in a boss fight', () => {
     let made = 0;
     let both = 0;
     for (let seed = 1; seed <= 40; seed++) {
-      const sim = new Sim(seed * 101, 'hard', { hero: seed % 2 ? 'knight' : 'wisp', features: KNOT });
+      const sim = new Sim(seed * 101, 'hard', { hero: seed % 2 ? 'knight' : 'wisp', features: KNOT, startWave: 4 });
       const bot = new SkilledBot(seed);
       while (sim.state.alive && sim.state.tick < 60 * 150) {
         const before = { ...sim.state.hero };
@@ -79,7 +80,7 @@ describe('hex knot: dark and the pool', () => {
         for (const e of s.events)
           if (e.type === 'knot') {
             made++;
-            expect(s.wave).toBeGreaterThanOrEqual(2);
+            expect(s.wave).toBeGreaterThanOrEqual(KC.unlockWave);
             expect(s.boss).toBeNull();
             // the director runs after the hero moved: the distance holds for the hero's position on that tick
             expect(Math.hypot(e.x - s.hero.x, e.y - s.hero.y)).toBeGreaterThanOrEqual(KC.minHeroDist - 1e-9);
@@ -96,7 +97,7 @@ describe('hex knot: dark and the pool', () => {
         if (s.boss) expect(ks).toEqual([]);
       }
     }
-    expect(made).toBeGreaterThan(30);
+    expect(made).toBeGreaterThan(40);
     expect(both).toBeGreaterThan(0);
   });
 });
@@ -230,10 +231,11 @@ describe('hex knot: the boss rule', () => {
     let bosses = 0;
     let late = 0;
     for (let seed = 1; seed <= 60; seed++) {
-      const sim = new Sim(seed * 7, 'hard', { hero: seed % 2 ? 'knight' : 'wisp', features: KNOT, startWave: 2 });
+      const sim = new Sim(seed * 7, 'hard', { hero: seed % 2 ? 'knight' : 'wisp', features: KNOT, startWave: 4 });
       const bot = new SkilledBot(seed);
       let lastEnd = -1;
-      while (sim.state.alive && sim.state.tick < 60 * 40) {
+      while (sim.state.tick < 60 * 60) {
+        sim.state.alive = true; // immortal: every run reaches the boss wave
         sim.step(bot.input(sim));
         for (const e of sim.state.events) {
           expect(e.type === 'knot_end' && e.how === 'cancel').toBe(false);
@@ -263,7 +265,7 @@ describe('hex knot: the boss rule', () => {
 
 describe('hex knot: fairness (walking-only solver, 200 seeds; centre, corners and edges)', () => {
   it('a hero who ignores knots entirely (no parry, no dash) can always survive their bursts (1 or 2 knots)', { timeout: 120_000 }, () => {
-    const waves = [2, 5, 8, 12, 16, 24];
+    const waves = [4, 5, 8, 12, 16, 24];
     const how: Record<string, number> = {};
     const stuck: string[] = [];
     for (let seed = 1; seed <= 200; seed++) {
@@ -521,5 +523,21 @@ describe('briar line: fairness (walking-only solver, 200 seeds; centre, corners 
       expect(stuck).toEqual([]);
       expect(skipped).toBeLessThan(20);
       console.log(`walking solver, briar${sigils ? ' + sigils' : ''}: ${JSON.stringify(how)}${skipped ? `, ${skipped} not started` : ''}`);
+    });
+});
+
+describe('the hunts on Easy and Medium (spot check, 30 seeds each): no instance is unwinnable for a walking hero', () => {
+  for (const d of ['easy', 'medium'] as const)
+    it(`${d}: knot bursts and briar lines (with sigils) always leave a walking way out`, { timeout: 120_000 }, () => {
+      const stuck: string[] = [];
+      for (let seed = 1; seed <= 30; seed++) {
+        const [spot, hx, hy] = SPOTS[seed % SPOTS.length]!;
+        const wave = [4, 8, 12][seed % 3]!;
+        const k = startKnots(seed * 19 + 2, wave, hx, hy, 1 + (seed % 2), d)!;
+        if (!walkingSolver(k).ok) stuck.push(`knot seed ${seed} ${spot}`);
+        const line = startLine(seed * 23 + 4, wave, hx, hy, true, d);
+        if (line && !walkingSolver(line, 25, sigilHook).ok) stuck.push(`briar seed ${seed} ${spot}`);
+      }
+      expect(stuck).toEqual([]);
     });
 });

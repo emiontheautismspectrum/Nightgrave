@@ -153,7 +153,7 @@ export const FEATURES: Features = deepFreeze({
     slowThenFast: { weight: 1.2, unlockWave: 11, wraiths: 2, delaySeconds: 1.2, fastFactor: 1.4, minDist: 150, leadFraction: 0.7 },
     stalkerPair: { weight: 1.2, unlockWave: 13, idleSeconds: 1.2, staggerSeconds: 0.7 },
   },
-  knot: { enabled: false, weight: 1.5, unlockWave: 2, maxActive: 2, fuseSeconds: 4, shards: 8, minHeroDist: 90, edgeInset: 30, spacingPx: 40, radius: 5, trailProof: true, bossLeadSeconds: 1 },
+  knot: { enabled: false, weight: 1.5, unlockWave: 4, maxActive: 2, fuseSeconds: 4, shards: 8, minHeroDist: 90, edgeInset: 30, spacingPx: 40, radius: 5, trailProof: true, bossLeadSeconds: 1 },
   briar: { enabled: false, weight: 1, unlockWave: 4, maxActive: 1, telegraphSeconds: 0.75, speed: 55, halfWidth: 3, gapPx: 44, reachFraction: 0.8, bossLeadSeconds: 1 },
 });
 

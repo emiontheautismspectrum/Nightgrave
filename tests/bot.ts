@@ -140,9 +140,11 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
       const dx = kt.x - h.x;
       const dy = kt.y - h.y;
       const d = Math.sqrt(dx * dx + dy * dy) || 1;
-      const w = d > p.parryRadius * 0.4 ? 0.12 : 0;
-      fx += (dx / d) * w;
-      fy += (dy / d) * w;
+      // a firm pull (stronger than the pull to the centre, weaker than a close shot) until it is well inside the zone
+      // (only half as hard while a shot is closing in within 0.5 s: the hunt never outweighs a dodge)
+      const w = d > p.parryRadius * 0.4 ? (nearT < 30 ? 0.12 : 0.5) : 0;
+      fx += (dx / d) * w - (p.cx - h.x) * 0.002;
+      fy += (dy / d) * w - (p.cy - h.y) * 0.002;
     }
   }
   if (parryTarget && opts.parry !== false && parryCooldownLeft(s, p) === 0) buttons |= BTN_PARRY;

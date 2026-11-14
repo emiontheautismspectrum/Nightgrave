@@ -319,7 +319,7 @@ describe('phone portrait: the hunts (FEATURES.knot / briar, every enabled combin
       let checked = 0;
       const seeds = [1, 7, 42, 1234, 99991, 31337];
       seeds.forEach((seed, i) => {
-        for (const w of [2, 4, 5, 6, 9, 12]) {
+        for (const w of [4, 5, 6, 8, 9, 12]) {
           const r = audit(seed, w, i % 2 === 0, 3600, PHONES[i % PHONES.length]!, f);
           fails.push(...r.fails);
           checked += r.checked;

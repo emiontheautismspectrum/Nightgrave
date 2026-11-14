@@ -15,8 +15,9 @@ const t = (s: number): number => Math.max(1, Math.round(s * TICK_RATE));
 
 /**
  * Upper bound of projectiles spawned per second on Hard at the density cap (stream + set pieces + casters + boss).
- * `features`: the flags of the run (default: production). An ENABLED pattern pack adds its biggest set piece; a
- * disabled block is not read, so the bound of a dark build is unchanged. Today this spawn rate is not the binding
+ * `features`: the flags of the run (default: production). An ENABLED pattern pack adds its biggest set piece, an
+ * enabled hex knot a knot plus its burst (FEATURES.knot), an enabled briar line nothing (FEATURES.briar: no projectile);
+ * a disabled block is not read, so the bound of a dark build is unchanged. Today this spawn rate is not the binding
  * term of maxPossibleScore (kills are capped by pulses x kills per pulse first), so the pack leaves the score bound
  * itself where it is; the term is kept honest for the day a rule makes it bind.
  */
@@ -27,8 +28,11 @@ export function maxSpawnsPerSecond(features: Features = FEATURES): number {
   const P = T.patterns;
   // a splitting orb can turn into (children) more parryable orbs
   const pack = features.patternPack.enabled === true ? Math.max(...Object.values(packEntityCaps(features.patternPack)).map((c) => c.projectiles)) : 0;
+  // the hunts (enabled only): a knot pick is one parryable knot that bursts into its shards later; a briar pick adds
+  // no projectile at all (a line is not a kill), and its fallback is an orb fan, already counted
+  const knot = features.knot.enabled === true ? 1 + Math.max(1, Math.round(features.knot.shards)) : 0;
   const biggestSet = Math.max(P.orbFan.maxCount, P.runeBurst.maxShards, P.blades.maxCount, P.wraiths.maxCount, P.heavyOrbs.maxCount,
-    P.armored.maxCount, P.split.maxCount * (1 + T.newThreats.split.children), pack);
+    P.armored.maxCount, P.split.maxCount * (1 + T.newThreats.split.children), pack, knot);
   const sets = (dens / P.gapMinSeconds) * biggestSet;
   const casterCycle = T.casters.telegraphSeconds + T.casters.riseSeconds + T.casters.casterIdleMinSeconds + T.casters.castSeconds;
   const casters = (T.casters.maxActive / casterCycle) * Math.max(P.orbFan.maxCount, T.casters.shardFan.count);

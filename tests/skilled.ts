@@ -98,9 +98,21 @@ export class SkilledBot {
         }
       }
       if (best < 40) this.parryAt = t + Math.max(0, Math.round(best)) + Math.round((this.rnd() - 0.5) * 4.999);
-      // a hex knot (FEATURES.knot only) inside the zone and seen for the reaction time: press within 0-2 ticks
+      // a hex knot (FEATURES.knot only) inside the zone and seen for the reaction time: press within 0-2 ticks, but
+      // only in a lull (no perceived violet shot reaching the hero within the parry cooldown), as a careful player would
+      // while the fuse leaves time; in the last second of the fuse it presses anyway
+      const lull = !seen.some((pr) => {
+        if (!pr.parryable) return false;
+        const rx = pr.x - h.x;
+        const ry = pr.y - h.y;
+        const v2 = pr.vx * pr.vx + pr.vy * pr.vy || 1e-9;
+        const tc = -(rx * pr.vx + ry * pr.vy) / v2;
+        return tc >= 0 && tc < p.parryCooldown + 6 && Math.hypot(rx + pr.vx * tc, ry + pr.vy * tc) < p.heroRadius + pr.radius + 6;
+      });
       if (this.parryAt < 0)
         for (const k of s.knots ?? [])
+          if (!lull && k.burst - t > 60) continue;
+          else
           if (t - k.start >= REACTION_TICKS && inParryZone(h.x, h.y, h.aimX, h.aimY, k.x, k.y, k.r - 1, p) >= 0) {
             this.parryAt = t + Math.floor(this.rnd() * 3);
             this.target = k.id;
