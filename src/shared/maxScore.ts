@@ -6,20 +6,27 @@
  * every boss killed as early as the schedule allows. It bounds EVERY hero: the most kills per pulse of any hero, plus
  * the Wisp-style trail term (every dash burns the most trail kills at the max multiplier).
  */
+import { FEATURES, type Features } from '../data/features';
 import { HEROES, HERO_IDS } from '../data/heroes';
 import { TICK_RATE, TUNING } from '../data/tuning';
+import { packEntityCaps } from '../sim/patternPack';
 
 const t = (s: number): number => Math.max(1, Math.round(s * TICK_RATE));
 
-/** Upper bound of projectiles spawned per second on Hard at the density cap (stream + set pieces + casters + boss). */
-export function maxSpawnsPerSecond(): number {
+/**
+ * Upper bound of projectiles spawned per second on Hard at the density cap (stream + set pieces + casters + boss).
+ * `features`: the flags of the run (default: production). An ENABLED pattern pack adds its biggest set piece; a
+ * disabled block is not read, so the bound of a dark build is unchanged.
+ */
+export function maxSpawnsPerSecond(features: Features = FEATURES): number {
   const T = TUNING;
   const dens = T.waves.densityCap * Math.max(...Object.values(T.difficulty).map((d) => d.density));
   const stream = dens / T.stream.intervalSeconds;
   const P = T.patterns;
   // a splitting orb can turn into (children) more parryable orbs
+  const pack = features.patternPack.enabled === true ? Math.max(...Object.values(packEntityCaps(features.patternPack)).map((c) => c.projectiles)) : 0;
   const biggestSet = Math.max(P.orbFan.maxCount, P.runeBurst.maxShards, P.blades.maxCount, P.wraiths.maxCount, P.heavyOrbs.maxCount,
-    P.armored.maxCount, P.split.maxCount * (1 + T.newThreats.split.children));
+    P.armored.maxCount, P.split.maxCount * (1 + T.newThreats.split.children), pack);
   const sets = (dens / P.gapMinSeconds) * biggestSet;
   const casterCycle = T.casters.telegraphSeconds + T.casters.riseSeconds + T.casters.casterIdleMinSeconds + T.casters.castSeconds;
   const casters = (T.casters.maxActive / casterCycle) * Math.max(P.orbFan.maxCount, T.casters.shardFan.count);
@@ -41,7 +48,7 @@ export function earliestBossDefeat(k: number): number {
   return first + (k - 1) * between;
 }
 
-export function maxPossibleScore(durationTicks: number): number {
+export function maxPossibleScore(durationTicks: number, features: Features = FEATURES): number {
   const T = TUNING;
   const n = Math.max(0, Math.floor(durationTicks));
   const dbl = T.pickups.doubleScore.factor;
@@ -51,7 +58,7 @@ export function maxPossibleScore(durationTicks: number): number {
   const pulses = Math.ceil(n / t(T.parry.cooldownSeconds));
   // kills are bounded by the projectiles that could exist AND by maxKillsPerPulse per successful pulse
   const maxKills = Math.max(T.parry.maxKillsPerPulse, ...HERO_IDS.map((id) => HEROES[id].parry.maxKillsPerPulse ?? T.parry.maxKillsPerPulse));
-  const kills = Math.min(Math.ceil((n / TICK_RATE) * maxSpawnsPerSecond() * (1 + T.newThreats.split.children)), pulses * maxKills);
+  const kills = Math.min(Math.ceil((n / TICK_RATE) * maxSpawnsPerSecond(features) * (1 + T.newThreats.split.children)), pulses * maxKills);
   const firsts = Math.min(pulses, kills);
   const extras = Math.max(0, kills - firsts);
   const parry = (firsts * T.score.parryBase + extras * T.score.extraKillPoints) * T.multiplier.cap * dbl;

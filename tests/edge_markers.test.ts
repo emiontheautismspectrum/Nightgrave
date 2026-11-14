@@ -11,6 +11,8 @@ import { PORTRAIT } from '../src/data/view';
 import { portraitLayout } from '../src/render/portraitLayout';
 import { portraitGameSize } from '../src/web/screen';
 import { SkilledBot } from './skilled';
+import type { Features } from '../src/data/features';
+import { PACK } from './pack_tools';
 
 const FAIR_TICKS = 15;
 /** "Could hit": the gap between the threat and the hero is within this many px. */
@@ -30,8 +32,8 @@ function makeCam(phone: [string, number, number, number] = PHONES[0]!): FollowCa
 
 interface Track { born: number; offAtBirth: boolean; seen: boolean[]; hitAt: number; sx: number; sy: number }
 
-function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 3600, phone = PHONES[0]!) {
-  const sim = new Sim(seed, 'hard', { startWave });
+function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 3600, phone = PHONES[0]!, features?: Features) {
+  const sim = new Sim(seed, 'hard', { startWave, ...(features ? { features } : {}) });
   const bot = new SkilledBot(seed);
   const cam = makeCam(phone);
   cam.reset(sim.state.hero.x, sim.state.hero.y);
@@ -42,6 +44,9 @@ function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 360
   let last = { x: sim.state.hero.x, y: sim.state.hero.y };
   const fails: string[] = [];
   let checked = 0;
+  /** Off-view threats of the pattern pack that were audited, per set piece. */
+  const pack: Record<string, number> = {};
+  const packOf = new Map<number, string>();
   while (sim.state.alive && sim.state.tick < maxTicks) {
     const s = sim.state;
     const h = s.hero;
@@ -60,6 +65,7 @@ function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 360
       let tr = proj.get(pr.id);
       if (!tr) proj.set(pr.id, (tr = { born: s.tick, offAtBirth: !inView(v, pr.x, pr.y), seen: [], hitAt: -1, sx: pr.x, sy: pr.y }));
       tr.seen[s.tick] = inView(v, pr.x, pr.y) || keys.has(`p${pr.id}`);
+      if (pr.pack) packOf.set(pr.id, pr.pack);
       const gap = Math.hypot(pr.x - h.x, pr.y - h.y) - pr.radius - sim.params.heroRadius;
       if (tr.hitAt < 0 && gap <= CONTACT_GAP) tr.hitAt = s.tick;
     }
@@ -74,6 +80,8 @@ function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 360
   for (const [id, tr] of proj) {
     if (!tr.offAtBirth || tr.hitAt < 0) continue;
     checked++;
+    const piece = packOf.get(id);
+    if (piece) pack[piece] = (pack[piece] ?? 0) + 1;
     for (let t = tr.hitAt - FAIR_TICKS; t < tr.hitAt; t++) {
       const ok = t >= tr.born ? tr.seen[t] : cueNear(t, tr.sx, tr.sy);
       if (!ok) {
@@ -89,7 +97,7 @@ function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 360
     for (let t = tr.born; t < tr.fill; t++) run = tr.seen[t] ? run + 1 : 0;
     if (run < FAIR_TICKS) fails.push(`seed ${seed} wave ${startWave}: sigil ${id} marked only ${run} ticks before its fill`);
   }
-  return { fails, checked, score: sim.score, ticks: sim.state.tick };
+  return { fails, checked, pack, score: sim.score, ticks: sim.state.tick };
 }
 
 describe('phone portrait: fairness edge markers', () => {
@@ -182,5 +190,57 @@ describe('phone portrait: fairness edge markers', () => {
       expect(v.y1).toBeLessThanOrEqual(270);
     }
     }
+  });
+});
+
+describe('phone portrait: the pattern pack (FEATURES.patternPack, enabled variant)', () => {
+  const WAVES = [1, 2, 4, 5, 6, 8, 9, 12, 14];
+  for (const phone of PHONES)
+    it(`${phone[0]}: every pack threat first appearing off-view is marked >= 15 ticks before it can hit`, { timeout: 120_000 }, () => {
+      let checked = 0;
+      const pack: Record<string, number> = {};
+      const fails: string[] = [];
+      for (const seed of [1, 7, 42, 1234, 99991, 31337]) {
+        for (const w of WAVES) {
+          const r = audit(seed, w, seed % 2 === 0, 3600, phone, PACK);
+          checked += r.checked;
+          for (const [k, n] of Object.entries(r.pack)) pack[k] = (pack[k] ?? 0) + n;
+          fails.push(...r.fails);
+        }
+      }
+      expect(fails).toEqual([]);
+      expect(checked).toBeGreaterThan(100);
+      if (phone === PHONES[0]) console.log(`edge markers, pack threats audited off-view (${phone[0]}): ${JSON.stringify(pack)}`);
+      // the audit really saw off-view threats of the pack: edge pieces, rune pieces and caster pieces
+      const total = Object.values(pack).reduce((a, b) => a + b, 0);
+      expect(total).toBeGreaterThan(50);
+      for (const k of ['pincer', 'curtain', 'echoFan', 'heavyLine']) expect(pack[k] ?? 0, k).toBeGreaterThan(0);
+    });
+
+  it('every off-view rune and caster of a pack piece is marked from its first cue to its last emission', { timeout: 60_000 }, () => {
+    let runes = 0;
+    let casters = 0;
+    for (const seed of [5, 11, 23]) for (const w of [2, 8, 13]) {
+      const sim = new Sim(seed, 'hard', { startWave: w, features: PACK });
+      const bot = new SkilledBot(seed);
+      const cam = makeCam();
+      cam.reset(sim.state.hero.x, sim.state.hero.y);
+      // rune pieces light their rune until the last emission; pack casters hold the wind-up for the whole burst
+      const runeOf = new Map<number, number>();
+      while (sim.state.alive && sim.state.tick < 3600) {
+        const s = sim.state;
+        cam.step(1000 / 60, s.hero.x, s.hero.y, null, false);
+        const v = cam.rect();
+        const keys = new Set(edgeMarkers(s, sim.params, v, PORTRAIT.horizonTicks).map((m) => m.key));
+        for (const tg of s.telegraphs) if (tg.shards === 0) runeOf.set(tg.id, tg.fire);
+        for (const tg of s.telegraphs) if (tg.shards === 0 && !inView(v, tg.x, tg.y)) (runes++, expect(keys.has(`t${tg.id}`)).toBe(true));
+        for (const c of s.casters) if (c.pack && s.tick <= c.fire && !inView(v, c.x, c.y)) (casters++, expect(keys.has(`c${c.id}`)).toBe(true));
+        // a queued rune emission is never later than the glow of its rune
+        for (const e of s.packQueue ?? []) if ((e.op === 'shot' || e.op === 'ring') && e.tele >= 0) expect(s.telegraphs.some((tg) => Math.hypot(tg.x - e.x, tg.y - e.y) < 5 && tg.start === e.tele && tg.fire >= e.at)).toBe(true);
+        sim.step(bot.input(sim));
+      }
+    }
+    expect(runes).toBeGreaterThan(0);
+    expect(casters).toBeGreaterThan(0);
   });
 });

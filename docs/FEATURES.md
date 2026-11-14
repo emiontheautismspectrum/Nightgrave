@@ -65,3 +65,36 @@ ticks and the death tick exactly, and checks the fingerprint and version they we
   move.
 - It is re-recorded only by a change that is meant to change the rules (enabling a block, a tuning change):
   `npx vite-node tools/bot/golden_record.ts <commit>`; the pull request says so.
+
+## Blocks
+
+### `patternPack` (dark)
+
+Ten set pieces built from the existing threats only (no new entity kind, sprite, string or sound), in
+`src/sim/patternPack.ts`; rows in `FEATURES.patternPack`. When the block is on, its rows join the director's pool AFTER
+the existing patterns: the existing order, weights and draws are untouched and the pick is still one PRNG draw. A
+piece that cannot start falls back to an orb fan, like a summon. No piece starts from a boss intro to the end of the
+break; emissions already queued finish, like rune telegraphs and casters.
+
+| Piece | Wave | What it is | Cue | Cap per instance |
+|---|---|---|---|---|
+| `spiral` | 1 | a rune emits small orbs over 1.2 s while the direction turns; the first one flies at the hero | rune glow | 16 |
+| `gapRing` | 2 | a dense rune burst with ONE gap of 0.7 rad, opened near the hero's direction | rune glow | 20 |
+| `pincer` | 3 | two orb fans from opposite edges, crossing at the hero | far edge spawn | 10 |
+| `curtain` | 4 | a line of large orbs sweeps in from the far edge with one 44 px gap within walking reach; one at a time | far edge spawn | 28 |
+| `echoFan` | 5 | an orb fan, then the same fan 0.5 s later, turned by half a ray gap | far edge spawn | 12 |
+| `crossfire` | 6 | two stalkers on two sides cast 2-3 blades each at the same time (red) | stalkers, wind-up held for the burst | 6 + 2 casters |
+| `pulseRings` | 8 | one rune fires 3 shard rings 0.4 s apart, each turned by a third of the spacing | rune glow | 36 |
+| `heavyLine` | 9 | large orbs from points along one far edge, parallel, 0.15 s apart | far edge spawn | 7 |
+| `slowThenFast` | 11 | two wraiths, then 1.2 s later one fast small orb aimed ahead of the hero's drift | spawns >= 150 px away | 3 |
+| `stalkerPair` | 13 | two stalkers; the second casts 0.7 s after the first (a violet fan, then any attack) | stalkers | 14 + 2 casters |
+
+Fairness, all tested in `tests/pattern_pack.test.ts` and `tests/edge_markers.test.ts` on the enabled variant: nothing
+appears within 60 px of the hero without a cue of at least 15 ticks (an uncued edge shot that would is dropped); violet
+is parryable and red is blades only; a walking-only solver (no parry, no dash) finds a way through every piece on 200
+seeds each, from the centre, the corners and the edges, up to the speed and count caps; every off-view threat of the
+pack is marked on the edge of the zoomed phone view at least 15 ticks before it can hit.
+
+Bot report (the targets of the pack and per-piece numbers, today's rules against the variant):
+`npx vite-node tools/bot/pack_report.ts 100 hard`. Read it before enabling: a 100-seed median moves by 10-20% between
+seed sets (the first boss opens a hole in the survival distribution at 70-80 s), so check 300 seeds as well.

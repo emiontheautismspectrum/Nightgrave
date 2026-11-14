@@ -5,6 +5,7 @@
 import { HOLLOWS, PORTAL, RUNES } from '../data/arena';
 import { dcos, dsin, PI, rotate } from './dmath';
 import { isBossWave, rotateBeams, runBoss, startBoss } from './boss';
+import { packPick, packWeight, startPackPattern } from './patternPack';
 import type { SimParams } from './params';
 import { nextFloat, range } from './rng';
 import type { Caster, CasterAttack, CasterKind, Projectile, ProjectileKind, SimState } from './state';
@@ -386,11 +387,18 @@ const PATTERNS: [PatternKey, (s: SimState, p: SimParams, sp: number) => void][] 
 function pickPattern(s: SimState, p: SimParams): (s: SimState, p: SimParams, sp: number) => void {
   let total = 0;
   for (const [k] of PATTERNS) if (s.wave >= p.patterns[k].unlockWave) total += p.patterns[k].weight;
+  // FEATURES.patternPack (enabled only): its rows join the pool AFTER the existing ones; still one single draw
+  if (p.pack) total += packWeight(p.pack, s.wave);
   let r = nextFloat(s) * total;
   for (const [k, fn] of PATTERNS) {
     if (s.wave < p.patterns[k].unlockWave) continue;
     r -= p.patterns[k].weight;
     if (r < 0) return fn;
+  }
+  if (p.pack) {
+    const key = packPick(p.pack, s.wave, r);
+    // a set piece that cannot start (no free rune, hollow or caster slot) falls back to an orb fan
+    if (key) return (s2, p2, sp) => void (startPackPattern(key, s2, p2, sp, spawnProjectile) || orbFan(s2, p2, sp));
   }
   return orbFan;
 }

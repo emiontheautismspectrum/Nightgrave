@@ -263,6 +263,10 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
   features)`), consumes no PRNG and is not in the fingerprint (`tuningHash(features)` appends the ENABLED blocks only).
   Bots and tests run a variant with `withFeatures(...)`; a variant replay carries its own fingerprint and can never be
   decoded, verified or submitted as a production run. Enabling a block is a rules change (version bump + cut-over).
+- Pattern pack (`FEATURES.patternPack`, DARK; `src/sim/patternPack.ts`, table in docs/FEATURES.md): ten set pieces
+  from the existing threats only (spiral 1, gapRing 2, pincer 3, curtain 4, echoFan 5, crossfire 6, pulseRings 8,
+  heavyLine 9, slowThenFast 11, stalkerPair 13 = unlock waves), appended to the director's pool after the existing
+  patterns only when enabled. Bot report: `npx vite-node tools/bot/pack_report.ts 100 hard`.
 - Golden corpus (`tests/fixtures/golden_corpus.json`, `tests/golden_corpus.test.ts`): 20 recorded Hard runs whose score,
   length and death tick must not move in any dark merge; re-recorded only by a change that is meant to change the rules.
 

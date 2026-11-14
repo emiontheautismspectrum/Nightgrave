@@ -8,7 +8,8 @@ import { NEVER, type Hero, type Projectile, type SimState } from './state';
 import { inParryZone, segDist2 } from './parryZone';
 import type { AnyHeroId } from '../data/heroes';
 import { FEATURES, type Features } from '../data/features';
-import { isFading, moveProjectile, runDirector, sigilHits, splitBurst, type DirectorOptions } from './waves';
+import { isFading, moveProjectile, runDirector, sigilHits, spawnProjectile, splitBurst, type DirectorOptions } from './waves';
+import { runPatternPack } from './patternPack';
 
 export { spawnProjectile } from './waves';
 
@@ -93,6 +94,7 @@ export function createState(seed: number, difficulty: Difficulty, hero: AnyHeroI
     doubleUntil: -1,
     doubleTicks: 0,
     events: [],
+    ...(p.pack ? { packQueue: [] } : {}), // new state only while the block is enabled
   };
 }
 
@@ -245,6 +247,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   // 5. spawn + move projectiles
   if (opts.spawner !== false) {
     runDirector(s, p, opts);
+    if (p.pack) runPatternPack(s, p, spawnProjectile); // deferred pack emissions (also finish during a boss, like casters)
     runPickups(s, p);
   }
   const f = isSlow(s) ? p.pickups.slowTime.factor : 1; // Slow Time: projectiles only (beams and timers unaffected)

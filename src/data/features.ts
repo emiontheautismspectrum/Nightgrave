@@ -34,18 +34,21 @@ interface Counted {
  */
 export interface PatternPack {
   readonly enabled: boolean;
-  /** A rune glows, then emits small orbs one by one over `seconds` while the direction turns `turns` full circles. */
-  readonly spiral: PackRow & Counted & { readonly telegraphSeconds: number; readonly seconds: number; readonly turns: number };
+  /**
+   * A rune glows, then emits small orbs one by one over `seconds` while the direction turns `turns` full circles; the
+   * first orb flies at the hero's position when the rune lit up, +- `aimRad`.
+   */
+  readonly spiral: PackRow & Counted & { readonly telegraphSeconds: number; readonly seconds: number; readonly turns: number; readonly aimRad: number };
   /** A rune burst whose shard ring has ONE gap of `gapRad`; the gap opens within `gapAimRad` of the hero's direction. */
   readonly gapRing: PackRow & Counted & { readonly telegraphSeconds: number; readonly gapRad: number; readonly gapAimRad: number };
   /** Two orb fans from opposite edges, both aimed at the hero (`count` is per fan). */
   readonly pincer: PackRow & Counted & { readonly arc: number };
   /**
-   * A line of large orbs, `spacingPx` apart, sweeps the arena from the edge farther from the hero. One gap of `gapPx`
-   * (centre to centre), within `reachFraction` of the distance the hero can WALK before the line arrives. At most one
-   * curtain at a time.
+   * A line of large orbs, `spacingPx` apart, sweeps the arena from the edge farther from the hero at `speedFactor` x
+   * the large-orb speed. One gap of `gapPx` (centre to centre), within `reachFraction` of the distance the hero can
+   * WALK before the line arrives. At most one curtain at a time.
    */
-  readonly curtain: PackRow & { readonly spacingPx: number; readonly gapPx: number; readonly reachFraction: number };
+  readonly curtain: PackRow & { readonly spacingPx: number; readonly gapPx: number; readonly reachFraction: number; readonly speedFactor: number };
   /** An orb fan, then the same fan `echoSeconds` later, turned by half the gap between its rays. */
   readonly echoFan: PackRow & Counted & { readonly arc: number; readonly echoSeconds: number };
   /**
@@ -83,10 +86,10 @@ function deepFreeze<T>(o: T): T {
 export const FEATURES: Features = deepFreeze({
   patternPack: {
     enabled: false,
-    spiral: { weight: 1.5, unlockWave: 1, telegraphSeconds: 0.6, seconds: 1.2, turns: 1.5, count: 10, countPerWave: 0.5, maxCount: 16 },
-    gapRing: { weight: 1.5, unlockWave: 2, telegraphSeconds: 0.6, gapRad: 0.7, gapAimRad: 0.5, count: 16, countPerWave: 0.5, maxCount: 22 },
+    spiral: { weight: 1.5, unlockWave: 1, telegraphSeconds: 0.6, seconds: 1.2, turns: 1.5, aimRad: 0.05, count: 10, countPerWave: 0.5, maxCount: 16 },
+    gapRing: { weight: 1.5, unlockWave: 2, telegraphSeconds: 0.6, gapRad: 0.7, gapAimRad: 0.8, count: 14, countPerWave: 0.5, maxCount: 20 },
     pincer: { weight: 1.5, unlockWave: 3, arc: 0.6, count: 3, countPerWave: 0.2, maxCount: 5 },
-    curtain: { weight: 1.2, unlockWave: 4, spacingPx: 14, gapPx: 44, reachFraction: 0.6 },
+    curtain: { weight: 0.6, unlockWave: 4, spacingPx: 14, gapPx: 44, reachFraction: 0.3, speedFactor: 0.8 },
     echoFan: { weight: 1.5, unlockWave: 5, arc: 0.7, echoSeconds: 0.5, count: 3, countPerWave: 0.25, maxCount: 6 },
     crossfire: { weight: 1.2, unlockWave: 6, idleSeconds: 1.0, burstGapSeconds: 0.25, count: 2, countPerWave: 0.1, maxCount: 3 },
     pulseRings: { weight: 1.2, unlockWave: 8, telegraphSeconds: 0.6, rings: 3, ringGapSeconds: 0.4, count: 8, countPerWave: 0.25, maxCount: 12 },
