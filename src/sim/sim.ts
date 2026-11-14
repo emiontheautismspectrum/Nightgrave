@@ -4,12 +4,13 @@ import { beamHits, onBossParry } from './boss';
 import { makeParams, ticks, type SimParams } from './params';
 import { isDouble, isSlow, runPickups } from './pickups';
 import { toSeed } from './rng';
-import { NEVER, type Hero, type Projectile, type SimState } from './state';
+import { NEVER, type Hero, type Knot, type Projectile, type SimState } from './state';
 import { inParryZone, segDist2 } from './parryZone';
 import type { AnyHeroId } from '../data/heroes';
 import { FEATURES, type Features } from '../data/features';
 import { isFading, moveProjectile, runDirector, sigilHits, spawnProjectile, splitBurst, type DirectorOptions } from './waves';
 import { runPatternPack } from './patternPack';
+import { runKnots } from './hunts';
 
 export { spawnProjectile } from './waves';
 
@@ -95,6 +96,7 @@ export function createState(seed: number, difficulty: Difficulty, hero: AnyHeroI
     doubleTicks: 0,
     events: [],
     ...(p.pack ? { packQueue: [] } : {}), // new state only while the block is enabled
+    ...(p.knot ? { knots: [] } : {}),
   };
 }
 
@@ -250,6 +252,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
     if (p.pack) runPatternPack(s, p, spawnProjectile); // deferred pack emissions (also finish during a boss, like casters)
     runPickups(s, p);
   }
+  if (s.knots) runKnots(s, p, spawnProjectile); // FEATURES.knot: fuses that ended burst (also without the director)
   const f = isSlow(s) ? p.pickups.slowTime.factor : 1; // Slow Time: projectiles only (beams and timers unaffected)
   for (const pr of s.projectiles) moveProjectile(s, pr, f);
 
@@ -265,18 +268,29 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
     // within parryRadius * parryCloseFrac of the hero) steps it once more (at most once per pulse). Every destroyed
     // projectile, perfect or not, refreshes the reset timer; a whiff or a crack alone neither steps nor refreshes.
     // the hero's parry zone (radius + arc around the aim): THE shared zone function (src/sim/parryZone.ts)
-    const cand: { pr: Projectile; d2: number }[] = [];
+    const cand: ({ pr: Projectile; d2: number; id: number } | { knot: Knot; d2: number; id: number })[] = [];
     for (const pr of s.projectiles) {
       if (!pr.parryable || isFading(s, pr) || pr.crackedBy === h.parryStart) continue;
       const d2 = inParryZone(h.x, h.y, h.aimX, h.aimY, pr.x, pr.y, pr.radius, p);
-      if (d2 >= 0) cand.push({ pr, d2 });
+      if (d2 >= 0) cand.push({ pr, d2, id: pr.id });
     }
-    cand.sort((a, b) => a.d2 - b.d2 || a.pr.id - b.pr.id);
+    // FEATURES.knot: a knot covered by the pulse is a candidate like a projectile (the same zone, nearest first)
+    if (s.knots)
+      for (const knot of s.knots) {
+        const d2 = inParryZone(h.x, h.y, h.aimX, h.aimY, knot.x, knot.y, knot.r, p);
+        if (d2 >= 0) cand.push({ knot, d2, id: knot.id });
+      }
+    cand.sort((a, b) => a.d2 - b.d2 || a.id - b.id);
     const hit = new Set<number>();
     const perfectEdge = p.parryRadius * p.parryCloseFrac;
-    for (const { pr, d2 } of cand) {
+    for (const c of cand) {
       if (h.parryKills >= p.parryMaxKills) break;
       h.parryKills++;
+      if ('knot' in c) {
+        parryKnot(s, p, c.knot);
+        continue;
+      }
+      const { pr, d2 } = c;
       if (pr.armor > 0) {
         // armored orb: this parry only cracks the shell and pushes it a few px straight away from the hero
         pr.armor--;
@@ -404,6 +418,32 @@ function updateAim(h: Hero, ix: number, iy: number, want: number, p: SimParams):
   }
 }
 
+/**
+ * A pulse destroyed a hex knot (FEATURES.knot): it scores like a parried projectile (the pulse's first kill pays
+ * parryBase x the multiplier and steps it once, later kills extraKillPoints) and refreshes the reset timer, but it is
+ * never PERFECT, never gives a guard charge (also when it is the pulse's first kill) and is never a boss reflect.
+ */
+function parryKnot(s: SimState, p: SimParams, k: Knot): void {
+  const h = s.hero;
+  const first = !h.parryScored;
+  const dbl = isDouble(s) ? p.pickups.doubleScore.factor : 1;
+  const points = (first ? p.parryBase : p.extraKillPoints) * s.multiplier * dbl; // hundredths of a point
+  s.parryScoreHundredths += points;
+  const step = first ? p.multStep : 0;
+  const after = Math.min(p.multCap, s.multiplier + step);
+  s.events.push({ type: 'parry_hit', id: k.id, x: k.x, y: k.y, points: points / 100, multiplier: s.multiplier / 100, perfect: false, multAfter: after / 100 });
+  if (first) s.parryCount++;
+  if (step > 0) {
+    s.multiplier = after;
+    s.events.push({ type: 'mult_step', multiplier: after / 100, perfect: false, x: h.x, y: h.y });
+  }
+  s.lastParryTick = s.tick;
+  h.parryHit = true;
+  h.parryScored = true;
+  s.knots = (s.knots ?? []).filter((q) => q.id !== k.id);
+  s.events.push({ type: 'knot_end', id: k.id, x: k.x, y: k.y, how: 'parry' });
+}
+
 /** The Wisp's ember trail: expire old segments, burn parryable non-armored projectiles (no step, no timer, no parry). */
 function runTrail(s: SimState, p: SimParams): void {
   const A = p.ability;
@@ -425,6 +465,19 @@ function runTrail(s: SimState, p: SimParams): void {
     s.events.push({ type: 'trail_kill', id: pr.id, x: pr.x, y: pr.y, points: points / 100 });
   }
   if (burnt.size) s.projectiles = s.projectiles.filter((pr) => !burnt.has(pr.id));
+  // FEATURES.knot: knots are trail-proof by default (`trailProof`); with it off the trail burns them like shots
+  if (p.knot && !p.knot.trailProof && s.knots)
+    for (const k of [...s.knots]) {
+      if (s.trailKills >= A.maxKills) break;
+      const r = k.r + A.halfWidth;
+      if (!s.trail.some((g) => segDist2(k.x, k.y, g.x0, g.y0, g.x1, g.y1) <= r * r)) continue;
+      s.trailKills++;
+      const points = A.killPoints * s.multiplier * (isDouble(s) ? p.pickups.doubleScore.factor : 1);
+      s.parryScoreHundredths += points;
+      s.events.push({ type: 'trail_kill', id: k.id, x: k.x, y: k.y, points: points / 100 });
+      s.knots = s.knots.filter((q) => q.id !== k.id);
+      s.events.push({ type: 'knot_end', id: k.id, x: k.x, y: k.y, how: 'parry' });
+    }
 }
 
 function die(s: SimState, by: number): void {

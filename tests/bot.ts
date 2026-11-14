@@ -11,6 +11,34 @@ export interface BotOptions {
   parry?: boolean;
   /** Dash across a beam sweeping in from the front (the skilled bot). Default false. */
   beamDash?: boolean;
+  /**
+   * Hex knots (FEATURES.knot only): walk to a knot that can be reached before its fuse ends, parry it, and step away
+   * from one about to burst. Default true; false = ignore knots entirely (the walking-only fairness solver). Nothing
+   * of this runs while no knot exists, so the bot plays exactly as before without the block.
+   */
+  knots?: boolean;
+}
+
+/** Ticks a knot hunt keeps in hand: a knot is chased only if the hero reaches it this long before its fuse ends. */
+export const KNOT_MARGIN = 12;
+
+/** The knot the bot goes for: the nearest one it can reach (inside half its parry radius) before the fuse ends. */
+export function knotTarget(sim: Sim): { x: number; y: number; r: number; id: number; burst: number } | null {
+  const s = sim.state;
+  const p = sim.params;
+  const h = s.hero;
+  let best: { x: number; y: number; r: number; id: number; burst: number } | null = null;
+  let bd = Infinity;
+  for (const k of s.knots ?? []) {
+    const d = Math.hypot(k.x - h.x, k.y - h.y);
+    const reach = Math.max(0, d - p.parryRadius * 0.5) / p.heroSpeed;
+    if (reach + KNOT_MARGIN > k.burst - s.tick) continue;
+    if (d < bd) {
+      bd = d;
+      best = k;
+    }
+  }
+  return best;
 }
 
 /** Eye beam threat (wind-up or active): start line, rotation sign. The side behind the start line is never swept. */
@@ -72,6 +100,29 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
         dashAway = [-pr.vy / vl, pr.vx / vl];
         if (dashAway[0] * -cx + dashAway[1] * -cy < 0) dashAway = [-dashAway[0], -dashAway[1]];
       }
+    }
+  }
+  // hex knots (FEATURES.knot): parry one that is inside the zone, walk to the one in reach, keep clear of a burst
+  const knots = s.knots;
+  if (knots && knots.length && opts.knots !== false) {
+    for (const k of knots) {
+      if (inParryZone(h.x, h.y, h.aimX, h.aimY, k.x, k.y, k.r - 2, p) >= 0) parryTarget = true;
+      const rx = h.x - k.x;
+      const ry = h.y - k.y;
+      const d = Math.sqrt(rx * rx + ry * ry) || 1;
+      if (k.burst - s.tick < 30 && d < 48) {
+        fx += (rx / d) * 3;
+        fy += (ry / d) * 3;
+      }
+    }
+    const kt = knotTarget(sim);
+    if (kt) {
+      const dx = kt.x - h.x;
+      const dy = kt.y - h.y;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1;
+      const w = d > p.parryRadius * 0.4 ? 0.12 : 0;
+      fx += (dx / d) * w;
+      fy += (dy / d) * w;
     }
   }
   if (parryTarget && opts.parry !== false && parryCooldownLeft(s, p) === 0) buttons |= BTN_PARRY;

@@ -11,6 +11,7 @@
  */
 import { BTN_DASH, BTN_PARRY, type InputFrame } from '../src/sim/input';
 import { dashCooldownLeft, isFading, parryCooldownLeft, type Sim } from '../src/sim/sim';
+import { inParryZone } from '../src/sim/parryZone';
 import { botInput } from './bot';
 
 export const REACTION_TICKS = 12;
@@ -90,6 +91,14 @@ export class SkilledBot {
         }
       }
       if (best < 40) this.parryAt = t + Math.max(0, Math.round(best)) + Math.round((this.rnd() - 0.5) * 4.999);
+      // a hex knot (FEATURES.knot only) inside the zone and seen for the reaction time: press within 0-2 ticks
+      if (this.parryAt < 0)
+        for (const k of s.knots ?? [])
+          if (t - k.start >= REACTION_TICKS && inParryZone(h.x, h.y, h.aimX, h.aimY, k.x, k.y, k.r - 1, p) >= 0) {
+            this.parryAt = t + Math.floor(this.rnd() * 3);
+            this.target = k.id;
+            break;
+          }
     }
     if (this.parryAt >= 0 && t >= this.parryAt) {
       buttons |= BTN_PARRY;
@@ -98,7 +107,7 @@ export class SkilledBot {
     }
     // an arc hero faces the threat from TURN_LEAD ticks before the press until the end of the pulse (or the threat's end)
     const turning = (this.parryAt >= 0 && this.parryAt - t <= TURN_LEAD) || t < this.turnUntil;
-    const tgt = turning && !p.parryFull ? s.projectiles.find((pr) => pr.id === this.target) : undefined;
+    const tgt = turning && !p.parryFull ? (s.projectiles.find((pr) => pr.id === this.target) ?? s.knots?.find((k) => k.id === this.target)) : undefined;
     if (tgt && !(buttons & BTN_DASH)) {
       const rx = tgt.x - h.x;
       const ry = tgt.y - h.y;

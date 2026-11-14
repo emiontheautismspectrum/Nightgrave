@@ -5,6 +5,7 @@
 import { HOLLOWS, PORTAL, RUNES } from '../data/arena';
 import { dcos, dsin, PI, rotate } from './dmath';
 import { isBossWave, rotateBeams, runBoss, startBoss } from './boss';
+import { huntsAtBoss, startKnot } from './hunts';
 import { packPick, packWeight, startPackPattern } from './patternPack';
 import type { SimParams } from './params';
 import { nextFloat, range } from './rng';
@@ -389,6 +390,9 @@ function pickPattern(s: SimState, p: SimParams): (s: SimState, p: SimParams, sp:
   for (const [k] of PATTERNS) if (s.wave >= p.patterns[k].unlockWave) total += p.patterns[k].weight;
   // FEATURES.patternPack (enabled only): its rows join the pool AFTER the existing ones; still one single draw
   if (p.pack) total += packWeight(p.pack, s.wave);
+  // FEATURES.knot (enabled only): one more row after the pack's (pool order: existing, pack, knot)
+  const knot = p.knot && s.wave >= p.knot.unlockWave ? p.knot.weight : 0;
+  total += knot;
   let r = nextFloat(s) * total;
   for (const [k, fn] of PATTERNS) {
     if (s.wave < p.patterns[k].unlockWave) continue;
@@ -399,7 +403,10 @@ function pickPattern(s: SimState, p: SimParams): (s: SimState, p: SimParams, sp:
     const key = packPick(p.pack, s.wave, r);
     // a set piece that cannot start (no free rune, hollow or caster slot) falls back to an orb fan
     if (key) return (s2, p2, sp) => void (startPackPattern(key, s2, p2, sp, spawnProjectile) || orbFan(s2, p2, sp));
+    r -= packWeight(p.pack, s.wave);
   }
+  // a knot that cannot be created (the cap, no free spot, the boss lead) falls back to an orb fan
+  if (knot > 0 && (r -= knot) < 0) return (s2, p2, sp) => void (startKnot(s2, p2, sp) || orbFan(s2, p2, sp));
   return orbFan;
 }
 
@@ -451,6 +458,7 @@ export function runDirector(s: SimState, p: SimParams, opts: DirectorOptions): v
     // the boss replaces this wave; the wave clock stays paused until it is defeated and the break is over
     s.bossWave = wave;
     startBoss(s, p, wave);
+    if (s.knots) huntsAtBoss(s); // the hunts never reach into a boss fight (FEATURES.knot)
     s.waveClock = (wave - startWave + 1) * p.waveTicks;
     fireTelegraphs(s, p);
     runCasters(s, p, waveSpeed(p, wave));

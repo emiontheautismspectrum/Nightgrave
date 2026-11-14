@@ -72,13 +72,15 @@ export function watch(s: SimState, piece: Pick<Piece, 'key' | 'projectiles' | 'c
 
 /** Nothing of the piece is left: no queued emission, telegraph, caster or projectile. */
 export const resolved = (s: SimState): boolean =>
-  s.projectiles.length === 0 && s.casters.length === 0 && s.telegraphs.length === 0 && (s.packQueue?.length ?? 0) === 0;
+  s.projectiles.length === 0 && s.casters.length === 0 && s.telegraphs.length === 0 && (s.packQueue?.length ?? 0) === 0 &&
+  (s.knots?.length ?? 0) === 0;
 
 type Policy = (s: SimState, p: SimParams) => InputFrame;
 
 const walkTo = (x: number, y: number): Policy => () => ({ cursor: true, mx: x, my: y, buttons: 0 });
 /** The heuristic bot restricted to walking: it never parries and its dash presses are removed. */
-const walkBot: Policy = (s, p) => ({ ...botInput({ state: s, params: p } as unknown as Sim, { parry: false }), buttons: 0 });
+/** (It ignores hex knots entirely: it never walks to one; knots do not exist outside FEATURES.knot.) */
+const walkBot: Policy = (s, p) => ({ ...botInput({ state: s, params: p } as unknown as Sim, { parry: false, knots: false }), buttons: 0 });
 
 /** Play a policy on a COPY of the state until the piece is resolved (survived), the hero dies or the time is up. */
 function play(s0: SimState, p: SimParams, opts: SimOptions, policy: Policy, limit: number): { ok: boolean; death: number } {
