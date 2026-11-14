@@ -322,8 +322,11 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       }
       const after = Math.min(p.multCap, s.multiplier + step);
       s.events.push({ type: 'parry_hit', id: pr.id, x: pr.x, y: pr.y, points: points / 100, multiplier: s.multiplier / 100, perfect, multAfter: after / 100 });
-      if (first) {
-        s.parryCount++;
+      if (first) s.parryCount++;
+      // a pulse whose first kill was a knot (FEATURES.knot) still gets its charge from its first projectile kill
+      const knotFirst = s.knotPulse === h.parryStart;
+      if (first || knotFirst) {
+        if (knotFirst) s.knotPulse = NEVER;
         // Knight guard: every successful pulse adds a charge (the same definition as the multiplier step)
         if (p.ability.kind === 'guard' && h.guardCharges < p.ability.charges) {
           h.guardCharges++;
@@ -435,7 +438,10 @@ function parryKnot(s: SimState, p: SimParams, k: Knot): void {
   const step = first ? p.multStep : 0;
   const after = Math.min(p.multCap, s.multiplier + step);
   s.events.push({ type: 'parry_hit', id: k.id, x: k.x, y: k.y, points: points / 100, multiplier: s.multiplier / 100, perfect: false, multAfter: after / 100 });
-  if (first) s.parryCount++;
+  if (first) {
+    s.parryCount++;
+    s.knotPulse = h.parryStart; // no guard charge from the knot; the pulse's first projectile kill gives it
+  }
   if (step > 0) {
     s.multiplier = after;
     s.events.push({ type: 'mult_step', multiplier: after / 100, perfect: false, x: h.x, y: h.y });

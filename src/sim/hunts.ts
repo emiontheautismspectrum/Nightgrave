@@ -29,8 +29,11 @@ const KNOT_TRIES = 8;
 
 const d2 = (ax: number, ay: number, bx: number, by: number): number => (ax - bx) * (ax - bx) + (ay - by) * (ay - by);
 
-/** Ticks left in the current wave (the director's clock; the next wave starts when it reaches 0). */
-const waveTicksLeft = (s: SimState, p: SimParams): number => p.waveTicks - (s.waveClock % p.waveTicks);
+/**
+ * Ticks until the next wave starts, as seen by a pattern pick (the director has already counted this tick on its
+ * clock): the clock on a whole wave means the next wave starts on the very next tick.
+ */
+export const waveTicksLeft = (s: SimState, p: SimParams): number => ((p.waveTicks - (s.waveClock % p.waveTicks)) % p.waveTicks) + 1;
 
 /** Would something that lasts `life` ticks from now still be alive `lead` ticks before the next wave, a boss wave? */
 export const reachesBoss = (s: SimState, p: SimParams, life: number, lead: number): boolean =>

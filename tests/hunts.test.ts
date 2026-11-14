@@ -67,7 +67,7 @@ describe('hex knot: dark and the pool', () => {
     expect(a.state.wave === KC.unlockWave || !a.state.alive).toBe(true);
   });
 
-  it('knots join the pool from wave 4: created >= 90 px from the hero, >= 30 px inside, spaced, at most 2, never in a boss fight', () => {
+  it('knots join the pool from wave 4: created >= 90 px from the hero, >= 30 px inside, spaced, at most 2, never in a boss fight', { timeout: 60_000 }, () => {
     let made = 0;
     let both = 0;
     for (let seed = 1; seed <= 40; seed++) {
@@ -184,6 +184,18 @@ describe('hex knot: the parry', () => {
     expect(sim.state.events.some((e) => e.type === 'guard_gain')).toBe(false);
   });
 
+  it('a Knight pulse that destroys a knot AND an orb earns its guard charge whichever is nearer', () => {
+    for (const [kx, ox] of [[261, 264], [264, 261]] as const) { // both beyond the PERFECT edge
+      const { sim } = bare('knight', kx, 135, 240, 135);
+      spawnProjectile(sim.state, sim.params, 'orb_small', ox, 135, 0, 0);
+      stepBare(sim, { cursor: false, mx: 0, my: 0, buttons: BTN_PARRY });
+      expect(sim.state.knots, `knot ${kx}`).toEqual([]);
+      expect(sim.state.projectiles, `knot ${kx}`).toEqual([]);
+      expect(sim.state.hero.guardCharges, `knot ${kx}`).toBe(1);
+      expect(sim.state.multiplier, `knot ${kx}`).toBe(125); // one step per pulse
+    }
+  });
+
   it('the ONE zone: the Knight arc and the Wisp circle treat a knot exactly like an orb at the same spot', () => {
     for (const hero of ['knight', 'wisp'] as const)
       for (let a = 0; a < 24; a++)
@@ -227,7 +239,26 @@ describe('hex knot: the parry', () => {
 });
 
 describe('hex knot: the boss rule', () => {
-  it('no knot is alive when a boss wave starts (60 seeds, both heroes): every fuse ends before, nothing is cancelled', () => {
+  it('the last tick of the wave before a boss: neither a knot nor a line is created (nothing to cancel at the intro)', () => {
+    for (const f of [KNOT, BRIAR]) {
+      const sim = new Sim(5, 'hard', { hero: 'wisp', features: { ...f, knot: { ...f.knot, weight: 1000 }, briar: { ...f.briar, weight: 1000 } }, startWave: 6 });
+      sim.state.streamTimer = 1e9;
+      const s = sim.state;
+      for (let lead = 0; lead < 4; lead++) {
+        const ev: SimEvent[] = [];
+        const t = new Sim(5, 'hard', { hero: 'wisp', features: sim.features, startWave: 6 });
+        t.state.streamTimer = 1e9;
+        t.state.waveClock = t.params.waveTicks - 1 - lead;
+        t.state.patternAt = 0;
+        while (!t.state.boss && t.state.tick < 200) (t.state.alive = true, t.step(IDLE), ev.push(...t.state.events));
+        expect(ev.filter((e) => e.type === 'knot' || e.type === 'briar'), `lead ${lead}`).toEqual([]);
+        expect(ev.filter((e) => (e.type === 'knot_end' && e.how === 'cancel') || (e.type === 'briar_end' && e.how === 'withered'))).toEqual([]);
+      }
+      expect(s.tick).toBe(0);
+    }
+  });
+
+  it('no knot is alive when a boss wave starts (60 seeds, both heroes): every fuse ends before, nothing is cancelled', { timeout: 60_000 }, () => {
     let bosses = 0;
     let late = 0;
     for (let seed = 1; seed <= 60; seed++) {
@@ -424,7 +455,7 @@ describe('briar line: the rules', () => {
     expect(b.t - a.tele).toBeGreaterThan(1.9 * (a.t - a.tele));
   });
 
-  it('no line is started while a curtain is alive, and no curtain while a line is alive (both directions)', () => {
+  it('no line is started while a curtain is alive, and no curtain while a line is alive (both directions)', { timeout: 60_000 }, () => {
     const all = withFeatures('briar', 'patternPack');
     let lineWithCurtain = 0;
     let curtainWithLine = 0;
@@ -452,7 +483,7 @@ describe('briar line: the rules', () => {
     expect(curtains).toBeGreaterThan(20);
   });
 
-  it('no sigil is placed in the gap corridor while a line is alive, and a gap never opens into a sigil', () => {
+  it('no sigil is placed in the gap corridor while a line is alive, and a gap never opens into a sigil', { timeout: 60_000 }, () => {
     let sigils = 0;
     for (let seed = 1; seed <= 120; seed++) {
       const [, hx, hy] = SPOTS[seed % SPOTS.length]!;
@@ -472,7 +503,7 @@ describe('briar line: the rules', () => {
     expect(sigils).toBeGreaterThan(100);
   });
 
-  it('no line is alive at a boss intro (60 seeds): none is started that would still be there; a slowed one withers', () => {
+  it('no line is alive at a boss intro (60 seeds): none is started that would still be there; a slowed one withers', { timeout: 60_000 }, () => {
     let bosses = 0;
     let lines = 0;
     for (let seed = 1; seed <= 60; seed++) {

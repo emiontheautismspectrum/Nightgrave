@@ -385,6 +385,11 @@ export interface SimState {
   packQueue?: PackEvent[];
   /** Hex knots on the field. The field exists only while FEATURES.knot is enabled. */
   knots?: Knot[];
+  /**
+   * parryStart of the pulse whose FIRST kill was a knot (FEATURES.knot only; set lazily): that pulse's first projectile
+   * kill still earns the Knight's guard charge, so the order of the kills never decides it.
+   */
+  knotPulse?: number;
   /** Briar lines on the field. The field exists only while FEATURES.briar is enabled. */
   walls?: Wall[];
 }
