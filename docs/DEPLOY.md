@@ -320,8 +320,9 @@ page" instead of posting incompatible runs.
 Order for such an update (for example the multiplier fix, version 0.8.0, which changes the tuning fingerprint):
 
 1. Pause the replay verifier: GitHub -> Actions -> the "verify-replays" workflow -> "..." -> Disable workflow. (The
-   Action runs the code of the default branch: after the merge it would replay old pending runs with the new rules and
-   reject them as `outdated` for good; before it, the old code would reject new runs.)
+   Action runs the code of the default branch: after the merge it would SKIP old pending runs as "other version",
+   leaving them pending until the 2-day expiry, ahead of newer runs in the queue; before it, the old code would
+   skip new runs the same way.)
 2. With the OLD code (before merging), clear the queue: `npm run verify:pending` with `API_BASE` and `VERIFIER_TOKEN`
    set (as in step 14), until it reports nothing pending.
 3. Merge, then deploy the Worker and Pages together (`npx wrangler deploy` in `server/`, and let Pages build `main`),
