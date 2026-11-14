@@ -15,6 +15,7 @@
 import { HOLLOWS, RUNES } from '../data/arena';
 import { PACK_KEYS, type PackKey, type PatternPack } from '../data/features';
 import { TUNING } from '../data/tuning';
+import { isBossWave } from './boss';
 import { dcos, dsin, PI, rotate } from './dmath';
 import { ticks, type SimParams } from './params';
 import { nextFloat, range } from './rng';
@@ -33,8 +34,6 @@ export type PackSpawn = (
   telegraphTicks?: number,
 ) => Projectile;
 
-/** A pack blade is not launched at a hero this close to its stalker (the same rule as waves.CASTER_POINT_BLANK). */
-export const PACK_POINT_BLANK = 16;
 /** Rune pieces start this far from the rune centre (as the rune burst does). */
 const RUNE_OFFSET = 4;
 /** A caster's shot starts this far in front of it (as in waves.casterAttack). */
@@ -70,12 +69,12 @@ export function packEntityCaps(pack: PatternPack): Record<PackKey, { projectiles
   const casterShot = Math.max(TUNING.patterns.orbFan.maxCount, TUNING.casters.shardFan.count, 1);
   return {
     spiral: { projectiles: pack.spiral.maxCount, casters: 0 },
-    gapRing: { projectiles: pack.gapRing.maxCount, casters: 0 },
+    gapRing: { projectiles: Math.max(2, pack.gapRing.maxCount), casters: 0 },
     pincer: { projectiles: 2 * pack.pincer.maxCount, casters: 0 },
     curtain: { projectiles: Math.floor(longSide / pack.curtain.spacingPx) + 1, casters: 0 },
     echoFan: { projectiles: 2 * pack.echoFan.maxCount, casters: 0 },
     crossfire: { projectiles: 2 * pack.crossfire.maxCount, casters: 2 },
-    pulseRings: { projectiles: pack.pulseRings.rings * pack.pulseRings.maxCount, casters: 0 },
+    pulseRings: { projectiles: Math.max(1, Math.round(pack.pulseRings.rings)) * pack.pulseRings.maxCount, casters: 0 },
     heavyLine: { projectiles: pack.heavyLine.maxCount, casters: 0 },
     slowThenFast: { projectiles: pack.slowThenFast.wraiths + 1, casters: 0 },
     stalkerPair: { projectiles: 2 * casterShot, casters: 2 },
@@ -150,8 +149,10 @@ function freeRune(s: SimState): number {
 }
 
 /**
- * Light a rune from now until `fire` (the piece's LAST emission): the rune glows, and is marked on the edge of a
- * zoomed view, for the whole piece. The director's own burst for this telegraph is empty (0 shards).
+ * Light a rune from now until `fire`: the glow ramps up exactly as for a rune burst, so a piece ALWAYS launches on a
+ * full glow, the tell the player knows. A piece with several emissions re-lights its rune (a `glow` emission), so the
+ * rune stays lit, and marked on the edge of a zoomed view, until its last shot. The director's own burst for these
+ * telegraphs is empty (0 shards).
  */
 function lightRune(s: SimState, rune: number, fire: number): void {
   const r = RUNES[rune]!;
@@ -210,7 +211,8 @@ const spiral: Start = (s, p, pack, sp, _spawn, q) => {
   const [ux, uy] = aimAt(s, r.x, r.y, s.hero.x, s.hero.y, c.aimRad);
   const sign = nextFloat(s) < 0.5 ? -1 : 1;
   const v = p.smallSpeed * sp;
-  lightRune(s, rune, s.tick + tele + emit);
+  lightRune(s, rune, s.tick + tele); // the first orb, the one aimed at the hero, leaves on the full glow
+  q.push({ op: 'glow', at: s.tick + tele, pack: 'spiral', rune, fire: s.tick + tele + emit }); // lit while it emits
   for (let i = 0; i < n; i++) {
     const [dx, dy] = rotate(ux, uy, (sign * c.turns * 2 * PI * i) / n);
     q.push({ op: 'shot', at: s.tick + tele + Math.round((i * emit) / Math.max(1, n - 1)), pack: 'spiral', kind: 'orb_small', x: r.x + dx * RUNE_OFFSET, y: r.y + dy * RUNE_OFFSET, vx: dx * v, vy: dy * v, tele: s.tick });
@@ -300,11 +302,10 @@ const echoFan: Start = (s, p, pack, sp, spawn, q) => {
 };
 
 /**
- * 6. Two stalkers on two different sides cast blades at the same moment, `count` blades each. The wind-up is held
- * for the whole burst, so the casters (and their edge markers) announce every blade; the last blade is the caster's
- * own attack.
+ * 6. Two stalkers on two different sides cast at the same moment: `count` blades each, side by side in parallel
+ * lanes, all leaving at the end of the usual cast. The middle (or first) lane is the stalker's own blade.
  */
-const crossfire: Start = (s, p, pack, sp, _spawn, q) => {
+const crossfire: Start = (s, p, pack, _sp, _spawn, q) => {
   const c = pack.crossfire;
   if (s.casters.length + 2 > p.casterMax) return false;
   const free = freeHollows(s);
@@ -314,13 +315,13 @@ const crossfire: Start = (s, p, pack, sp, _spawn, q) => {
   if (other.length === 0) return false;
   const b = other[Math.floor(nextFloat(s) * other.length)] ?? other[0]!;
   const n = countOf(c, s.wave);
-  const gap = ticks(c.burstGapSeconds);
   const idle = ticks(c.idleSeconds);
-  const v = p.bladeSpeed * sp;
   for (const hollow of [a, b]) {
-    const cs = stalker(s, p, hollow, 'blade', idle, p.casterCast + (n - 1) * gap, 'crossfire');
-    for (let i = 0; i < n - 1; i++)
-      q.push({ op: 'aim', at: cs.castStart + p.casterCast + i * gap, pack: 'crossfire', kind: 'blade', x: cs.x, y: cs.y, speed: v, spread: 0.08, minDist: PACK_POINT_BLANK, tele: s.tick });
+    const cs = stalker(s, p, hollow, 'blade', idle, p.casterCast, 'crossfire');
+    const flip = nextFloat(s) < 0.5 ? -1 : 1;
+    // lanes at +1, -1, +2, -2, ... gaps beside the stalker's own blade
+    for (let i = 1; i < n; i++)
+      q.push({ op: 'lane', at: cs.fire, pack: 'crossfire', x: cs.x, y: cs.y, offset: flip * (i % 2 ? 1 : -1) * Math.ceil(i / 2) * c.laneGapPx, tele: s.tick });
   }
   return true;
 };
@@ -336,9 +337,12 @@ const pulseRings: Start = (s, p, pack, sp, _spawn, q) => {
   const rings = Math.max(1, Math.round(c.rings));
   const n = countOf(c, s.wave);
   const base = nextFloat(s) * 2 * PI;
-  lightRune(s, rune, s.tick + tele + (rings - 1) * gap);
-  for (let k = 0; k < rings; k++)
+  lightRune(s, rune, s.tick + tele);
+  for (let k = 0; k < rings; k++) {
+    // every ring leaves on a full glow of its own
+    if (k > 0) q.push({ op: 'glow', at: s.tick + tele + (k - 1) * gap, pack: 'pulseRings', rune, fire: s.tick + tele + k * gap });
     q.push({ op: 'ring', at: s.tick + tele + k * gap, pack: 'pulseRings', x: r.x, y: r.y, n, speed: p.shardSpeed * sp, gap: 0, aim: false, off: base + (k * 2 * PI) / n / rings, tele: s.tick });
+  }
   return true;
 };
 
@@ -399,15 +403,21 @@ const stalkerPair: Start = (s, p, pack) => {
   return true;
 };
 
+/** Pieces that last several seconds (a slow line, casters): see PatternPack.bossLeadSeconds. */
+const LONG_PIECES: readonly PackKey[] = ['curtain', 'crossfire', 'stalkerPair'];
+
 const STARTS: Record<PackKey, Start> = { spiral, gapRing, pincer, curtain, echoFan, crossfire, pulseRings, heavyLine, slowThenFast, stalkerPair };
 
 /**
  * Start a set piece now (called by the director for the row it picked). False: it could not start (no free rune,
- * hollow or caster slot, a curtain already on the field) and nothing was changed except, at most, PRNG draws.
+ * hollow or caster slot, a curtain already on the field, a long piece just before a boss wave) and nothing was
+ * changed except, at most, PRNG draws.
  */
 export function startPackPattern(key: PackKey, s: SimState, p: SimParams, sp: number, spawn: PackSpawn): boolean {
   const pack = p.pack;
   if (!pack) return false;
+  // the long pieces are not started just before a boss wave (they would still be on the field at its first attack)
+  if (LONG_PIECES.includes(key) && isBossWave(p, s.wave + 1) && p.waveTicks - (s.waveClock % p.waveTicks) < ticks(pack.bossLeadSeconds)) return false;
   const q = (s.packQueue ??= []);
   if (!STARTS[key](s, p, pack, sp, spawn, q)) return false;
   s.events.push({ type: 'pack', key });
@@ -447,10 +457,16 @@ function fire(s: SimState, p: SimParams, e: PackEvent, spawn: PackSpawn): void {
       const [dx, dy] = rotate(gx, gy, e.gap / 2 + k * step);
       tagged(spawn(s, p, 'rune_shard', e.x + dx * RUNE_OFFSET, e.y + dy * RUNE_OFFSET, dx * e.speed, dy * e.speed, {}, s.tick - e.tele), e.pack);
     }
-  } else if (e.op === 'aim') {
-    if (d2(e.x, e.y, h.x, h.y) < e.minDist * e.minDist) return;
-    const [ax, ay] = aimAt(s, e.x, e.y, h.x, h.y, e.spread);
-    tagged(spawn(s, p, e.kind, e.x + ax * CASTER_MUZZLE, e.y + ay * CASTER_MUZZLE, ax * e.speed, ay * e.speed, {}, e.tele < 0 ? 0 : s.tick - e.tele), e.pack);
+  } else if (e.op === 'glow') {
+    lightRune(s, e.rune, e.fire);
+  } else if (e.op === 'lane') {
+    // the stalker's own blade was launched by the director earlier this tick (it has not moved yet)
+    const near = (CASTER_MUZZLE + 2) * (CASTER_MUZZLE + 2);
+    const own = s.projectiles.find((pr) => pr.born === s.tick && pr.kind === 'blade' && pr.boss === 0 && pr.speed > 1e-6 && d2(pr.x, pr.y, e.x, e.y) <= near);
+    if (!own) return; // the cast fizzled (point blank): no lane either
+    const nx = -own.vy / own.speed;
+    const ny = own.vx / own.speed;
+    tagged(spawn(s, p, 'blade', own.x + nx * e.offset, own.y + ny * e.offset, own.vx, own.vy, {}, s.tick - e.tele), e.pack);
   } else {
     const [x, y] = farPoint(s, p, e.minDist);
     const dt = Math.max(1, s.tick - e.t0);
@@ -481,6 +497,6 @@ export function runPatternPack(s: SimState, p: SimParams, spawn: PackSpawn): voi
   for (const c of s.casters) {
     if (!c.pack || c.fire !== s.tick) continue;
     const near = (CASTER_MUZZLE + 2) * (CASTER_MUZZLE + 2);
-    for (const pr of s.projectiles) if (pr.born === s.tick && !pr.pack && d2(pr.x, pr.y, c.x, c.y) <= near) pr.pack = c.pack;
+    for (const pr of s.projectiles) if (pr.born === s.tick && !pr.pack && pr.boss === 0 && d2(pr.x, pr.y, c.x, c.y) <= near) pr.pack = c.pack;
   }
 }

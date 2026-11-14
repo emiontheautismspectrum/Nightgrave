@@ -32,7 +32,7 @@ flags to try something.
 
 A variant run cannot reach the board:
 
-- its replay is encoded with its own flags (`encodeReplay(..., meta, sim.features)`) and carries
+- its replay is encoded with its own flags (`replayOf(sim)`, or `encodeReplay(..., meta, sim.features)`) and carries
   `tuningHash(variant)`; `decodeReplay` and `playReplay` refuse it under the production flags ("different tuning"),
   and `playReplay` always decodes and simulates under the SAME flags;
 - the game, the Worker and the verifier never pass flags, so they always use the production ones; the Worker answers
@@ -74,19 +74,21 @@ Ten set pieces built from the existing threats only (no new entity kind, sprite,
 `src/sim/patternPack.ts`; rows in `FEATURES.patternPack`. When the block is on, its rows join the director's pool AFTER
 the existing patterns: the existing order, weights and draws are untouched and the pick is still one PRNG draw. A
 piece that cannot start falls back to an orb fan, like a summon. No piece starts from a boss intro to the end of the
-break; emissions already queued finish, like rune telegraphs and casters.
+break; emissions already queued finish, like rune telegraphs and casters. The long pieces (curtain, crossfire,
+stalkerPair) are also not started in the last `bossLeadSeconds` (5 s) before a boss wave. The cues keep the tells the
+player already knows: a rune piece launches on a full glow, a stalker at the end of its cast.
 
 | Piece | Wave | What it is | Cue | Cap per instance |
 |---|---|---|---|---|
-| `spiral` | 1 | a rune emits small orbs over 1.2 s while the direction turns; the first one flies at the hero | rune glow | 16 |
+| `spiral` | 1 | a rune emits small orbs over 1.2 s while the direction turns; the first one flies at the hero | rune glow (full at the first orb, then lit while it emits) | 16 |
 | `gapRing` | 2 | a dense rune burst with ONE gap of 0.7 rad, opened near the hero's direction | rune glow | 20 |
 | `pincer` | 3 | two orb fans from opposite edges, crossing at the hero | far edge spawn | 10 |
 | `curtain` | 4 | a line of large orbs sweeps in from the far edge with one 44 px gap within walking reach; one at a time | far edge spawn | 28 |
 | `echoFan` | 5 | an orb fan, then the same fan 0.5 s later, turned by half a ray gap | far edge spawn | 12 |
-| `crossfire` | 6 | two stalkers on two sides cast 2-3 blades each at the same time (red) | stalkers, wind-up held for the burst | 6 + 2 casters |
-| `pulseRings` | 8 | one rune fires 3 shard rings 0.4 s apart, each turned by a third of the spacing | rune glow | 36 |
+| `crossfire` | 6 | two stalkers on two sides cast together: 2-3 blades each, side by side in lanes 12 px apart (red) | stalkers; every blade leaves at the end of the usual cast | 6 + 2 casters |
+| `pulseRings` | 8 | one rune fires 3 shard rings 0.4 s apart, each turned by a third of the spacing | rune glow, a full ramp before every ring | 36 |
 | `heavyLine` | 9 | large orbs from points along one far edge, parallel, 0.15 s apart | far edge spawn | 7 |
-| `slowThenFast` | 11 | two wraiths, then 1.2 s later one fast small orb aimed ahead of the hero's drift | spawns >= 150 px away | 3 |
+| `slowThenFast` | 11 | two wraiths, then 1.2 s later one fast small orb aimed ahead of the hero's drift | far edge spawns (the wraiths >= 60 px, the fast orb >= 150 px away) | 3 |
 | `stalkerPair` | 13 | two stalkers; the second casts 0.7 s after the first (a violet fan, then any attack) | stalkers | 14 + 2 casters |
 
 Fairness, all tested in `tests/pattern_pack.test.ts` and `tests/edge_markers.test.ts` on the enabled variant: nothing

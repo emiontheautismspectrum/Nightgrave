@@ -20,8 +20,8 @@ const SEEDS: Record<HeroId, number[]> = {
 const CAP = 60 * 270;
 
 const commit = process.argv[2] ?? '';
-if (!/^[0-9a-f]{7,40}$/.test(commit)) {
-  console.error('usage: npx vite-node tools/bot/golden_record.ts <commit hash>');
+if (!/^[0-9a-f]{40}$/.test(commit)) {
+  console.error('usage: npx vite-node tools/bot/golden_record.ts <full 40-character commit hash the working tree is at>');
   process.exit(2);
 }
 const runs = [];

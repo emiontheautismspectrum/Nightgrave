@@ -9,7 +9,7 @@ import { HERO_RULES, HEROES, TEST_HEROES } from '../src/data/heroes';
 import { TUNING } from '../src/data/tuning';
 import { CLIENT_VERSION, tuningFingerprint } from '../src/shared/version';
 import { makeParams } from '../src/sim/params';
-import { decodeReplay, encodeReplay, playReplay, tuningHash } from '../src/sim/replay';
+import { decodeReplay, encodeReplay, playReplay, replayOf, tuningHash } from '../src/sim/replay';
 import { Sim } from '../src/sim/sim';
 import { mulberryInputs } from './scripted';
 
@@ -96,6 +96,20 @@ describe('feature flags: an enabled variant', () => {
     expect(withFeatures()).toEqual(FEATURES);
   });
 
+  it('a variant is frozen too, and a value that cannot be fingerprinted is refused', () => {
+    expect(Object.isFrozen(VARIANT) && Object.isFrozen(VARIANT.patternPack) && Object.isFrozen(VARIANT.patternPack.spiral)).toBe(true);
+    expect(() => ((VARIANT.patternPack as { enabled: boolean }).enabled = false)).toThrow();
+    const withTurns = (turns: unknown): Features => ({ ...VARIANT, patternPack: { ...VARIANT.patternPack, spiral: { ...VARIANT.patternPack.spiral, turns: turns as number } } });
+    for (const bad of [NaN, Infinity, -Infinity, undefined, -0]) expect(() => tuningHash(withTurns(bad)), String(bad)).toThrow(/fingerprint/);
+    expect(tuningHash(withTurns(0))).not.toBe(tuningHash(withTurns(1.5)));
+    // the same odd value in a DISABLED block is never looked at
+    expect(tuningHash({ ...FEATURES, patternPack: { ...FEATURES.patternPack, spiral: { ...FEATURES.patternPack.spiral, turns: NaN } } })).toBe('f0214eba');
+    // "enabled" must be exactly true everywhere: a truthy 1 is off for the sim AND for the fingerprint
+    const one = { patternPack: { ...FEATURES.patternPack, enabled: 1 as unknown as boolean } };
+    expect(tuningHash(one)).toBe('f0214eba');
+    expect(makeParams('hard', 'knight', one).pack).toBeNull();
+  });
+
   it('has a different fingerprint, which covers the rows of the enabled block and not the key order', () => {
     const v = tuningHash(VARIANT);
     expect(v).toMatch(/^[0-9a-f]{8}$/);
@@ -117,7 +131,10 @@ describe('feature flags: an enabled variant', () => {
   it('a variant replay carries the variant fingerprint and cannot be decoded or played by a production build', () => {
     const sim = new Sim(77, 'hard', { hero: 'knight', features: VARIANT });
     for (const f of mulberryInputs(5, 60 * 30)) sim.step(f);
-    const r = JSON.parse(JSON.stringify(encodeReplay(77, 'hard', 'knight', sim.log, undefined, sim.features))) as { tuning: string };
+    // replayOf(sim) always encodes under the flags the Sim was built with
+    expect(replayOf(sim)).toEqual(encodeReplay(77, 'hard', 'knight', sim.log, undefined, VARIANT));
+    expect(replayOf(new Sim(1, 'hard', { hero: 'wisp' })).tuning).toBe('f0214eba');
+    const r = JSON.parse(JSON.stringify(replayOf(sim))) as { tuning: string };
     expect(r.tuning).toBe(tuningHash(VARIANT));
     expect(r.tuning).not.toBe(tuningFingerprint());
     expect(() => decodeReplay(r)).toThrow(/different tuning/);

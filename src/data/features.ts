@@ -35,6 +35,11 @@ interface Counted {
 export interface PatternPack {
   readonly enabled: boolean;
   /**
+   * The long pieces (curtain, crossfire, stalkerPair) are not started in the last `bossLeadSeconds` before a boss
+   * wave, so they are over, or nearly, when the boss makes its first attack.
+   */
+  readonly bossLeadSeconds: number;
+  /**
    * A rune glows, then emits small orbs one by one over `seconds` while the direction turns `turns` full circles; the
    * first orb flies at the hero's position when the rune lit up, +- `aimRad`.
    */
@@ -52,10 +57,10 @@ export interface PatternPack {
   /** An orb fan, then the same fan `echoSeconds` later, turned by half the gap between its rays. */
   readonly echoFan: PackRow & Counted & { readonly arc: number; readonly echoSeconds: number };
   /**
-   * Two stalkers step out of hollows on two different sides and cast blades at the same time: `count` blades each,
-   * `burstGapSeconds` apart, every blade aimed at the hero when it leaves (crossing lines). Telegraph = the casters.
+   * Two stalkers step out of hollows on two different sides and cast at the same moment: `count` blades each, side by
+   * side in lanes `laneGapPx` apart, all leaving at the end of the cast (the usual caster tell).
    */
-  readonly crossfire: PackRow & Counted & { readonly idleSeconds: number; readonly burstGapSeconds: number };
+  readonly crossfire: PackRow & Counted & { readonly idleSeconds: number; readonly laneGapPx: number };
   /** One rune fires `rings` full shard rings `ringGapSeconds` apart, each turned by a third of the shard spacing. */
   readonly pulseRings: PackRow & Counted & { readonly telegraphSeconds: number; readonly rings: number; readonly ringGapSeconds: number };
   /** Large orbs from points `spacingPx` apart along the far edge, flying parallel, launched `staggerSeconds` apart. */
@@ -86,12 +91,13 @@ function deepFreeze<T>(o: T): T {
 export const FEATURES: Features = deepFreeze({
   patternPack: {
     enabled: false,
+    bossLeadSeconds: 5,
     spiral: { weight: 1.5, unlockWave: 1, telegraphSeconds: 0.6, seconds: 1.2, turns: 1.5, aimRad: 0.05, count: 10, countPerWave: 0.5, maxCount: 16 },
     gapRing: { weight: 1.5, unlockWave: 2, telegraphSeconds: 0.6, gapRad: 0.7, gapAimRad: 0.8, count: 14, countPerWave: 0.5, maxCount: 20 },
     pincer: { weight: 1.5, unlockWave: 3, arc: 0.6, count: 3, countPerWave: 0.2, maxCount: 5 },
     curtain: { weight: 0.6, unlockWave: 4, spacingPx: 14, gapPx: 44, reachFraction: 0.3, speedFactor: 0.8 },
     echoFan: { weight: 1.5, unlockWave: 5, arc: 0.7, echoSeconds: 0.5, count: 3, countPerWave: 0.25, maxCount: 6 },
-    crossfire: { weight: 1.2, unlockWave: 6, idleSeconds: 1.0, burstGapSeconds: 0.25, count: 2, countPerWave: 0.1, maxCount: 3 },
+    crossfire: { weight: 1.2, unlockWave: 6, idleSeconds: 1.0, laneGapPx: 12, count: 2, countPerWave: 0.1, maxCount: 3 },
     pulseRings: { weight: 1.2, unlockWave: 8, telegraphSeconds: 0.6, rings: 3, ringGapSeconds: 0.4, count: 8, countPerWave: 0.25, maxCount: 12 },
     heavyLine: { weight: 1.2, unlockWave: 9, spacingPx: 22, staggerSeconds: 0.15, count: 4, countPerWave: 0.2, maxCount: 7 },
     slowThenFast: { weight: 1.2, unlockWave: 11, wraiths: 2, delaySeconds: 1.2, fastFactor: 1.4, minDist: 150, leadFraction: 0.7 },
@@ -103,11 +109,14 @@ export const FEATURES: Features = deepFreeze({
 export function withFeatures(...enable: FeatureKey[]): Features {
   const out = { ...FEATURES } as { -readonly [K in FeatureKey]: Features[K] };
   for (const k of enable) out[k] = { ...FEATURES[k], enabled: true };
-  return out;
+  return deepFreeze(out); // frozen: the flags a run was built from can never drift from the rules it simulates
 }
 
 /** JSON with sorted keys: the same rules always give the same text, whatever order an object was built in. */
 function canonical(v: unknown): string {
+  // a rule value must be a real one: NaN, Infinity and undefined have no distinct JSON text (two rule sets could
+  // share a fingerprint), and -0 would read as 0
+  if (v === undefined || (typeof v === 'number' && (!Number.isFinite(v) || Object.is(v, -0)))) throw new Error('features: an enabled block holds a value that cannot be fingerprinted');
   if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`;
   if (v && typeof v === 'object') {
     const o = v as Record<string, unknown>;

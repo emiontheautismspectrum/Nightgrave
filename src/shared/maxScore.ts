@@ -16,7 +16,9 @@ const t = (s: number): number => Math.max(1, Math.round(s * TICK_RATE));
 /**
  * Upper bound of projectiles spawned per second on Hard at the density cap (stream + set pieces + casters + boss).
  * `features`: the flags of the run (default: production). An ENABLED pattern pack adds its biggest set piece; a
- * disabled block is not read, so the bound of a dark build is unchanged.
+ * disabled block is not read, so the bound of a dark build is unchanged. Today this spawn rate is not the binding
+ * term of maxPossibleScore (kills are capped by pulses x kills per pulse first), so the pack leaves the score bound
+ * itself where it is; the term is kept honest for the day a rule makes it bind.
  */
 export function maxSpawnsPerSecond(features: Features = FEATURES): number {
   const T = TUNING;

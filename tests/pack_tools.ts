@@ -14,10 +14,10 @@ import { botInput } from './bot';
 /** The production flags with the pattern pack enabled. */
 export const PACK: Features = withFeatures('patternPack');
 
-/** A variant whose pool holds ONE pack row (the other pack rows weigh 0). */
-export function onlyPiece(key: PackKey): Features {
+/** A variant whose pool holds ONE pack row with the given weight (the other pack rows weigh 0). */
+export function onlyPiece(key: PackKey, weight = 1): Features {
   const pp = { ...PACK.patternPack } as Record<string, unknown>;
-  for (const k of PACK_KEYS) pp[k] = { ...PACK.patternPack[k], weight: k === key ? 1 : 0 };
+  for (const k of PACK_KEYS) pp[k] = { ...PACK.patternPack[k], weight: k === key ? weight : 0 };
   return { ...PACK, patternPack: pp as unknown as Features['patternPack'] };
 }
 

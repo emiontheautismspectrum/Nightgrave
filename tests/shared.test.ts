@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Difficulty } from '../src/data/tuning';
 import { addDays, dailySeed, dayStartMs } from '../src/shared/daily';
-import { maxPossibleScore } from '../src/shared/maxScore';
+import { maxPossibleScore, maxSpawnsPerSecond } from '../src/shared/maxScore';
 import { decodeInputLog, encodeInputLog } from '../src/shared/replayCodec';
 import { hasProfanity, validateMessage, validateName } from '../src/shared/text';
 import { sanitizeInput } from '../src/sim/input';
@@ -43,7 +43,10 @@ describe('maxPossibleScore', () => {
         }
     expect(picks).toBeGreaterThan(50);
     expect(best).toBeLessThan(0.5);
-    // the variant's bound is never below the production bound, and the production bound did not move
+    // the pack raises the spawn-rate term (its biggest piece); the score bound itself is capped by pulses x kills per
+    // pulse first, so it stays where it is: never below the production bound, and the production bound did not move
+    expect(maxSpawnsPerSecond(PACK)).toBeGreaterThan(maxSpawnsPerSecond() + 10);
+    expect(maxSpawnsPerSecond()).toBeCloseTo(45.1636, 3);
     for (const t of [0, 1, 600, 3600, 36000]) expect(maxPossibleScore(t, PACK)).toBeGreaterThanOrEqual(maxPossibleScore(t));
     expect([600, 3600, 36000].map((t) => maxPossibleScore(t))).toMatchInlineSnapshot(`
       [

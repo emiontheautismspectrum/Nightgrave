@@ -9,14 +9,14 @@ import { TUNING, type Difficulty } from '../src/data/tuning';
 import { dailySeed } from '../src/shared/daily';
 import { encodeInputLog } from '../src/shared/replayCodec';
 import { CLIENT_VERSION, tuningFingerprint } from '../src/shared/version';
-import { packEntityCaps, packPick, packWeight, PACK_POINT_BLANK } from '../src/sim/patternPack';
+import { packEntityCaps, packPick, packWeight } from '../src/sim/patternPack';
 import { encodeReplay, playReplay, tuningHash } from '../src/sim/replay';
 import { Sim } from '../src/sim/sim';
 import type { Projectile, SimEvent } from '../src/sim/state';
 import { CASTER_POINT_BLANK } from '../src/sim/waves';
 import { verifyItem, type PendingItem } from '../tools/verify/core';
 import { botInput } from './bot';
-import { PACK, resolved, SPOTS, startPiece, walkingSolver, watch, type Piece } from './pack_tools';
+import { onlyPiece, PACK, resolved, SPOTS, startPiece, walkingSolver, watch, type Piece } from './pack_tools';
 import { mulberryInputs } from './scripted';
 import { SkilledBot } from './skilled';
 
@@ -64,7 +64,6 @@ describe('pattern pack: rows and the pool', () => {
       // no pack piece (the ones with blades least of all) before the existing blades' unlock wave
       expect(PP[k].unlockWave, k).toBeGreaterThanOrEqual(TUNING.patterns.blades.unlockWave);
     }
-    expect(PACK_POINT_BLANK).toBe(CASTER_POINT_BLANK);
   });
 
   it('packWeight / packPick: locked rows never count, the rows are walked in PACK_KEYS order', () => {
@@ -117,37 +116,71 @@ describe('pattern pack: rows and the pool', () => {
 });
 
 describe('pattern pack: never during a boss intro or fight', () => {
-  it('no piece starts from the boss intro to the end of the break; queued emissions finish; pieces start again after', { timeout: 60_000 }, () => {
+  it('no piece starts from the boss intro to the end of the break; queued emissions finish; pieces start again after', { timeout: 120_000 }, () => {
     let fights = 0;
     let picksOutside = 0;
-    for (const [seed, wave] of [[1, 2], [2, 6], [3, 10], [4, 14], [5, 6], [6, 10]] as const) {
-      const sim = new Sim(seed * 977, 'hard', { hero: 'knight', startWave: wave, features: PACK });
-      let bossStart = -1;
-      let after = 0;
-      while (sim.state.tick < 60 * 150 && after < 60 * 20) {
-        const fighting = sim.state.boss !== null || sim.state.breakUntil > sim.state.tick; // before the step
-        const events = stepImmortal(sim, botInput(sim));
-        const s = sim.state;
-        const picked = events.filter((e) => e.type === 'pack').length;
-        if (events.some((e) => e.type === 'boss_intro')) {
-          bossStart = s.tick;
-          fights++;
+    const lead = PP.bossLeadSeconds * 60;
+    const lateLong: string[] = [];
+    for (const d of ['easy', 'medium', 'hard'] as Difficulty[])
+      for (const [seed, wave] of [[1, 2], [2, 6], [3, 10], [4, 14], [5, 6], [6, 10]] as const) {
+        const sim = new Sim(seed * 977, d, { hero: 'knight', startWave: wave, features: PACK });
+        let bossStart = -1;
+        let after = 0;
+        const longStarts: number[] = [];
+        while (sim.state.tick < 60 * 150 && after < 60 * 20) {
+          const fighting = sim.state.boss !== null || sim.state.breakUntil > sim.state.tick; // before the step
+          const events = stepImmortal(sim, botInput(sim));
+          const s = sim.state;
+          const picks = events.filter((e): e is Extract<SimEvent, { type: 'pack' }> => e.type === 'pack');
+          for (const e of picks) if (['curtain', 'crossfire', 'stalkerPair'].includes(e.key)) longStarts.push(s.tick);
+          if (events.some((e) => e.type === 'boss_intro')) {
+            bossStart = s.tick;
+            fights++;
+            // the long pieces were not started in the last bossLeadSeconds before the intro
+            for (const t of longStarts) if (bossStart - t < lead) lateLong.push(`${d} seed ${seed}: a long piece started ${bossStart - t} ticks before the intro`);
+          }
+          if (fighting || s.boss !== null) expect(picks.length, `${d} seed ${seed} tick ${s.tick}`).toBe(0);
+          else picksOutside += picks.length;
+          if (s.boss && bossStart >= 0 && s.tick === bossStart + 60 * 2) {
+            // when the intro ends (the first wind-up may start): no curtain is on the field and no pack caster is
+            // still to cast; whatever else was queued is short
+            expect(s.projectiles.filter((pr) => pr.pack === 'curtain' && pr.x > 48 && pr.x < 432 && pr.y > 27 && pr.y < 243).length, `${d} seed ${seed}`).toBeLessThanOrEqual(0);
+            expect(s.casters.filter((c) => c.pack && c.fire >= s.tick).length, `${d} seed ${seed}`).toBe(0);
+          }
+          if (s.boss && bossStart >= 0 && s.tick - bossStart > 60 * 4) expect(s.packQueue).toEqual([]);
+          if (bossStart >= 0 && !s.boss && s.breakUntil <= s.tick) after++;
         }
-        if (fighting || s.boss !== null) expect(picked, `seed ${seed} tick ${s.tick}`).toBe(0);
-        else picksOutside += picked;
-        if (s.boss && bossStart >= 0 && s.tick - bossStart > 60 * 6) {
-          // whatever was queued before the intro is long finished (the longest piece lasts under 6 s)
-          expect(s.packQueue).toEqual([]);
-          expect(s.casters.filter((c) => c.pack).length).toBe(0);
-          expect(s.projectiles.filter((pr) => pr.pack && pr.kind !== 'wraith').length).toBe(0);
-        }
-        if (bossStart >= 0 && !s.boss && s.breakUntil <= s.tick) after++;
+        expect(bossStart, `${d} seed ${seed}: the boss came`).toBeGreaterThan(0);
+        expect(after, `${d} seed ${seed}: the fight ended`).toBeGreaterThan(0);
       }
-      expect(bossStart, `seed ${seed}: the boss came`).toBeGreaterThan(0);
-      expect(after, `seed ${seed}: the fight ended`).toBeGreaterThan(0);
+    expect(lateLong).toEqual([]);
+    expect(fights).toBeGreaterThanOrEqual(18);
+    expect(picksOutside).toBeGreaterThan(60);
+  });
+
+  it('the long pieces fall back to an orb fan just before a boss wave, and only there', () => {
+    // wave 6 is followed by the boss wave 7: with less than 5 s of the wave left when the director picks (the pick
+    // comes after the tick's clock step, hence the + 1) the curtain is refused, with 5 s or more it is started
+    for (const [ticksLeft, started] of [[60 * 4, false], [60 * 5, false], [60 * 5 + 1, true], [60 * 9, true]] as const) {
+      const sim = new Sim(5, 'hard', { hero: 'wisp', features: onlyPiece('curtain'), startWave: 6 });
+      (sim.params as { patterns: unknown }).patterns = Object.fromEntries(Object.entries(sim.params.patterns).map(([k, v]) => [k, typeof v === 'object' ? { ...v, weight: 0 } : v]));
+      sim.state.streamTimer = 1e9;
+      sim.state.patternAt = 1e9;
+      while (sim.state.waveClock < sim.params.waveTicks - ticksLeft) stepImmortal(sim);
+      sim.state.patternAt = sim.state.tick;
+      const events = stepImmortal(sim);
+      expect(events.some((e) => e.type === 'pack'), `${ticksLeft} ticks before the boss wave`).toBe(started);
+      expect(sim.state.projectiles.length).toBeGreaterThan(0); // the curtain, or the orb fan it fell back to
+      expect(sim.state.projectiles.every((pr) => (pr.pack === 'curtain') === started)).toBe(true);
     }
-    expect(fights).toBeGreaterThanOrEqual(6);
-    expect(picksOutside).toBeGreaterThan(20);
+    // a wave that is not followed by a boss wave: no restriction
+    const sim = new Sim(5, 'hard', { hero: 'wisp', features: onlyPiece('curtain'), startWave: 4 });
+    sim.state.patternAt = 1e9;
+    while (sim.state.waveClock < sim.params.waveTicks - 60) stepImmortal(sim);
+    (sim.params as { patterns: unknown }).patterns = Object.fromEntries(Object.entries(sim.params.patterns).map(([k, v]) => [k, typeof v === 'object' ? { ...v, weight: 0 } : v]));
+    sim.state.projectiles = [];
+    sim.state.patternAt = sim.state.tick;
+    expect(stepImmortal(sim).some((e) => e.type === 'pack')).toBe(true);
   });
 });
 
@@ -155,11 +188,21 @@ describe('pattern pack: fairness and the colour language', () => {
   it('no pack projectile appears within 60 px of the hero without a cue of >= 15 ticks; violet parryable, red = blades only', { timeout: 120_000 }, () => {
     const fair = TUNING.fairness.minSpawnDistance;
     const spawned = new Map<PackKey, number>();
+    let cued = 0;
     for (const d of ['easy', 'medium', 'hard'] as Difficulty[])
       for (let seed = 1; seed <= 8; seed++) {
         const sim = new Sim(seed * 53 + 1, d, { hero: seed % 2 ? 'knight' : 'wisp', startWave: [1, 3, 5, 8, 11, 13, 16, 24][seed - 1]!, features: PACK });
         const bot = new SkilledBot(seed);
+        // what was REALLY on the field: every lit rune and every caster, by position, with the ticks it has been there
+        const cues = new Map<string, { x: number; y: number; since: number; last: number }>();
         while (sim.state.tick < 60 * 100) {
+          const now = sim.state.tick;
+          for (const c of [...sim.state.telegraphs, ...sim.state.casters]) {
+            const k = `${c.x},${c.y}`;
+            const cue = cues.get(k);
+            if (cue && cue.last >= now - 1) cue.last = now;
+            else cues.set(k, { x: c.x, y: c.y, since: now, last: now });
+          }
           const events = stepImmortal(sim, bot.input(sim));
           const s = sim.state;
           for (const e of events) {
@@ -168,6 +211,14 @@ describe('pattern pack: fairness and the colour language', () => {
             if (!pr?.pack) continue;
             spawned.set(pr.pack, (spawned.get(pr.pack) ?? 0) + 1);
             expect(e.dist >= fair || e.telegraphTicks >= 15, `${d} seed ${seed} tick ${s.tick}: ${pr.pack} ${pr.kind} at ${e.dist.toFixed(1)} px, cue ${e.telegraphTicks} ticks`).toBe(true);
+            if (e.dist < fair) {
+              // not only the number the piece reports: a rune glow or a caster stood at the muzzle for >= 15 ticks
+              const sx = pr.x - pr.vx;
+              const sy = pr.y - pr.vy;
+              const real = [...cues.values()].some((c) => c.last >= now - 1 && now - c.since >= 15 && Math.hypot(c.x - sx, c.y - sy) <= 20);
+              expect(real, `${d} seed ${seed} tick ${s.tick}: ${pr.pack} ${pr.kind} had no visible cue`).toBe(true);
+              cued++;
+            }
             expect(pr.parryable).toBe(pr.kind !== 'blade');
             if (pr.kind === 'blade') expect(['crossfire', 'stalkerPair']).toContain(pr.pack);
             else expect(['orb_small', 'orb_large', 'rune_shard', 'wraith']).toContain(pr.kind); // existing kinds only
@@ -178,7 +229,8 @@ describe('pattern pack: fairness and the colour language', () => {
             expect(c.kind).toBe('stalker');
             expect(c.appear - c.start).toBe(sim.params.casterTele + sim.params.casterRise);
             expect(c.fire - c.castStart).toBeGreaterThanOrEqual(15);
-            for (const q of s.packQueue ?? []) if (q.op === 'aim' && q.x === c.x && q.y === c.y) expect(q.at - c.castStart).toBeGreaterThanOrEqual(15);
+            expect(c.fire - c.castStart).toBe(sim.params.casterCast); // the usual cast: its end is the tell
+            for (const q of s.packQueue ?? []) if (q.op === 'lane' && q.x === c.x && q.y === c.y) expect(q.at).toBe(c.fire);
           }
           expect(s.casters.length).toBeLessThanOrEqual(TUNING.casters.maxActive);
           // at most one curtain on the field
@@ -186,6 +238,7 @@ describe('pattern pack: fairness and the colour language', () => {
         }
       }
     for (const k of PACK_KEYS) expect(spawned.get(k) ?? 0, k).toBeGreaterThan(0);
+    expect(cued).toBeGreaterThan(100); // close spawns really happened and were really cued
   });
 });
 
@@ -351,22 +404,34 @@ describe('pattern pack: the shape of each piece', () => {
     });
   });
 
-  it('crossfire: two stalkers on two different sides, the same cast, every shot a blade, the last one at the cast end', () => {
+  it('crossfire: two stalkers on two different sides cast together; each sends its blades side by side at the end of the cast', () => {
     each('crossfire', (shots, piece, hero) => {
-      const st = piece.sim.state;
       expect(piece.casters.size).toBe(2);
       // a hero standing on a hollow makes that stalker's blades fizzle (point blank): checked in its own test below
-      if (HOLLOWS.some((h) => Math.hypot(h.x - hero.x, h.y - hero.y) < PACK_POINT_BLANK + 10)) return;
+      if (HOLLOWS.some((h) => Math.hypot(h.x - hero.x, h.y - hero.y) < CASTER_POINT_BLANK + 10)) return;
       expect(shots.every((pr) => pr.kind === 'blade' && !pr.parryable)).toBe(true);
-      const births = [...new Set(shots.map((pr) => pr.born))].sort((a, b) => a - b);
+      expect(new Set(shots.map((pr) => pr.born)).size).toBe(1); // every blade leaves on the same tick: the cast end
       const n = shots.length / 2;
       expect(Number.isInteger(n) && n >= PP.crossfire.count && n <= PP.crossfire.maxCount).toBe(true);
-      expect(births.length).toBe(n);
-      for (let i = 1; i < births.length; i++) expect(births[i]! - births[i - 1]!).toBe(15);
-      // two muzzles near two hollows on different sides
-      const sides = new Set(shots.map((pr) => HOLLOWS.map((h) => [Math.hypot(h.x - pr.x, h.y - pr.y), h.side] as const).sort((x, y) => x[0] - y[0])[0]![1]));
+      // two groups (one per stalker): parallel lanes laneGapPx apart, from hollows on two different sides
+      const groups = new Map<string, Projectile[]>();
+      for (const pr of shots) {
+        const k = `${r6(pr.vx)},${r6(pr.vy)}`;
+        groups.set(k, [...(groups.get(k) ?? []), pr]);
+      }
+      expect(groups.size).toBe(2);
+      const sides = new Set<string>();
+      for (const g of groups.values()) {
+        expect(g.length).toBe(n);
+        const across = g.map((pr) => (pr.x * -pr.vy + pr.y * pr.vx) / pr.speed).sort((x, y) => x - y);
+        for (let i = 1; i < across.length; i++) expect(across[i]! - across[i - 1]!).toBeCloseTo(PP.crossfire.laneGapPx, 5);
+        const mx = g.reduce((a, pr) => a + pr.x, 0) / g.length;
+        const my = g.reduce((a, pr) => a + pr.y, 0) / g.length;
+        sides.add(HOLLOWS.map((h) => [Math.hypot(h.x - mx, h.y - my), h.side] as const).sort((x, y) => x[0] - y[0])[0]![1]);
+        // aimed at the hero (the caster's usual +-0.08 rad)
+        expect(angDiff(ang(g[0]!), Math.atan2(hero.y - my, hero.x - mx))).toBeLessThan(0.2);
+      }
       expect(sides.size).toBe(2);
-      expect(st.tick).toBeGreaterThan(piece.start);
     });
   });
 

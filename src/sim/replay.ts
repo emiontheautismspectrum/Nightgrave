@@ -77,6 +77,16 @@ export function encodeReplay(seed: number, difficulty: Difficulty, hero: HeroId,
   return { v: REPLAY_VERSION, tuning: tuningHash(features), seed: toSeed(seed), difficulty, hero, runs, ...(m ? { meta: m } : {}) };
 }
 
+/**
+ * The replay of a finished or running Sim, encoded under the flags that Sim was built with: the safe way to record a
+ * run (a variant run encoded by hand without its flags would claim the production fingerprint).
+ */
+export function replayOf(sim: Sim, meta?: ReplayMeta): Replay {
+  const hero = sim.state.heroId;
+  if (!isHeroId(hero)) throw new Error('replay: unknown hero');
+  return encodeReplay(sim.state.seed, sim.difficulty, hero, sim.log, meta, sim.features);
+}
+
 const isDifficulty = (d: unknown): d is Difficulty => typeof d === 'string' && Object.hasOwn(TUNING.difficulty, d);
 
 /**

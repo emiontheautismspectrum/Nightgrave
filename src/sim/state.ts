@@ -37,7 +37,7 @@ export interface Projectile {
   crackedBy: number;
   /** Harmless before this tick (split pieces), -1 = always harmful. */
   safeUntil: number;
-  /** The pattern-pack set piece that launched it (only with FEATURES.patternPack; never read by the rules). */
+  /** The pattern-pack set piece that launched it (only with FEATURES.patternPack; read only to keep one curtain at a time). */
   pack?: PackKey;
 }
 
@@ -162,8 +162,13 @@ export type PackEvent =
    * angle `off`. aim = true: the gap is centred on the hero's direction turned by `off` (when the ring is launched).
    */
   | { op: 'ring'; at: number; pack: PackKey; x: number; y: number; n: number; speed: number; gap: number; aim: boolean; off: number; tele: number }
-  /** One projectile from (x, y) aimed at the hero when it is launched; dropped if the hero is within `minDist`. */
-  | { op: 'aim'; at: number; pack: PackKey; kind: ProjectileKind; x: number; y: number; speed: number; spread: number; minDist: number; tele: number }
+  /**
+   * A blade in a lane beside a pack stalker's own blade: launched on the stalker's fire tick, `offset` px to the side
+   * of that blade and parallel to it; nothing if the stalker's cast fizzled (the hero stood next to it).
+   */
+  | { op: 'lane'; at: number; pack: PackKey; x: number; y: number; offset: number; tele: number }
+  /** Light the rune again until `fire` (a rune piece keeps its rune lit, one glow per emission or for the rest). */
+  | { op: 'glow'; at: number; pack: PackKey; rune: number; fire: number }
   /**
    * One small orb from a seeded edge point at least `minDist` from the hero, aimed ahead of the hero's drift since
    * (hx, hy) at tick t0: `lead` x the flight time.

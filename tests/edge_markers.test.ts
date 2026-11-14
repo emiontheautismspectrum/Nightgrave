@@ -12,7 +12,8 @@ import { portraitLayout } from '../src/render/portraitLayout';
 import { portraitGameSize } from '../src/web/screen';
 import { SkilledBot } from './skilled';
 import type { Features } from '../src/data/features';
-import { PACK } from './pack_tools';
+import { PACK_KEYS } from '../src/data/features';
+import { onlyPiece, PACK } from './pack_tools';
 
 const FAIR_TICKS = 15;
 /** "Could hit": the gap between the threat and the hero is within this many px. */
@@ -217,6 +218,23 @@ describe('phone portrait: the pattern pack (FEATURES.patternPack, enabled varian
       for (const k of ['pincer', 'curtain', 'echoFan', 'heavyLine']) expect(pack[k] ?? 0, k).toBeGreaterThan(0);
     });
 
+  it('piece by piece: the off-view threats of every set piece are audited (a pool with that one pack piece)', { timeout: 180_000 }, () => {
+    const pack: Record<string, number> = {};
+    const fails: string[] = [];
+    for (const key of PACK_KEYS)
+      for (const seed of [3, 17, 404, 5150, 2718, 90210]) {
+        // the piece weighs as much as half the existing pool, from a wave where the run still lasts a while
+        const r = audit(seed, Math.max(6, PACK.patternPack[key].unlockWave), false, 3600, PHONES[seed % PHONES.length]!, onlyPiece(key, 9));
+        pack[key] = (pack[key] ?? 0) + (r.pack[key] ?? 0);
+        fails.push(...r.fails);
+      }
+    expect(fails).toEqual([]);
+    console.log(`edge markers, off-view pack threats audited piece by piece: ${JSON.stringify(pack)}`);
+    // rune pieces start at the runes around the centre, where the hero plays: they are rarely off-view at birth
+    // (their glow is covered by the next test); every edge and caster piece must have been audited
+    for (const k of ['pincer', 'curtain', 'echoFan', 'crossfire', 'heavyLine', 'slowThenFast', 'stalkerPair']) expect(pack[k] ?? 0, k).toBeGreaterThan(0);
+  });
+
   it('every off-view rune and caster of a pack piece is marked from its first cue to its last emission', { timeout: 60_000 }, () => {
     let runes = 0;
     let casters = 0;
@@ -236,7 +254,10 @@ describe('phone portrait: the pattern pack (FEATURES.patternPack, enabled varian
         for (const tg of s.telegraphs) if (tg.shards === 0 && !inView(v, tg.x, tg.y)) (runes++, expect(keys.has(`t${tg.id}`)).toBe(true));
         for (const c of s.casters) if (c.pack && s.tick <= c.fire && !inView(v, c.x, c.y)) (casters++, expect(keys.has(`c${c.id}`)).toBe(true));
         // a queued rune emission is never later than the glow of its rune
-        for (const e of s.packQueue ?? []) if ((e.op === 'shot' || e.op === 'ring') && e.tele >= 0) expect(s.telegraphs.some((tg) => Math.hypot(tg.x - e.x, tg.y - e.y) < 5 && tg.start === e.tele && tg.fire >= e.at)).toBe(true);
+        // a queued rune emission always has its rune lit (re-lit glow by glow) until it leaves
+        for (const e of s.packQueue ?? []) if ((e.op === 'shot' || e.op === 'ring') && e.tele >= 0) expect(s.telegraphs.some((tg) => tg.shards === 0 && Math.hypot(tg.x - e.x, tg.y - e.y) < 5 && tg.fire >= Math.min(e.at, tg.fire))).toBe(true);
+        // and it leaves on a full glow: a ring exactly when a glow of its rune ends
+        for (const e of s.packQueue ?? []) if (e.op === 'ring' && e.at > s.tick) expect(s.telegraphs.some((tg) => tg.x === e.x && tg.y === e.y && tg.fire <= e.at) || (s.packQueue ?? []).some((g) => g.op === 'glow' && g.fire === e.at)).toBe(true);
         sim.step(bot.input(sim));
       }
     }
