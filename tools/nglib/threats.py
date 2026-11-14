@@ -173,8 +173,68 @@ def blood_sigil():
     return frames
 
 
+def hex_knot():
+    """Hex knot (12x12, 4 frames): a stationary HOLLOW violet ring (never a filled orb) with four fuse pips on it.
+    The pips ARE the fuse: frame i has 4 - i bone pips lit, the burnt ones dark. Light from the top-left."""
+    frames = []
+    xx, yy = C.grid(12, 12)
+    d = np.sqrt((xx - 5.5) ** 2 + (yy - 5.5) ** 2)
+    pips = [(5, 1), (9, 5), (5, 9), (1, 5)]  # 2x2 pips on the ring, N, E, S, W: they burn clockwise
+    for i in range(4):
+        a = C.new(12, 12)
+        ringm = (d <= 4.9) & (d >= 2.6)
+        a[ringm] = C.ci("violet")
+        a[ringm & ((xx - 5.5) + (yy - 5.5) > 3.2)] = C.ci("violet_dark")  # lower-right shade
+        for k, (x, y) in enumerate(pips):
+            a[y:y + 2, x:x + 2] = C.ci("bone" if k >= i else "violet_dark")
+        frames.append(C.outline(a))
+    return frames
+
+
+def briar_tile():
+    """Briar line band tile (8x8, 2 frames, tiled along the band): a 6 px thick band of blood-red thorny stems with
+    bone thorn tips, dark outline; frame 1 is shifted by 2 px (the line creeps)."""
+    frames = []
+    for i in range(2):
+        a = C.new(8, 8)
+        for x in range(8):
+            y0 = 2 + ((x + 2 * i) // 2) % 2  # a twisting stem
+            a[y0:y0 + 3, x] = C.ci("blood")
+            a[y0 + 2, x] = C.ci("blood_dark")
+        for x in ((1 + 2 * i) % 8, (5 + 2 * i) % 8):  # thorns up and down
+            C.put(a, x, 1, "blood")
+            C.put(a, x, 0, "bone")
+            C.put(a, (x + 2) % 8, 6, "blood")
+            C.put(a, (x + 2) % 8, 7, "blood_dark")
+        frames.append(a)
+    return frames
+
+
+def briar_post():
+    """Briar gap post (8x12): a thick thorn stake standing at each side of the gap, bone tip on top, blood body."""
+    a = C.new(8, 12)
+    a[2:12, 3:5] = C.ci("blood")
+    a[4:12, 4] = C.ci("blood_dark")
+    for y, x in ((3, 2), (6, 5), (8, 2), (10, 5)):
+        C.put(a, x, y, "blood")
+    C.put(a, 3, 1, "bone")
+    C.put(a, 4, 1, "bone")
+    C.put(a, 3, 0, "bone")
+    return [C.outline(a)]
+
+
+def edge_gap():
+    """Gap edge marker (5x5, bone): a small diamond on the arena edge where the briar gap will pass (safe passage)."""
+    a = C.new(5, 5)
+    xx, yy = C.grid(5, 5)
+    a[np.abs(xx - 2) + np.abs(yy - 2) <= 2] = C.ci("bone")
+    C.put(a, 2, 2, "stone_dark")
+    return [a]
+
+
 SPRITES = {
     "orb_armored": orb_armored, "orb_armored_crack": orb_armored_crack, "orb_split": orb_split, "blood_sigil": blood_sigil,
     "orb_small": orb_small, "orb_large": orb_large, "rune_shard": rune_shard,
     "blade": blade, "wraith": wraith, "wraith_fade": wraith_fade,
+    "hex_knot": hex_knot, "briar_tile": briar_tile, "briar_post": briar_post, "edge_gap": edge_gap,
 }

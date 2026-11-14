@@ -31,7 +31,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
 TARGET = {"violet": 3.0, "blood": 2.5}
 PROJECTILES = {"orb_small": "violet", "orb_large": "violet", "rune_shard": "violet", "wraith": "violet", "blade": "blood",
-               "orb_armored": "violet", "orb_split": "violet", "blood_sigil": "blood"}
+               "orb_armored": "violet", "orb_split": "violet", "blood_sigil": "blood",
+               "hex_knot": "violet", "briar_tile": "blood", "briar_post": "blood"}
 CALM_MAX = 1.6
 
 
@@ -161,8 +162,8 @@ def main():
     print(f"projectile contrast vs surroundings (every position in the arena; fog at alpha {fa} on top):")
     for name, hue in PROJECTILES.items():
         sheet = load_idx(os.path.join(ASSETS, "sprites", f"{name}.png"))
-        h = sheet.shape[0]
-        frames = [sheet[:, i * h:(i + 1) * h] for i in range(sheet.shape[1] // h)]
+        w = json.load(open(os.path.join(ASSETS, "atlas", "manifest.json")))["sprites"][name]["w"]  # frames need not be square
+        frames = [sheet[:, i * w:(i + 1) * w] for i in range(sheet.shape[1] // w)]
         r = sweep(lum_g, fog_mask, fog_rgb, fa, frames, hue)
         rp = sweep(lum_p, fog_mask, fog_rgb, fa, frames, hue)
         rt = sweep(lum_t, fog_mask, fog_rgb, fa, frames, hue)

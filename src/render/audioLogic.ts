@@ -8,7 +8,8 @@ export type SfxEvent =
   | 'parry' | 'parry_chain' | 'dash' | 'death' | 'orb_spawn' | 'rune_charge' | 'rune_burst' | 'blade_whoosh'
   | 'wraith_wail' | 'boss_intro_eye' | 'boss_intro_lich' | 'boss_hit' | 'boss_death' | 'pickup_slow'
   | 'pickup_double' | 'new_record' | 'ui_click' | 'ui_confirm'
-  | 'guard_gain' | 'guard_ready' | 'guard_break' | 'trail';
+  | 'guard_gain' | 'guard_ready' | 'guard_break' | 'trail'
+  | 'knot_fuse' | 'knot_burst' | 'briar_creep';
 export type MusicTrack = 'music_menu' | 'music_run_calm' | 'music_run_tense' | 'music_boss';
 export const AMBIENCE = 'amb_graveyard';
 
@@ -21,6 +22,8 @@ export const SFX_FILE: Record<SfxEvent, string> = {
   pickup_slow: 'sfx_pickup_slow', pickup_double: 'sfx_pickup_double', new_record: 'sfx_new_record',
   ui_click: 'sfx_ui_click', ui_confirm: 'sfx_ui_confirm',
   guard_gain: 'sfx_guard_gain', guard_ready: 'sfx_guard_ready', guard_break: 'sfx_guard_break', trail: 'sfx_trail',
+  // the hunts (FEATURES.knot / briar; never heard while the blocks are off)
+  knot_fuse: 'sfx_knot_fuse', knot_burst: 'sfx_knot_burst', briar_creep: 'sfx_briar_creep',
 };
 export const ALL_SFX = Object.keys(SFX_FILE) as SfxEvent[];
 /** Hero sounds not yet in docs/AUDIO_LIST.md: synthesized only until a file with that stem is added. */
@@ -93,6 +96,7 @@ export class SoundDiffer {
     const out: SfxEvent[] = [];
     let parried = false;
     let runeBurst = false;
+    let knotBurst = false;
     for (const e of events) {
       switch (e.type) {
         case 'parry_hit':
@@ -137,6 +141,15 @@ export class SoundDiffer {
         case 'boss_defeated':
           out.push('boss_death');
           break;
+        case 'knot':
+          out.push('knot_fuse');
+          break;
+        case 'knot_end':
+          knotBurst ||= e.how === 'burst';
+          break;
+        case 'briar':
+          out.push('briar_creep');
+          break;
         case 'pickup_take':
           out.push(e.kind === 'slow' ? 'pickup_slow' : 'pickup_double');
           break;
@@ -145,7 +158,8 @@ export class SoundDiffer {
       }
     }
     if (parried) out.push('parry');
-    if (runeBurst) out.push('rune_burst');
+    if (knotBurst) out.push('knot_burst'); // a knot's shard ring is its own burst sound, not a rune's
+    else if (runeBurst) out.push('rune_burst');
     if (st.multiplier > this.prevMult) out.push('parry_chain'); // one per multiplier step
     this.prevMult = st.multiplier;
     // dedupe within a tick (a 16-shard ring is one burst; two blades one whoosh)

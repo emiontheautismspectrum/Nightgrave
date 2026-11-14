@@ -24,6 +24,9 @@ Mood: dark ambient, slow rhythm, meditative with tension. Duration in seconds.
 | sfx_new_record.mp3 | 1.5 | Triumphant but subdued bell and choir swell, dark fantasy |
 | sfx_ui_click.mp3 | 0.15 | Soft stone tap, UI |
 | sfx_ui_confirm.mp3 | 0.3 | Low bell tone confirm, UI |
+| sfx_knot_fuse.mp3 | 0.8 | Hissing arcane fuse catching on a floating violet knot, soft crackle, ominous |
+| sfx_knot_burst.mp3 | 0.5 | Tight radial snap of a magic knot bursting into stone shards, dark fantasy |
+| sfx_briar_creep.mp3 | 1.0 | Low creaking of thorny branches dragging over stone, slow and menacing |
 
 ## Music and ambience (loops)
 | File | Dur | Prompt |
@@ -35,6 +38,9 @@ Mood: dark ambient, slow rhythm, meditative with tension. Duration in seconds.
 | amb_graveyard.mp3 | 60 | Quiet night wind through dead trees, faint distant owl, subtle crows, seamless loop |
 
 ## Notes
+- The hunts (hex knot, briar line) are dark until their feature blocks are enabled; until a file exists the game
+  plays a synthesized fallback. Every hunt cue is also visible (fuse pips, the band's telegraph, the bone gap marker),
+  so the fight reads with sound muted.
 - calm and tense must share tempo and key so the game can crossfade between them as the run gets harder.
 - Check your ElevenLabs plan license for commercial use before publishing.
 - If a track does not loop cleanly, the game adds a crossfade in code.

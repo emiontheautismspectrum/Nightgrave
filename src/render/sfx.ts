@@ -37,6 +37,9 @@ export const SYNTH: Record<SfxEvent, Voice> = {
   guard_ready: { f0: 620, f1: 930, dur: 0.25, type: 'triangle', gain: 0.07 },
   guard_break: { f0: 1200, f1: 300, dur: 0.35, type: 'square', gain: 0.06, noise: 0.45 },
   trail: { f0: 260, f1: 520, dur: 0.12, type: 'sawtooth', gain: 0.025, noise: 0.5 },
+  knot_fuse: { f0: 330, f1: 360, dur: 0.6, type: 'triangle', gain: 0.04, noise: 0.35 },
+  knot_burst: { f0: 520, f1: 160, dur: 0.3, type: 'square', gain: 0.06, noise: 0.45 },
+  briar_creep: { f0: 90, f1: 70, dur: 0.8, type: 'sawtooth', gain: 0.035, noise: 0.6 },
 };
 
 let noiseBuf: AudioBuffer | null = null;
