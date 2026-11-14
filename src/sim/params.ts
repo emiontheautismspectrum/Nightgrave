@@ -1,5 +1,6 @@
 import { TICK_RATE, TUNING, type Difficulty } from '../data/tuning';
 import { HERO_RULES, heroDef, type AnyHeroId } from '../data/heroes';
+import { FEATURES, type Features, type PatternPack } from '../data/features';
 import { dcos, dsin, PI } from './dmath';
 
 /** Tuning converted to tick units for one run. Derived purely from TUNING + difficulty. */
@@ -103,6 +104,11 @@ export interface SimParams {
   pickups: typeof TUNING.pickups;
   /** Parry active ticks by ember charge count (index = charges, last entry = cap). */
   parryActiveByCharge: number[];
+  /**
+   * Feature blocks (src/data/features.ts): the block when it is ENABLED, else null. The sim reads a block only
+   * through these fields, so a disabled block is never read.
+   */
+  pack: PatternPack | null;
 }
 
 export const ticks = (seconds: number): number => Math.max(1, Math.round(seconds * TICK_RATE));
@@ -117,10 +123,11 @@ function emberTable(active: number): number[] {
 }
 
 /**
- * The rules of one run: TUNING + difficulty + HERO. `hero` defaults to the test-only 'classic' (the pre-heroes rules)
- * so the old tests keep their numbers; the game, the verifier, the Worker and the bots always pass it explicitly.
+ * The rules of one run: TUNING + difficulty + HERO + the feature flags. `hero` defaults to the test-only 'classic'
+ * (the pre-heroes rules) so the old tests keep their numbers; the game, the verifier, the Worker and the bots always
+ * pass it explicitly. `features` defaults to the production flags; only bots and tests pass a variant.
  */
-export function makeParams(difficulty: Difficulty, hero: AnyHeroId = 'classic'): SimParams {
+export function makeParams(difficulty: Difficulty, hero: AnyHeroId = 'classic', features: Features = FEATURES): SimParams {
   const T = TUNING;
   const d = T.difficulty[difficulty];
   const H = heroDef(hero);
@@ -219,5 +226,6 @@ export function makeParams(difficulty: Difficulty, hero: AnyHeroId = 'classic'):
     newThreats: T.newThreats,
     pickups: T.pickups,
     parryActiveByCharge: emberTable(active),
+    pack: features.patternPack.enabled === true ? features.patternPack : null,
   };
 }

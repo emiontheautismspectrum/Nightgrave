@@ -7,6 +7,7 @@ import { toSeed } from './rng';
 import { NEVER, type Hero, type Projectile, type SimState } from './state';
 import { inParryZone, segDist2 } from './parryZone';
 import type { AnyHeroId } from '../data/heroes';
+import { FEATURES, type Features } from '../data/features';
 import { isFading, moveProjectile, runDirector, sigilHits, splitBurst, type DirectorOptions } from './waves';
 
 export { spawnProjectile } from './waves';
@@ -19,6 +20,11 @@ export interface SimOptions extends DirectorOptions {
    * (the pre-heroes rules) so the old tests keep their numbers; the game, the verifier and the bots always pass it.
    */
   hero?: AnyHeroId;
+  /**
+   * The feature flags of the run (src/data/features.ts). Default: the production FEATURES. Only bots and tests pass a
+   * variant; its replay must be encoded with the same flags (encodeReplay) and can never be submitted.
+   */
+  features?: Features;
 }
 
 export function createState(seed: number, difficulty: Difficulty, hero: AnyHeroId = 'classic', p: SimParams = makeParams(difficulty, hero)): SimState {
@@ -461,6 +467,8 @@ export class Sim {
   readonly params: SimParams;
   readonly state: SimState;
   readonly log: InputFrame[] = [];
+  /** The flags this run is simulated under (the production FEATURES unless a variant was passed). */
+  readonly features: Features;
 
   constructor(
     seed: number,
@@ -468,7 +476,8 @@ export class Sim {
     readonly options: SimOptions = {},
   ) {
     const hero = options.hero ?? 'classic';
-    this.params = makeParams(difficulty, hero);
+    this.features = options.features ?? FEATURES;
+    this.params = makeParams(difficulty, hero, this.features);
     this.state = createState(seed, difficulty, hero, this.params);
   }
 

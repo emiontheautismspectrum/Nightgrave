@@ -258,6 +258,13 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Fixed timestep 60 ticks/s. Seeded PRNG (mulberry32). NEVER use Math.random() or Date.now() in `src/sim/`.
 - Input recorded per tick: replay = (seed, difficulty, input log). Same replay => same score.
 - Game data in `src/data/`. Internal resolution 480x270, integer scaling, nearest-neighbor.
+- Feature blocks (`src/data/features.ts`, docs/FEATURES.md): new rules ship DARK behind `enabled: false`. A disabled
+  block is never read by the sim (it reaches the sim only as a nullable `SimParams` field, `makeParams(difficulty, hero,
+  features)`), consumes no PRNG and is not in the fingerprint (`tuningHash(features)` appends the ENABLED blocks only).
+  Bots and tests run a variant with `withFeatures(...)`; a variant replay carries its own fingerprint and can never be
+  decoded, verified or submitted as a production run. Enabling a block is a rules change (version bump + cut-over).
+- Golden corpus (`tests/fixtures/golden_corpus.json`, `tests/golden_corpus.test.ts`): 20 recorded Hard runs whose score,
+  length and death tick must not move in any dark merge; re-recorded only by a change that is meant to change the rules.
 
 ## Art and audio
 - See docs/ASSETS_SPEC.md (art direction, palette, full asset list) and docs/AUDIO_LIST.md (ElevenLabs prompts).

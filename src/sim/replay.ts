@@ -1,5 +1,6 @@
 import { ARENA_LAYOUT } from '../data/arena';
 import { TUNING, type Difficulty } from '../data/tuning';
+import { enabledFeaturesText, FEATURES, type Features } from '../data/features';
 import { HERO_RULES, HEROES, isHeroId, TEST_HEROES, type HeroId } from '../data/heroes';
 import { sanitizeInput, type InputFrame } from './input';
 import { Sim, type SimOptions } from './sim';
@@ -8,12 +9,18 @@ import { toSeed } from './rng';
 /** 2: the hero is part of the replay CORE (it changes the rules); version 1 replays are rejected. */
 export const REPLAY_VERSION = 2;
 
-/** FNV-1a fingerprint of TUNING: a replay only plays back under the tuning it was recorded with. */
-export function tuningHash(): string {
+/**
+ * FNV-1a fingerprint of the rules: a replay only plays back under the rules it was recorded with. It covers TUNING,
+ * the hero table, the spawn geometry and the ENABLED feature blocks (src/data/features.ts). With no block enabled the
+ * hashed text is byte-identical to the text hashed before the flags existed (nothing is appended, no separator).
+ * `features` defaults to the production flags; a variant (bots, tests) gives a different fingerprint.
+ */
+export function tuningHash(features: Features = FEATURES): string {
   // spawn geometry is part of the rules (decorative layout fields such as the calm zone are not)
   const L = ARENA_LAYOUT;
   // the hero table is part of the rules too (every hero, the test-only one included, and the shared facing rules)
-  const src = JSON.stringify(TUNING) + JSON.stringify([HEROES, TEST_HEROES, HERO_RULES]) + JSON.stringify([L.arena, L.heroSpawn, L.portal, L.portalClearRadius, L.hollows, L.runes, (L as { propAnchors?: unknown }).propAnchors]);
+  const src = JSON.stringify(TUNING) + JSON.stringify([HEROES, TEST_HEROES, HERO_RULES]) + JSON.stringify([L.arena, L.heroSpawn, L.portal, L.portalClearRadius, L.hollows, L.runes, (L as { propAnchors?: unknown }).propAnchors])
+    + enabledFeaturesText(features);
   let h = 0x811c9dc5;
   for (let i = 0; i < src.length; i++) h = Math.imul(h ^ src.charCodeAt(i), 0x01000193) >>> 0;
   return h.toString(16).padStart(8, '0');
@@ -24,7 +31,7 @@ export const MAX_REPLAY_TICKS = 60 * 60 * 120;
 /** Run-length encoded input log: each run is [count, cursor(0|1), mx, my, buttons]. */
 export interface Replay {
   v: number;
-  /** tuningHash() at record time. */
+  /** tuningHash(features of the run) at record time. */
   tuning: string;
   seed: number;
   difficulty: Difficulty;
@@ -52,7 +59,11 @@ export function sanitizeMeta(m: unknown): ReplayMeta | undefined {
   return { input, view: o.view === 'zoomed' ? 'zoomed' : 'full' };
 }
 
-export function encodeReplay(seed: number, difficulty: Difficulty, hero: HeroId, frames: readonly InputFrame[], meta?: ReplayMeta): Replay {
+/**
+ * `features`: the flags the run was simulated under (default: production). A variant run MUST pass its own flags: its
+ * replay then carries the variant's fingerprint, which a production build refuses to decode.
+ */
+export function encodeReplay(seed: number, difficulty: Difficulty, hero: HeroId, frames: readonly InputFrame[], meta?: ReplayMeta, features: Features = FEATURES): Replay {
   if (!isHeroId(hero)) throw new Error('replay: unknown hero');
   const runs: Replay['runs'] = [];
   for (const raw of frames) {
@@ -63,17 +74,20 @@ export function encodeReplay(seed: number, difficulty: Difficulty, hero: HeroId,
     else runs.push([1, c, f.mx, f.my, f.buttons]);
   }
   const m = sanitizeMeta(meta);
-  return { v: REPLAY_VERSION, tuning: tuningHash(), seed: toSeed(seed), difficulty, hero, runs, ...(m ? { meta: m } : {}) };
+  return { v: REPLAY_VERSION, tuning: tuningHash(features), seed: toSeed(seed), difficulty, hero, runs, ...(m ? { meta: m } : {}) };
 }
 
 const isDifficulty = (d: unknown): d is Difficulty => typeof d === 'string' && Object.hasOwn(TUNING.difficulty, d);
 
-/** Decode an untrusted replay. Throws on malformed structure; every frame is sanitized. */
-export function decodeReplay(data: unknown): { seed: number; difficulty: Difficulty; hero: HeroId; frames: InputFrame[]; meta?: ReplayMeta } {
+/**
+ * Decode an untrusted replay. Throws on malformed structure; every frame is sanitized. The replay must have been
+ * recorded under exactly `features` (default: the production flags): any other fingerprint is refused.
+ */
+export function decodeReplay(data: unknown, features: Features = FEATURES): { seed: number; difficulty: Difficulty; hero: HeroId; frames: InputFrame[]; meta?: ReplayMeta } {
   if (!data || typeof data !== 'object') throw new Error('replay: not an object');
   const r = data as Partial<Replay>;
   if (r.v !== REPLAY_VERSION) throw new Error('replay: unsupported version');
-  if (r.tuning !== tuningHash()) throw new Error('replay: recorded with different tuning');
+  if (r.tuning !== tuningHash(features)) throw new Error('replay: recorded with different tuning');
   if (typeof r.seed !== 'number' || !Number.isInteger(r.seed) || r.seed < 0 || r.seed > 0xffffffff)
     throw new Error('replay: bad seed');
   if (!isDifficulty(r.difficulty)) throw new Error('replay: bad difficulty');
@@ -92,10 +106,15 @@ export function decodeReplay(data: unknown): { seed: number; difficulty: Difficu
   return { seed: r.seed, difficulty: r.difficulty, hero: r.hero, frames, ...(meta ? { meta } : {}) };
 }
 
-/** Re-simulate a replay from scratch. Same replay => same final state and score. */
+/**
+ * Re-simulate a replay from scratch. Same replay => same final state and score. The replay is decoded AND simulated
+ * under the same flags (`options.features`, default production): it is never re-simulated under flags other than the
+ * ones its fingerprint names (a mismatch throws in decodeReplay).
+ */
 export function playReplay(data: unknown, options: SimOptions = {}): Sim {
-  const { seed, difficulty, hero, frames } = decodeReplay(data);
-  const sim = new Sim(seed, difficulty, { ...options, hero }); // the hero always comes from the replay core
+  const features = options.features ?? FEATURES;
+  const { seed, difficulty, hero, frames } = decodeReplay(data, features);
+  const sim = new Sim(seed, difficulty, { ...options, hero, features }); // the hero always comes from the replay core
   for (const f of frames) {
     if (!sim.state.alive) break;
     sim.step(f);
