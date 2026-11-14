@@ -253,6 +253,26 @@ describe('pattern pack: the shape of each piece', () => {
     });
   });
 
+  it('a hero standing EXACTLY on the rune: every rune piece still launches moving shots (never a zero vector)', () => {
+    for (const key of ['spiral', 'gapRing', 'pulseRings'] as const) {
+      let onIt = 0;
+      for (let seed = 1; seed <= 80; seed++) {
+        const rune = RUNES[seed % RUNES.length]!;
+        const piece = startPiece(key, seed * 13 + 5, PP[key].unlockWave + 3, rune.x, rune.y)!;
+        const lit = piece.sim.state.telegraphs[0]!;
+        if (lit.x === rune.x && lit.y === rune.y) onIt++;
+        const shots = playOut(piece);
+        expect(shots.length, `${key} seed ${seed}`).toBeGreaterThanOrEqual(PP[key].count);
+        for (const pr of shots) {
+          expect(Number.isFinite(pr.x) && Number.isFinite(pr.y) && Number.isFinite(pr.vx) && Number.isFinite(pr.vy)).toBe(true);
+          expect(Math.hypot(pr.vx, pr.vy), `${key} seed ${seed}`).toBeGreaterThan(0.5);
+        }
+        expect(resolved(piece.sim.state), `${key} seed ${seed}: nothing is left on the field`).toBe(true);
+      }
+      expect(onIt, key).toBeGreaterThan(0);
+    }
+  });
+
   it('gapRing: one ring of shards with exactly ONE gap of >= 0.5 rad, opened toward the hero', () => {
     expect(PP.gapRing.gapRad).toBeGreaterThanOrEqual(0.5);
     each('gapRing', (shots, _piece, hero) => {

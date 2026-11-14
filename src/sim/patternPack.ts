@@ -125,12 +125,17 @@ function farPoint(s: SimState, p: SimParams, min: number): [number, number] {
   return best;
 }
 
-/** Unit vector from (x, y) to (tx, ty), turned by a seeded error in [-spread, spread] (no draw when spread is 0). */
+/**
+ * Unit vector from (x, y) to (tx, ty), turned by a seeded error in [-spread, spread] (no draw when spread is 0).
+ * Never a zero vector: a target exactly on the origin (the hero standing on a rune) aims along +x.
+ */
 function aimAt(s: SimState, x: number, y: number, tx: number, ty: number, spread: number): [number, number] {
   const dx = tx - x;
   const dy = ty - y;
-  const d = Math.sqrt(dx * dx + dy * dy) || 1;
-  return spread > 0 ? rotate(dx / d, dy / d, range(s, -spread, spread)) : [dx / d, dy / d];
+  const d = Math.sqrt(dx * dx + dy * dy);
+  const ux = d > 1e-6 ? dx / d : 1;
+  const uy = d > 1e-6 ? dy / d : 0;
+  return spread > 0 ? rotate(ux, uy, range(s, -spread, spread)) : [ux, uy];
 }
 
 /** Can the hero's centre be at (x, y)? (the arena shrunk by heroInset) */
