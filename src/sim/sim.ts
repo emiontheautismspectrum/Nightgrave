@@ -7,7 +7,9 @@ import { toSeed } from './rng';
 import { NEVER, type Hero, type Projectile, type SimState } from './state';
 import { inParryZone, segDist2 } from './parryZone';
 import type { AnyHeroId } from '../data/heroes';
-import { isFading, moveProjectile, runDirector, sigilHits, splitBurst, type DirectorOptions } from './waves';
+import { FEATURES, type Features } from '../data/features';
+import { isFading, moveProjectile, runDirector, sigilHits, spawnProjectile, splitBurst, type DirectorOptions } from './waves';
+import { runPatternPack } from './patternPack';
 
 export { spawnProjectile } from './waves';
 
@@ -19,6 +21,11 @@ export interface SimOptions extends DirectorOptions {
    * (the pre-heroes rules) so the old tests keep their numbers; the game, the verifier and the bots always pass it.
    */
   hero?: AnyHeroId;
+  /**
+   * The feature flags of the run (src/data/features.ts). Default: the production FEATURES. Only bots and tests pass a
+   * variant; its replay must be encoded with the same flags (encodeReplay) and can never be submitted.
+   */
+  features?: Features;
 }
 
 export function createState(seed: number, difficulty: Difficulty, hero: AnyHeroId = 'classic', p: SimParams = makeParams(difficulty, hero)): SimState {
@@ -87,6 +94,7 @@ export function createState(seed: number, difficulty: Difficulty, hero: AnyHeroI
     doubleUntil: -1,
     doubleTicks: 0,
     events: [],
+    ...(p.pack ? { packQueue: [] } : {}), // new state only while the block is enabled
   };
 }
 
@@ -239,6 +247,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   // 5. spawn + move projectiles
   if (opts.spawner !== false) {
     runDirector(s, p, opts);
+    if (p.pack) runPatternPack(s, p, spawnProjectile); // deferred pack emissions (also finish during a boss, like casters)
     runPickups(s, p);
   }
   const f = isSlow(s) ? p.pickups.slowTime.factor : 1; // Slow Time: projectiles only (beams and timers unaffected)
@@ -461,6 +470,8 @@ export class Sim {
   readonly params: SimParams;
   readonly state: SimState;
   readonly log: InputFrame[] = [];
+  /** The flags this run is simulated under (the production FEATURES unless a variant was passed). */
+  readonly features: Features;
 
   constructor(
     seed: number,
@@ -468,7 +479,8 @@ export class Sim {
     readonly options: SimOptions = {},
   ) {
     const hero = options.hero ?? 'classic';
-    this.params = makeParams(difficulty, hero);
+    this.features = options.features ?? FEATURES;
+    this.params = makeParams(difficulty, hero, this.features);
     this.state = createState(seed, difficulty, hero, this.params);
   }
 

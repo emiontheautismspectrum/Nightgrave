@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Difficulty } from '../src/data/tuning';
 import { addDays, dailySeed, dayStartMs } from '../src/shared/daily';
-import { maxPossibleScore } from '../src/shared/maxScore';
+import { maxPossibleScore, maxSpawnsPerSecond } from '../src/shared/maxScore';
 import { decodeInputLog, encodeInputLog } from '../src/shared/replayCodec';
 import { hasProfanity, validateMessage, validateName } from '../src/shared/text';
 import { sanitizeInput } from '../src/sim/input';
@@ -9,6 +9,7 @@ import { Sim } from '../src/sim/sim';
 import { botInput } from './bot';
 import { SkilledBot } from './skilled';
 import { mulberryInputs } from './scripted';
+import { PACK } from './pack_tools';
 
 describe('dailySeed', () => {
   it('is stable (golden values) and differs per day', () => {
@@ -24,6 +25,39 @@ describe('dailySeed', () => {
 });
 
 describe('maxPossibleScore', () => {
+  it('the pattern-pack variant (FEATURES.patternPack enabled): every bot run stays below the bound of its own flags', { timeout: 60_000 }, () => {
+    let best = 0;
+    let picks = 0;
+    for (const hero of ['knight', 'wisp'] as const)
+      for (const startWave of [0, 6, 13])
+        for (let seed = 1; seed <= 6; seed++) {
+          const sim = new Sim(seed * 7919, 'hard', { hero, features: PACK, ...(startWave ? { startWave } : {}) });
+          const bot = new SkilledBot(seed);
+          while (sim.state.alive && sim.state.tick < 60 * 200) {
+            sim.step(seed % 3 ? bot.input(sim) : botInput(sim));
+            picks += sim.state.events.filter((e) => e.type === 'pack').length;
+            if (sim.state.tick % 60 === 0) expect(sim.score).toBeLessThanOrEqual(maxPossibleScore(sim.state.tick, PACK));
+          }
+          expect(sim.score).toBeLessThanOrEqual(maxPossibleScore(sim.state.tick, PACK));
+          if (sim.state.tick > 600) best = Math.max(best, sim.score / maxPossibleScore(sim.state.tick, PACK));
+        }
+    expect(picks).toBeGreaterThan(50);
+    expect(best).toBeLessThan(0.5);
+    // the pack raises the spawn-rate term (its biggest piece); the score bound itself is capped by pulses x kills per
+    // pulse first, so it stays where it is: never below the production bound, and the production bound did not move
+    expect(maxSpawnsPerSecond(PACK)).toBeGreaterThan(maxSpawnsPerSecond() + 10);
+    expect(maxSpawnsPerSecond()).toBeCloseTo(45.1636, 3);
+    for (const t of [0, 1, 600, 3600, 36000]) expect(maxPossibleScore(t, PACK)).toBeGreaterThanOrEqual(maxPossibleScore(t));
+    expect([600, 3600, 36000].map((t) => maxPossibleScore(t))).toMatchInlineSnapshot(`
+      [
+        6400,
+        35250,
+        355300,
+      ]
+    `);
+    console.log(`maxPossibleScore, pattern-pack variant: best bot score / bound ${best.toFixed(3)}`);
+  });
+
   it('real bot runs always stay below it (and it is not absurdly loose)', () => {
     const ratios: number[] = [];
     for (const d of ['easy', 'medium', 'hard'] as Difficulty[])

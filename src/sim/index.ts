@@ -8,3 +8,4 @@ export * from './state';
 export * from './waves';
 export * from './boss';
 export * from './pickups';
+export * from './patternPack';

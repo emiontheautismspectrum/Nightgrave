@@ -1,5 +1,6 @@
 import type { Difficulty } from '../data/tuning';
 import type { AnyHeroId } from '../data/heroes';
+import type { PackKey } from '../data/features';
 
 /** Sentinel start tick meaning "never happened" (JSON-safe, unlike -Infinity). */
 export const NEVER = -1_000_000_000;
@@ -36,6 +37,8 @@ export interface Projectile {
   crackedBy: number;
   /** Harmless before this tick (split pieces), -1 = always harmful. */
   safeUntil: number;
+  /** The pattern-pack set piece that launched it (only with FEATURES.patternPack; read only to keep one curtain at a time). */
+  pack?: PackKey;
 }
 
 /** Blood sigil ground hazard: [start, fill) telegraph, [fill, end) lethal, [end, gone) fading (harmless). */
@@ -142,7 +145,35 @@ export interface Caster {
   fire: number;
   end: number;
   attack: CasterAttack;
+  /** The pattern-pack set piece that summoned it (only with FEATURES.patternPack). */
+  pack?: PackKey;
 }
+
+/**
+ * A deferred emission of the pattern pack (src/sim/patternPack.ts), fired on tick `at`. `tele` = the tick its visible
+ * cue started (a rune glow, a caster), or -1 for an edge spawn with no cue: that one is dropped if the hero is closer
+ * than the fairness distance when it is due.
+ */
+export type PackEvent =
+  /** One projectile with a fixed position and velocity. */
+  | { op: 'shot'; at: number; pack: PackKey; kind: ProjectileKind; x: number; y: number; vx: number; vy: number; tele: number }
+  /**
+   * `n` rune shards from (x, y) over the circle minus `gap` radians. aim = false: the first shard flies at the absolute
+   * angle `off`. aim = true: the gap is centred on the hero's direction turned by `off` (when the ring is launched).
+   */
+  | { op: 'ring'; at: number; pack: PackKey; x: number; y: number; n: number; speed: number; gap: number; aim: boolean; off: number; tele: number }
+  /**
+   * A blade in a lane beside a pack stalker's own blade: launched on the stalker's fire tick, `offset` px to the side
+   * of that blade and parallel to it; nothing if the stalker's cast fizzled (the hero stood next to it).
+   */
+  | { op: 'lane'; at: number; pack: PackKey; x: number; y: number; offset: number; tele: number }
+  /** Light the rune again until `fire` (a rune piece keeps its rune lit, one glow per emission or for the rest). */
+  | { op: 'glow'; at: number; pack: PackKey; rune: number; fire: number }
+  /**
+   * One small orb from a seeded edge point at least `minDist` from the hero, aimed ahead of the hero's drift since
+   * (hx, hy) at tick t0: `lead` x the flight time.
+   */
+  | { op: 'lead'; at: number; pack: PackKey; speed: number; minDist: number; lead: number; hx: number; hy: number; t0: number };
 
 /** A rune lighting up before it fires a radial ring of rune shards. */
 export interface Telegraph {
@@ -227,6 +258,8 @@ export type SimEvent =
   | { type: 'caster'; id: number; kind: CasterKind; source: number }
   | { type: 'caster_fire'; id: number; attack: CasterAttack }
   | { type: 'caster_fizzle'; id: number }
+  /** A pattern-pack set piece started (only with FEATURES.patternPack). */
+  | { type: 'pack'; key: PackKey }
   | { type: 'wave'; wave: number }
   | { type: 'death'; x: number; y: number; by: number }
   | { type: 'parry_crack'; id: number; x: number; y: number }
@@ -301,4 +334,6 @@ export interface SimState {
   doubleTicks: number;
   /** Events emitted during the most recent tick only (render reads them). */
   events: SimEvent[];
+  /** Deferred emissions of the pattern pack. The field exists only while FEATURES.patternPack is enabled. */
+  packQueue?: PackEvent[];
 }
