@@ -192,7 +192,7 @@ attack's projectiles and beams. Bodies never collide or kill; kill = 1000 + an e
 |---|---|---|
 | segments, cadence, wind-up | 12, 2.0 s, 0.5 s | top-centre (240, 60) |
 | `hedge` (weight 2) | the briar `Wall`, owned by the attack serial: red root line with ONE 44 px gap, 0.75 s telegraph at its edge, 50 px/s (x difficulty speed x encounter bonus), gap within 80% of the walking reach, never through her (24 px) nor into a sigil (else a spore fan) | never with another wall or a curtain alive |
-| `bloom` (2) | up to 3 lit ground spots >= 90 px from the hero (60 px apart) during the wind-up; each bursts into 9 (max 10) violet rune shards with ONE gap (>= 0.6 rad and >= 1.6 x the ring spacing, within 0.8 rad of the hero's direction), 0.3 s apart | blooms <= 3 |
+| `bloom` (2) | up to 3 lit ground spots >= 90 px from the hero (60 px apart) during the wind-up; each bursts into 9 (max 10) violet rune shards with ONE gap (>= 0.6 rad and >= 1.6 x the ring spacing, within 0.8 rad of the hero's direction), 0.3 s apart; never in a live wall's gap corridor | blooms <= 3 |
 | `lash` (2) | 3 (max 4) red blades over 0.5 rad along the wind-up's line | |
 | `spores` (3) | a violet fan of 5 small orbs over 1.2 rad at the hero | |
 
@@ -203,9 +203,9 @@ markers).
 | The Toller (`toller`) | Value | |
 |---|---|---|
 | segments, cadence, beat | 14, 1.5 s, 30 ticks | every wind-up and launch on a beat tick; wind-ups in beats (1, the pendulum 2) |
-| `toll` (weight 3) | three violet orb rings on three consecutive beats, 9 (max 10) orbs each (<= 30 per toll), 80 px/s; ring 2's gap (>= 1.2 rad, >= 1.6 x the spacing) opens within 0.4 rad of the hero; rings 1 and 3 are turned by 1.7 rad steps (consecutive gaps never overlap): parry 1, walk through 2, parry 3 | |
-| `pendulum` (2) | the Eye's beam entity swung out 50 degrees at 55 deg/s (<= 60) from a start line fixed at the wind-up (18-34 px beside the hero) and back to it: two passes of one attack; behind the start line is safe for both | never with a beam alive, never over a toll still ringing |
-| `knell` (3) | a ring of 15 (max 18) red blades at 1.2 x the blade speed with TWO gaps (>= 0.6 rad, >= 1.6 x the spacing) | knell rings alive <= 1 |
+| `toll` (weight 3) | three violet orb rings on three consecutive beats, 9 (max 10) orbs each (<= 30 per toll), 80 px/s; ring 2's gap (>= 1.0 rad, >= 1.6 x the spacing) opens within 0.4 rad of the hero; rings 1 and 3 are turned by 1.7 rad steps (consecutive gaps never overlap): parry 1, walk through 2, parry 3 | |
+| `pendulum` (4) | the Eye's beam entity swung out 50 degrees at 55 deg/s (<= 60) from a start line fixed at the wind-up (18-34 px beside the hero) and back to it: two passes of one attack; behind the start line is safe for both | never with a beam alive, never over a toll still ringing (any toll's orbs in flight or rings to come) |
+| `knell` (3.5) | a ring of 15 (max 18) red blades at 1.35 x the blade speed with TWO gaps (>= 0.6 rad, >= 1.6 x the spacing) | knell rings alive <= 1 |
 
 The fight reads muted: the bell swings on the beat (an extreme on every beat) and a bone ring widens from it on every
 toll; the rings themselves are spaced one beat apart.
@@ -227,14 +227,15 @@ ring toward the bell).
 |---|---|---|---|
 | Eye (today) | 0.46 (0.61 / 0.32) | 54% / 71% (24% apart) | 26-29 s |
 | Lich (today) | 0.16 (0.22 / 0.10) | 80% / 92% (13% apart) | 26-33 s |
-| Thorn Mother | 0.57 (0.62 / 0.52) | 61% / 68% (10% apart) | median 27.6 s (26-33) |
-| The Toller | 0.34 (0.42 / 0.27) | 66% / 78% (15% apart) | median 25.6 s (24-26) |
+| Thorn Mother | 0.57 (0.62 / 0.52) | 60% / 68% (12% apart) | median 27.6 s (26-33) |
+| The Toller | 0.33 (0.48 / 0.17) | 74% / 83% (11% apart) | median 25.7 s (23-26) |
 
 Heroes are compared by fights survived: deaths per fight split by hero are noisy and hero-biased by colour (the
 Knight's guard is stronger against violet, the Wisp's longer dash against red; today's Eye is 48% apart the same way).
-Rows tuned during the balance pass: bloom shards 10 -> 9 (max 12 -> 10); toll gap 0.6 -> 1.2 rad aimed within 0.4 rad
-(the gap of ring 2, as the design asks); knell 12 -> 15 blades (max 18) at 1.2 x speed, weight 3. Rules added: no
-pendulum over a toll still ringing; the hedge's gap never through her body.
+Rows tuned during the balance pass: bloom shards 10 -> 9 (max 12 -> 10); toll gap 0.6 -> 1.0 rad aimed within 0.4 rad
+(the gap of ring 2, as the design asks); knell 12 -> 15 blades (max 18) at 1.35 x speed, weight 3.5; pendulum weight 4.
+Rules added: no pendulum over a toll still ringing (any toll); the hedge's gap never through her body; no bloom in a
+live wall's gap corridor.
 
 ### Dev preview (`npm run dev` only)
 

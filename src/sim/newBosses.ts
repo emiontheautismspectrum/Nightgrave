@@ -10,7 +10,7 @@
 import type { TheToller, ThornMother } from '../data/features';
 import { TICK_RATE } from '../data/tuning';
 import { dcos, dsin, PI, rotate } from './dmath';
-import { placeWall, planWall } from './hunts';
+import { inGapCorridor, placeWall, planWall } from './hunts';
 import { ticks, type SimParams } from './params';
 import { nextFloat, range } from './rng';
 import type { Spawn } from './boss';
@@ -19,6 +19,9 @@ import type { Beam, Boss, BossAttack, BossEmission, BossPattern, SimState } from
 /** The attacks of the new bosses. */
 export type NewPattern = Exclude<BossPattern, 'ring' | 'beam' | 'spawns' | 'fan' | 'wraiths' | 'triple'>;
 type ShotKind = 'orb_small' | 'orb_large' | 'wraith' | 'rune_shard' | 'blade';
+
+/** A bloom spot keeps this far (px) out of a live wall's gap corridor: its shard ring never bursts in the safe lane. */
+const BLOOM_CLEAR = 12;
 
 const d2 = (ax: number, ay: number, bx: number, by: number): number => (ax - bx) * (ax - bx) + (ay - by) * (ay - by);
 /** Unit direction from (x, y) to the hero; straight down when the hero stands exactly there. */
@@ -125,11 +128,11 @@ export function newPatternTable(s: SimState, p: SimParams, kind: 'thorn' | 'toll
   const c = tollerRow(p);
   const out: [BossPattern, number][] = [['toll', c.toll.weight]];
   // never two beams at once: no pendulum while one swings (either pass) or its second pass is still to come; and
-  // never a pendulum wind-up over a toll that is still ringing (the previous attack's orbs in flight: walking behind
-  // the start line would mean walking through the rings)
+  // never a pendulum wind-up over a toll that is still ringing (ANY toll's orbs in flight, also from an earlier
+  // attack: walking behind the start line would mean walking through the rings)
   const b = s.boss;
   const swinging = s.beams.length > 0 || !!b?.pending?.some((e) => e.op === 'swing');
-  const ringing = !!b && b.serial > 0 && s.projectiles.some((pr) => pr.boss === b.serial && pr.kind === 'orb_small');
+  const ringing = s.projectiles.some((pr) => pr.boss > 0 && pr.kind === 'orb_small') || !!b?.pending?.some((e) => e.op === 'toll');
   if (!swinging && !ringing) out.push(['pendulum', c.pendulum.weight]);
   if (!knellAlive(s)) out.push(['knell', c.knell.weight]); // never two knell rings at once
   return out;
@@ -168,6 +171,7 @@ export function beginNewAttack(s: SimState, p: SimParams, b: Boss, pattern: Boss
           const x = range(s, p.x0 + r.edgeInset, p.x1 - r.edgeInset);
           const y = range(s, p.y0 + r.edgeInset, p.y1 - r.edgeInset);
           if (d2(x, y, s.hero.x, s.hero.y) < min2 || a.points.some(([px, py]) => d2(px, py, x, y) < gap2)) continue;
+          if (s.walls && s.walls.some((w) => inGapCorridor(w, x, y, BLOOM_CLEAR))) continue; // the gap's lane stays clear
           a.points.push([x, y]);
           a.offs.push(range(s, -r.gapAimRad, r.gapAimRad));
           break;
@@ -217,6 +221,8 @@ export function launchNew(s: SimState, p: SimParams, b: Boss, a: BossAttack, pat
       // the gap's lane never runs through her (her lash would meet the hero in it point-blank)
       if (placeWall(s, p, w, c, serial, { x: b.x, y: b.y, r: c.bossClearPx })) return;
       // every gap choice crossed a blood sigil or her body: the root line does not rise, a spore fan is the attack
+      // (the launch event names the attack that really happened)
+      for (const e of s.events) if (e.type === 'boss_attack' && e.pattern === 'hedge') e.pattern = 'spores';
       return launchNew(s, p, b, a, 'spores', spawn);
     }
     case 'bloom': {

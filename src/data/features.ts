@@ -260,9 +260,9 @@ export const FEATURES: Features = deepFreeze({
       y: 58,
       beatTicks: 30,
       windupBeats: 1,
-      toll: { weight: 3, rings: 3, count: 9, maxCount: 10, gapRad: 1.2, gapStepRad: 1.7, gapAimRad: 0.4, speed: 80 },
-      pendulum: { weight: 2, windupBeats: 2, degPerSecond: 55, sweepDeg: 50, halfWidth: 2, length: 440, offsetMinPx: 18, offsetMaxPx: 34 },
-      knell: { weight: 3, count: 15, maxCount: 18, gapRad: 0.6, gapAimRad: 0.6, speedFactor: 1.2 },
+      toll: { weight: 3, rings: 3, count: 9, maxCount: 10, gapRad: 1.0, gapStepRad: 1.7, gapAimRad: 0.4, speed: 80 },
+      pendulum: { weight: 4, windupBeats: 2, degPerSecond: 55, sweepDeg: 50, halfWidth: 2, length: 440, offsetMinPx: 18, offsetMaxPx: 34 },
+      knell: { weight: 3.5, count: 15, maxCount: 18, gapRad: 0.6, gapAimRad: 0.6, speedFactor: 1.35 },
     },
   },
 });

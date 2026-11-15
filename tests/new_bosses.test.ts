@@ -9,6 +9,7 @@ import { TUNING } from '../src/data/tuning';
 import { earliestBossDefeat, maxPossibleScore } from '../src/shared/maxScore';
 import { bossCycle, bossKindFor, orderHash } from '../src/sim/boss';
 import { tollGeometry } from '../src/sim/newBosses';
+import { inGapCorridor } from '../src/sim/hunts';
 import { makeParams } from '../src/sim/params';
 import { decodeReplay, encodeReplay } from '../src/sim/replay';
 import { Sim } from '../src/sim/sim';
@@ -486,5 +487,36 @@ describe('the dev preview parameters (src/web/devPreview.ts; dev builds only)', 
     // a preview run's replay is a variant: production refuses it
     const f = parseDevPreview(new URLSearchParams('flags=bosses'))!.features;
     expect(() => decodeReplay(encodeReplay(1, 'hard', 'wisp', [], undefined, f))).toThrow(/different tuning/);
+  });
+});
+
+describe('review fixes (adversarial review of U3)', () => {
+  it('a pendulum never winds up while ANY toll orb is in flight or a toll ring is still to come', () => {
+    let windups = 0;
+    for (let seed = 1; seed <= 40; seed++)
+      fightToller(seed, 'hard', TOLLER_V, (sim) => {
+        const s = sim.state;
+        const a = s.boss?.attack;
+        if (a?.pattern === 'pendulum' && s.tick - 1 === a.windStart) {
+          windups++;
+          // the pick happened on the wind-up's tick, before that tick's moves: no toll orb may have been alive then
+          expect(s.projectiles.some((pr) => pr.boss > 0 && pr.kind === 'orb_small' && pr.born < a.windStart)).toBe(false);
+          expect((s.boss?.pending ?? []).some((e) => e.op === 'toll')).toBe(false);
+        }
+      });
+    expect(windups).toBeGreaterThan(10); // rarer now: tolls ring for 2-3 s
+  });
+
+  it("a bloom never bursts in a live wall's gap corridor; a hedge that falls back is reported as spores", () => {
+    let blooms = 0;
+    for (let seed = 1; seed <= 30; seed++)
+      fightThorn(seed, 'hard', THORN_V, (sim) => {
+        const s = sim.state;
+        const a = s.boss?.attack;
+        if (a?.pattern === 'bloom' && s.tick - 1 === a.windStart)
+          for (const [x, y] of a.points) for (const w of s.walls ?? []) (blooms++, expect(inGapCorridor(w, x, y, 12)).toBe(false));
+        for (const e of s.events) if (e.type === 'boss_attack' && e.pattern === 'hedge') expect(s.events.some((x) => x.type === 'briar')).toBe(true);
+      });
+    expect(blooms).toBeGreaterThan(10);
   });
 });
