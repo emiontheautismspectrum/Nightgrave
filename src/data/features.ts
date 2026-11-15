@@ -172,7 +172,8 @@ export interface TheToller extends NewBossRow {
   readonly windupBeats: number;
   /**
    * `rings` violet orb rings on consecutive beats, `count` (max `maxCount`) orbs each, every ring with ONE gap of
-   * `gapRad`; ring k's gap is turned by k x `gapStepRad` from the first (never aligned: step >= gap + 0.5 rad).
+   * `gapRad` (at least 1.6 x the ring spacing, so it reads); ring k's gap is turned by k x `gapStepRad` from the first
+   * (at least the gap + 0.5 rad: two consecutive gaps never overlap).
    */
   readonly toll: AttackRow & { readonly rings: number; readonly count: number; readonly maxCount: number; readonly gapRad: number; readonly gapStepRad: number; readonly gapAimRad: number; readonly speed: number };
   /**
@@ -257,7 +258,7 @@ export const FEATURES: Features = deepFreeze({
       y: 58,
       beatTicks: 30,
       windupBeats: 1,
-      toll: { weight: 3, rings: 3, count: 9, maxCount: 10, gapRad: 0.6, gapStepRad: 1.3, gapAimRad: 0.6, speed: 80 },
+      toll: { weight: 3, rings: 3, count: 9, maxCount: 10, gapRad: 0.6, gapStepRad: 1.7, gapAimRad: 0.6, speed: 80 },
       pendulum: { weight: 2, windupBeats: 2, degPerSecond: 55, sweepDeg: 50, halfWidth: 2, length: 440, offsetMinPx: 18, offsetMaxPx: 34 },
       knell: { weight: 2, count: 12, maxCount: 14, gapRad: 0.6, gapAimRad: 0.6, speedFactor: 0.8 },
     },

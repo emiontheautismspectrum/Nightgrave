@@ -67,6 +67,22 @@ function beamThreat(sim: Sim): { x: number; y: number; dx: number; dy: number; s
   const b = s.boss;
   if (b?.attack?.pattern === 'beam' && s.tick >= b.attack.windStart)
     return { x: b.x, y: b.y, dx: b.attack.dirX, dy: b.attack.dirY, sign: b.attack.sign };
+  // the Toller's pendulum (FEATURES.bosses.toller only): its two passes sweep the same wedge out and back, so the
+  // safe side is behind the START line for the whole attack (never behind the moving line)
+  if (b?.kind === 'toller') {
+    if (b.attack?.pattern === 'pendulum' && s.tick >= b.attack.windStart) return { x: b.x, y: b.y, dx: b.attack.dirX, dy: b.attack.dirY, sign: b.attack.sign };
+    const bm = s.beams[0];
+    if (bm) {
+      const w = Math.atan2(bm.turnS, bm.turnC);
+      const back = b.pending?.some((e) => e.op === 'swing' && e.serial === bm.serial);
+      // pass 1: turn back by the rotations so far; pass 2: forward by the rotations still to come
+      const k = back ? -Math.max(0, s.tick - 1 - bm.start) : Math.max(0, bm.end - s.tick);
+      const c = Math.cos(k * w);
+      const sn = Math.sin(k * w);
+      const sign = back ? (w >= 0 ? 1 : -1) : w >= 0 ? -1 : 1;
+      return { x: bm.x, y: bm.y, dx: bm.dirX * c - bm.dirY * sn, dy: bm.dirX * sn + bm.dirY * c, sign };
+    }
+  }
   const bm = s.beams[0];
   if (bm) return { x: bm.x, y: bm.y, dx: bm.dirX, dy: bm.dirY, sign: bm.turnS >= 0 ? 1 : -1 };
   return null;
@@ -159,7 +175,7 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
       fy += ny * 3;
     }
     // the sweep is about to reach us from the front: dash across it to the safe side (dash i-frames)
-    const active = sim.state.beams.length > 0 || (sim.state.boss?.attack?.pattern === 'beam' && sim.state.boss.attack.fire - sim.state.tick <= 4);
+    const active = sim.state.beams.length > 0 || ((sim.state.boss?.attack?.pattern === 'beam' || sim.state.boss?.attack?.pattern === 'pendulum') && sim.state.boss.attack.fire - sim.state.tick <= 4);
     if (opts.beamDash && active && c < 0 && c > -18) dashAway = [nx, ny];
   }
   // blood sigils: keep out of the circle while it is telegraphed or lethal; dash out if caught inside a lethal one

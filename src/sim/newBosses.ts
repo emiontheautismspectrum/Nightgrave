@@ -12,9 +12,9 @@ import { TICK_RATE } from '../data/tuning';
 import { dcos, dsin, PI, rotate } from './dmath';
 import { placeWall, planWall } from './hunts';
 import { ticks, type SimParams } from './params';
-import { range } from './rng';
+import { nextFloat, range } from './rng';
 import type { Spawn } from './boss';
-import type { Boss, BossAttack, BossEmission, BossPattern, SimState } from './state';
+import type { Beam, Boss, BossAttack, BossEmission, BossPattern, SimState } from './state';
 
 /** The attacks of the new bosses. */
 export type NewPattern = Exclude<BossPattern, 'ring' | 'beam' | 'spawns' | 'fan' | 'wraiths' | 'triple'>;
@@ -65,11 +65,43 @@ function shot(s: SimState, p: SimParams, spawn: Spawn, serial: number, tele: num
   spawn(s, p, kind, x, y, vx, vy, { boss: serial }, tele);
 }
 
+/**
+ * A gap that READS as a gap: at least `gapRad`, and at least 1.6 x the ring's natural spacing (2 pi / n), so a sparse
+ * ring (fewer projectiles on an easier difficulty) still shows its gap clearly.
+ */
+export const readableGap = (n: number, gapRad: number): number => Math.max(gapRad, (1.6 * 2 * PI) / Math.max(1, n));
+
+/** The Toller's toll: orbs per ring, the gap of each ring, and how far the next ring's gap turns (never aligned). */
+export function tollGeometry(p: SimParams): { n: number; gap: number; step: number } {
+  const c = tollerRow(p).toll;
+  const n = scaled(p, c.count, c.maxCount);
+  const gap = readableGap(n, c.gapRad);
+  return { n, gap, step: Math.max(c.gapStepRad, gap + 0.5) };
+}
+
 /** `n` projectiles evenly over the circle minus ONE gap of `gap` rad centred at `gapAt` (the gap is exact). */
 function gappedRing(n: number, gapAt: number, gap: number): number[] {
   const out: number[] = [];
   const span = 2 * PI - gap;
   for (let k = 0; k < n; k++) out.push(gapAt + gap / 2 + (n === 1 ? span / 2 : (span * k) / (n - 1)));
+  return out;
+}
+
+/**
+ * `n` projectiles over the circle minus TWO gaps of `gap` rad centred at g1 and g2 (g2 - g1 within (gap, 2 pi - gap)):
+ * each arc between the gaps gets its share, its ends exactly on the gap edges.
+ */
+function twoGapRing(n: number, g1: number, g2: number, gap: number): number[] {
+  const d = ((g2 - g1) % (2 * PI) + 2 * PI) % (2 * PI);
+  const la = Math.max(0, d - gap);
+  const lb = Math.max(0, 2 * PI - d - gap);
+  const na = Math.max(0, Math.min(n, Math.round((n * la) / (la + lb || 1))));
+  const out: number[] = [];
+  const arc = (from: number, len: number, m: number): void => {
+    for (let k = 0; k < m; k++) out.push(from + (m === 1 ? len / 2 : (len * k) / (m - 1)));
+  };
+  arc(g1 + gap / 2, la, na);
+  arc(g1 + d + gap / 2, lb, n - na);
   return out;
 }
 
@@ -87,9 +119,26 @@ export function newPatternTable(s: SimState, p: SimParams, kind: 'thorn' | 'toll
     out.push(['bloom', c.bloom.weight], ['lash', c.lash.weight], ['spores', c.spores.weight]);
     return out;
   }
-  tollerRow(p);
-  throw new Error('boss: the toller is not implemented yet');
+  const c = tollerRow(p);
+  const out: [BossPattern, number][] = [['toll', c.toll.weight]];
+  // never two beams at once: no pendulum while one swings (either pass) or its second pass is still to come
+  const swinging = s.beams.length > 0 || !!s.boss?.pending?.some((e) => e.op === 'swing');
+  if (!swinging) out.push(['pendulum', c.pendulum.weight]);
+  if (!knellAlive(s)) out.push(['knell', c.knell.weight]); // never two knell rings at once
+  return out;
 }
+
+/** A knell ring is still flying (the Toller's only blades). */
+export const knellAlive = (s: SimState): boolean => s.projectiles.some((pr) => pr.boss > 0 && pr.kind === 'blade');
+
+/** The Toller keeps its beat: the next attack starts on the first beat tick (counted from the intro end) >= `at`. */
+export function onBeat(p: SimParams, b: Boss, at: number): number {
+  const beat = Math.max(1, Math.round(tollerRow(p).beatTicks));
+  return b.introEnd + Math.ceil((at - b.introEnd) / beat) * beat;
+}
+
+/** The Toller's beat in ticks (render: the bell swing). */
+export const beatTicks = (p: SimParams): number => Math.max(1, Math.round(tollerRow(p).beatTicks));
 
 // ------------------------------------------------------------------ the wind-up
 
@@ -119,7 +168,32 @@ export function beginNewAttack(s: SimState, p: SimParams, b: Boss, pattern: Boss
     }
     return a;
   }
-  throw new Error('boss: the toller is not implemented yet');
+  // the Toller: wind-ups are whole beats, so every launch lands on a beat tick
+  const c = tollerRow(p);
+  const beat = beatTicks(p);
+  const wind = Math.max(15, Math.round(pattern === 'pendulum' ? c.pendulum.windupBeats : c.windupBeats) * beat);
+  const a: BossAttack = { pattern, tpOut: t, tpIn: t, windStart: t, fire: t + wind, dirX: 0, dirY: 0, sign: 1, points: [] };
+  if (pattern === 'pendulum') {
+    // the start line, fixed now (the thin telegraph line): offset from the hero by a reachable 18-34 px, swinging
+    // towards and past him; everything behind it stays safe for BOTH passes (the second one swings back to it)
+    const r = c.pendulum;
+    const dx = s.hero.x - b.x;
+    const dy = s.hero.y - b.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    const q = Math.min(0.93, range(s, r.offsetMinPx, r.offsetMaxPx) / dist);
+    const sign = nextFloat(s) < 0.5 ? -1 : 1;
+    const cs = Math.sqrt(1 - q * q);
+    const [ux, uy] = [dx / dist, dy / dist];
+    a.dirX = ux * cs + uy * sign * q;
+    a.dirY = -ux * sign * q + uy * cs;
+    a.sign = sign;
+  } else if (pattern === 'toll') {
+    a.offs = [range(s, -c.toll.gapAimRad, c.toll.gapAimRad)]; // ring 1's gap near the hero's direction
+    a.sign = nextFloat(s) < 0.5 ? -1 : 1; // the way the later gaps turn
+  } else if (pattern === 'knell') {
+    a.offs = [range(s, -c.knell.gapAimRad, c.knell.gapAimRad), range(s, -0.5, 0.5)]; // gap 1 near the hero, gap 2 across
+  }
+  return a;
 }
 
 // ------------------------------------------------------------------ the launch
@@ -169,10 +243,46 @@ export function launchNew(s: SimState, p: SimParams, b: Boss, a: BossAttack, pat
       }
       return;
     }
-    case 'toll':
-    case 'pendulum':
-    case 'knell':
-      throw new Error('boss: the toller is not implemented yet');
+    case 'toll': {
+      const c = tollerRow(p).toll;
+      const [hx, hy] = aimAt(s, b.x, b.y);
+      const base = Math.atan2(hy, hx) + (a.offs?.[0] ?? 0);
+      const beat = beatTicks(p);
+      const { step } = tollGeometry(p);
+      const pend = (b.pending ??= []);
+      for (let k = 0; k < Math.max(1, Math.round(c.rings)); k++) {
+        const e: BossEmission = { op: 'toll', at: s.tick + k * beat, serial, k, gap: base + k * a.sign * step, tele: a.windStart };
+        if (k === 0) emit(s, p, b, e, spawn);
+        else pend.push(e);
+      }
+      return;
+    }
+    case 'pendulum': {
+      const c = tollerRow(p).pendulum;
+      const deg = Math.min(60, c.degPerSecond); // never faster than 60 deg/s
+      const w = ((deg * PI) / 180 / TICK_RATE) * a.sign;
+      const n = Math.max(2, Math.round((c.sweepDeg / deg) * TICK_RATE));
+      const beam: Beam = { serial, x: b.x, y: b.y, dirX: a.dirX, dirY: a.dirY, turnC: dcos(w), turnS: dsin(w), start: s.tick, end: s.tick + n, halfWidth: c.halfWidth, length: c.length };
+      s.beams.push(beam);
+      // pass 2 starts where pass 1 ends (it turns n - 1 times) and swings back to the start line
+      const [ex, ey] = rotate(a.dirX, a.dirY, (n - 1) * w);
+      (b.pending ??= []).push({ op: 'swing', at: s.tick + n, serial, dirX: ex, dirY: ey, sign: -a.sign, n });
+      return;
+    }
+    case 'knell': {
+      const c = tollerRow(p).knell;
+      const n = scaled(p, c.count, c.maxCount);
+      const [hx, hy] = aimAt(s, b.x, b.y);
+      const g1 = Math.atan2(hy, hx) + (a.offs?.[0] ?? 0);
+      const g2 = g1 + PI + (a.offs?.[1] ?? 0);
+      const v = p.bladeSpeed * b.speed * c.speedFactor;
+      for (const ang of twoGapRing(n, g1, g2, readableGap(n, c.gapRad))) {
+        const dx = dcos(ang);
+        const dy = dsin(ang);
+        shot(s, p, spawn, serial, tele, 'blade', b.x + dx * 10, b.y + dy * 10, dx * v, dy * v, false);
+      }
+      return;
+    }
     default:
       return unknownPattern(pattern);
   }
@@ -191,7 +301,7 @@ function emit(s: SimState, p: SimParams, b: Boss, e: BossEmission, spawn: Spawn)
       const [hx, hy] = aimAt(s, e.x, e.y);
       const gapAt = Math.atan2(hy, hx) + e.off;
       const v = p.shardSpeed * b.speed;
-      for (const ang of gappedRing(n, gapAt, c.gapRad)) {
+      for (const ang of gappedRing(n, gapAt, readableGap(n, c.gapRad))) {
         const dx = dcos(ang);
         const dy = dsin(ang);
         shot(s, p, spawn, e.serial, s.tick - e.tele, 'rune_shard', e.x + dx * 4, e.y + dy * 4, dx * v, dy * v, false, true);
@@ -199,9 +309,24 @@ function emit(s: SimState, p: SimParams, b: Boss, e: BossEmission, spawn: Spawn)
       s.events.push({ type: 'boss_bloom', x: e.x, y: e.y });
       return;
     }
-    case 'toll':
-    case 'swing':
-      throw new Error('boss: the toller is not implemented yet');
+    case 'toll': {
+      const c = tollerRow(p).toll;
+      const { n, gap } = tollGeometry(p);
+      const v = (c.speed * p.diffSpeed * b.speed) / TICK_RATE;
+      for (const ang of gappedRing(n, e.gap, gap)) {
+        const dx = dcos(ang);
+        const dy = dsin(ang);
+        shot(s, p, spawn, e.serial, s.tick - e.tele, 'orb_small', b.x + dx * 10, b.y + dy * 10, dx * v, dy * v, false);
+      }
+      s.events.push({ type: 'boss_toll', ring: e.k });
+      return;
+    }
+    case 'swing': {
+      const c = tollerRow(p).pendulum;
+      const w = ((Math.min(60, c.degPerSecond) * PI) / 180 / TICK_RATE) * e.sign;
+      s.beams.push({ serial: e.serial, x: b.x, y: b.y, dirX: e.dirX, dirY: e.dirY, turnC: dcos(w), turnS: dsin(w), start: s.tick, end: s.tick + e.n, halfWidth: c.halfWidth, length: c.length });
+      return;
+    }
     default:
       return unknownEmission(e);
   }

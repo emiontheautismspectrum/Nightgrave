@@ -342,6 +342,8 @@ export type SimEvent =
   | { type: 'boss_teleport'; x: number; y: number }
   /** A Thorn Mother bloom burst (FEATURES.bosses.thorn only). */
   | { type: 'boss_bloom'; x: number; y: number }
+  /** A Toller toll ring (0-based ring of the attack; FEATURES.bosses.toller only). */
+  | { type: 'boss_toll'; ring: number }
   | { type: 'boss_defeated'; kind: BossKind; x: number; y: number; points: number; charges: number }
   | { type: 'pickup_spawn'; id: number; kind: PickupKind }
   | { type: 'pickup_take'; id: number; kind: PickupKind; x: number; y: number }

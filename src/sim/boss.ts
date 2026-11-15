@@ -8,7 +8,7 @@ import { dcos, dsin, rotate } from './dmath';
 import { ticks, type SimParams } from './params';
 import { nextFloat, range } from './rng';
 import type { Beam, Boss, BossAttack, BossKind, BossPattern, SimState } from './state';
-import { beginNewAttack, launchNew, newBossClear, newPatternTable, runPending } from './newBosses';
+import { beginNewAttack, launchNew, newBossClear, newPatternTable, onBeat, runPending } from './newBosses';
 
 /** Spawner callback (waves.spawnProjectile), injected to avoid an import cycle. */
 export type Spawn = (
@@ -457,5 +457,6 @@ export function runBoss(s: SimState, p: SimParams, spawn: Spawn): void {
     const cad = ticks(bossRow(p, b.kind).cadenceSeconds);
     const pre = a.fire - a.tpOut;
     b.nextAt = t + Math.max(1, cad - pre);
+    if (b.kind === 'toller') b.nextAt = onBeat(p, b, b.nextAt); // the Toller starts every attack on its beat
   }
 }

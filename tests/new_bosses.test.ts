@@ -305,3 +305,158 @@ describe('thorn mother: the attacks', () => {
     }
   });
 });
+
+// ------------------------------------------------------------------ the Toller
+
+const TOLLER_V = withFeatures('toller');
+const fightToller = (seed: number, d: 'easy' | 'medium' | 'hard', f: Features = TOLLER_V, each?: (sim: Sim) => void): Sim => {
+  const sim = new Sim(seed, d, { hero: seed % 2 ? 'knight' : 'wisp', features: f, startWave: 3, firstBoss: 'toller' });
+  while (sim.state.bossesDefeated === 0 && sim.state.tick < 60 * 120) {
+    sim.state.alive = true;
+    sim.step(botInput(sim));
+    each?.(sim);
+  }
+  return sim;
+};
+/** The largest angular gap of a set of directions (radians). */
+function largestGap(angs: number[]): { size: number; at: number } {
+  const a = angs.map((x) => ((x % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)).sort((x, y) => x - y);
+  let best = { size: a[0]! + 2 * Math.PI - a[a.length - 1]!, at: a[a.length - 1]! + (a[0]! + 2 * Math.PI - a[a.length - 1]!) / 2 };
+  for (let i = 1; i < a.length; i++) if (a[i]! - a[i - 1]! > best.size) best = { size: a[i]! - a[i - 1]!, at: (a[i]! + a[i - 1]!) / 2 };
+  return best;
+}
+const angDiff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+
+describe('the toller: segments, the beat and the defeat', () => {
+  it('14 segments, one per launch; every wind-up and every launch on a 30-tick beat from the intro end', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      let launches = 0;
+      let kills = 0;
+      fightToller(seed, 'hard', TOLLER_V, (sim) => {
+        const s = sim.state;
+        const b = s.boss;
+        if (b?.attack && s.tick - 1 === b.attack.windStart) expect((b.attack.windStart - b.introEnd) % 30).toBe(0);
+        for (const e of s.events) {
+          if (e.type === 'boss_attack') {
+            launches++;
+            expect(e.remaining).toBe(14 - launches);
+            expect((s.tick - 1 - b!.introEnd) % 30).toBe(0);
+          }
+          if (e.type === 'boss_toll') expect((s.tick - 1 - b!.introEnd) % 30).toBe(0);
+          if (e.type === 'boss_defeated') kills++;
+        }
+        expect(s.beams.length).toBeLessThanOrEqual(1);
+      });
+      expect(launches).toBe(14);
+      expect(kills).toBe(1);
+    }
+  });
+
+  it('a bar emptied by the launch of a toll pays the kill exactly once, after the third ring and its orbs are gone', () => {
+    const f = onlyAttack('toller', 'toll');
+    const sim = new Sim(4, 'hard', { hero: 'wisp', features: f, startWave: 3, firstBoss: 'toller' });
+    const rings: number[] = [];
+    let defeated = -1;
+    let kills = 0;
+    let lastOrbGone = -1;
+    while (sim.state.tick < 60 * 40 && sim.state.bossesDefeated === 0) {
+      sim.state.alive = true;
+      const b = sim.state.boss;
+      if (b && b.deathTick < 0 && b.serial === 0 && b.remaining > 1) b.remaining = 1;
+      const had = sim.state.projectiles.some((pr) => pr.boss > 0);
+      sim.step(idle);
+      if (had && !sim.state.projectiles.some((pr) => pr.boss > 0)) lastOrbGone = sim.state.tick - 1;
+      for (const e of sim.state.events) {
+        if (e.type === 'boss_toll') rings.push(sim.state.tick - 1);
+        if (e.type === 'boss_defeated') (defeated = sim.state.tick - 1, kills++);
+      }
+    }
+    expect(rings.length).toBe(3);
+    expect(rings[1]! - rings[0]!).toBe(30);
+    expect(rings[2]! - rings[1]!).toBe(30);
+    expect(kills).toBe(1);
+    expect(defeated).toBeGreaterThan(rings[2]!);
+    expect(defeated).toBeGreaterThanOrEqual(lastOrbGone);
+    expect(sim.state.bossScore).toBe(1000);
+  });
+});
+
+describe('the toller: the attacks', () => {
+  it('toll: three violet rings on three beats, <= 30 orbs, each with a gap >= 0.5 rad, no two gaps aligned', () => {
+    let tolls = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      let gaps: number[] = [];
+      let orbs = 0;
+      fightToller(seed, 'hard', onlyAttack('toller', 'toll'), (sim) => {
+        const s = sim.state;
+        const b = s.boss!;
+        if (!s.events.some((e) => e.type === 'boss_toll')) return;
+        const ring = s.events.find((e) => e.type === 'boss_toll') as { ring: number };
+        const born = s.projectiles.filter((pr) => pr.boss > 0 && pr.born === s.tick - 1);
+        for (const pr of born) expect(pr.kind === 'orb_small' && pr.parryable).toBe(true);
+        const g = largestGap(born.map((pr) => Math.atan2(pr.y - b.y, pr.x - b.x)));
+        expect(g.size).toBeGreaterThanOrEqual(0.5);
+        if (ring.ring === 0) (gaps = [], orbs = 0, tolls++);
+        orbs += born.length;
+        expect(orbs).toBeLessThanOrEqual(30);
+        // the gap is THE gap (clearly wider than the ring's spacing), and no two gaps of a toll overlap (Hard)
+        const spacing = (2 * Math.PI - g.size) / Math.max(1, born.length - 1);
+        if (born.length >= 8) expect(g.size).toBeGreaterThanOrEqual(1.5 * spacing);
+        for (const other of gaps) expect(angDiff(other, g.at)).toBeGreaterThanOrEqual(g.size - 1e-9);
+        gaps.push(g.at);
+      });
+    }
+    expect(tolls).toBeGreaterThan(200);
+  });
+
+  it('pendulum: two red beam passes of ONE attack (the second starts when the first ends), <= 60 deg/s, back to the start line', () => {
+    let passes = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      let first: { dx: number; dy: number; end: number; serial: number } | null = null;
+      fightToller(seed, 'hard', onlyAttack('toller', 'pendulum'), (sim) => {
+        const s = sim.state;
+        for (const bm of s.beams) {
+          expect(Math.abs(Math.atan2(bm.turnS, bm.turnC)) * 60 * (180 / Math.PI)).toBeLessThanOrEqual(60 + 1e-9);
+          if (bm.start !== s.tick - 1) continue;
+          passes++;
+          const a = s.boss!.attack;
+          if (s.boss!.pending?.some((e) => e.op === 'swing' && e.serial === bm.serial)) first = { dx: bm.dirX, dy: bm.dirY, end: bm.end, serial: bm.serial };
+          else {
+            expect(first).not.toBeNull();
+            expect(bm.serial).toBe(first!.serial);
+            expect(bm.start).toBe(first!.end);
+            void a;
+          }
+        }
+        // the second pass's last direction is the first pass's start line
+        const bm = s.beams[0];
+        if (bm && first && bm.serial === first.serial && bm.start === first.end && s.tick === bm.end - 1 + 1) {
+          expect(angDiff(Math.atan2(bm.dirY, bm.dirX), Math.atan2(first.dy, first.dx))).toBeLessThan(1e-6);
+        }
+      });
+    }
+    expect(passes).toBeGreaterThan(100);
+  });
+
+  it('knell: a ring of red blades with TWO gaps >= 0.5 rad; never two knell rings alive', () => {
+    let rings = 0;
+    for (let seed = 1; seed <= 30; seed++)
+      fightToller(seed, 'hard', onlyAttack('toller', 'knell'), (sim) => {
+        const s = sim.state;
+        const b = s.boss!;
+        const serials = new Set(s.projectiles.filter((pr) => pr.boss > 0 && pr.kind === 'blade').map((pr) => pr.boss));
+        expect(serials.size).toBeLessThanOrEqual(1);
+        // (with only the knell in its table the Toller falls back to a toll while a knell is alive: skip those orbs)
+        const born = s.projectiles.filter((pr) => pr.boss > 0 && pr.born === s.tick - 1 && pr.kind === 'blade');
+        if (!born.length) return;
+        rings++;
+        for (const pr of born) expect(pr.parryable).toBe(false);
+        const a = born.map((pr) => ((Math.atan2(pr.vy, pr.vx) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)).sort((x, y) => x - y);
+        const g = a.map((x, i) => (i === 0 ? x + 2 * Math.PI - a[a.length - 1]! : x - a[i - 1]!)).sort((x, y) => y - x);
+        expect(g[0]).toBeGreaterThanOrEqual(0.5);
+        expect(g[1]).toBeGreaterThanOrEqual(0.5);
+        void b;
+      });
+    expect(rings).toBeGreaterThan(100);
+  });
+});
