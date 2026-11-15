@@ -13,6 +13,8 @@ import { encodeReplay } from '../src/sim/replay';
 import { Sim } from '../src/sim/sim';
 import type { BossKind, SimState } from '../src/sim/state';
 import { mulberryInputs } from './scripted';
+import { botInput } from './bot';
+import { onlyAttack } from './boss_tools';
 
 const N = TUNING.bosses.everyNthWave;
 const bossWave = (n: number): number => (n + 1) * N - 1;
@@ -146,6 +148,160 @@ describe('score bound with the new bosses', () => {
     for (const [, f] of VARIANTS) {
       for (const k of [1, 2, 3, 6]) expect(earliestBossDefeat(k, f)).toBeLessThanOrEqual(earliestBossDefeat(k));
       for (const n of [60 * 30, 60 * 120, 60 * 600]) expect(maxPossibleScore(n, f)).toBeGreaterThanOrEqual(maxPossibleScore(n));
+    }
+  });
+});
+
+// ------------------------------------------------------------------ the Thorn Mother
+
+const fightThorn = (seed: number, d: 'easy' | 'medium' | 'hard', f: Features = THORN_V, each?: (sim: Sim) => void, immortal = true): Sim => {
+  const sim = new Sim(seed, d, { hero: seed % 2 ? 'knight' : 'wisp', features: f, startWave: 3, firstBoss: 'thorn' });
+  while (sim.state.bossesDefeated === 0 && sim.state.tick < 60 * 120) {
+    if (immortal) sim.state.alive = true; // test only: every attack of the fight is observed
+    sim.step(botInput(sim));
+    each?.(sim);
+  }
+  return sim;
+};
+const THORN_V = withFeatures('thorn');
+
+describe('thorn mother: segments and defeat', () => {
+  it('12 segments, one per launched attack, at the 2.0 s cadence; the kill is paid once, after her last wall and bloom', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      let launches = 0;
+      let kills = 0;
+      let lastFire = -1;
+      const gaps: number[] = [];
+      let lastWallGone = -1;
+      let defeatTick = -1;
+      const sim = fightThorn(seed, 'hard', THORN_V, (s) => {
+        for (const e of s.state.events) {
+          if (e.type === 'boss_attack') {
+            launches++;
+            expect(e.remaining).toBe(12 - launches);
+            if (lastFire >= 0) gaps.push(s.state.tick - 1 - lastFire);
+            lastFire = s.state.tick - 1;
+          }
+          if (e.type === 'boss_defeated') {
+            kills++;
+            defeatTick = s.state.tick - 1;
+          }
+          if (e.type === 'briar_end') lastWallGone = s.state.tick - 1;
+        }
+        if (s.state.boss && s.state.boss.deathTick < 0) expect(s.state.knots ?? []).toEqual([]);
+      });
+      expect(sim.state.boss === null || sim.state.boss.deathTick >= 0).toBe(true);
+      expect(launches).toBe(12);
+      expect(kills).toBe(1);
+      expect(sim.state.bossScore).toBe(1000);
+      for (const g of gaps) expect(g).toBe(120);
+      expect(defeatTick).toBeGreaterThanOrEqual(lastWallGone);
+      expect(defeatTick).toBeGreaterThanOrEqual(lastFire);
+    }
+  });
+
+  it('a bar emptied by a bloom launch pays the kill once, only after the last bloom burst and its shards are gone', () => {
+    const f = onlyAttack('thorn', 'bloom');
+    const sim = new Sim(3, 'hard', { hero: 'wisp', features: f, startWave: 3, firstBoss: 'thorn' });
+    let lastBloom = -1;
+    let defeated = -1;
+    let n = 0;
+    while (sim.state.tick < 60 * 40 && defeated < 0) {
+      sim.state.alive = true;
+      const b = sim.state.boss;
+      if (b && b.deathTick < 0 && b.serial === 0 && b.remaining > 1) b.remaining = 1; // the first launch empties the bar
+      sim.step(idle);
+      for (const e of sim.state.events) {
+        if (e.type === 'boss_bloom') (lastBloom = sim.state.tick - 1, n++);
+        if (e.type === 'boss_defeated') defeated = sim.state.tick - 1;
+      }
+    }
+    expect(n).toBeGreaterThanOrEqual(2);
+    expect(defeated).toBeGreaterThan(lastBloom);
+    expect(sim.state.bossesDefeated).toBe(1);
+    expect(sim.state.bossScore).toBe(1000);
+  });
+});
+
+describe('thorn mother: the attacks', () => {
+  it('hedge: a boss-owned root wall (her serial), red and lethal, never two at once, never with a curtain, never withered by the intro rule', () => {
+    const f = onlyAttack('thorn', 'hedge', withFeatures('thorn', 'briar', 'knot'));
+    let walls = 0;
+    for (let seed = 1; seed <= 20; seed++)
+      fightThorn(seed, 'hard', f, (sim) => {
+        const s = sim.state;
+        expect((s.walls ?? []).length).toBeLessThanOrEqual(1);
+        // the hunts never start in her fight: only HER walls, and no knot at all
+        if (s.boss && s.boss.deathTick < 0) {
+          for (const w of s.walls ?? []) expect(w.boss).toBeGreaterThan(0);
+          expect(s.knots ?? []).toEqual([]);
+        }
+        for (const e of s.events) {
+          if (e.type === 'briar') {
+            walls++;
+            expect(e.boss).toBe(s.boss?.serial);
+          }
+          if (e.type === 'briar_end') expect(e.how).toBe('crossed');
+        }
+      });
+    expect(walls).toBeGreaterThan(40);
+  });
+
+  it('bloom: 1..3 spots >= 90 px from the hero at the wind-up, each a violet shard ring with one gap >= 0.5 rad, 0.3 s apart, cued >= 15 ticks', () => {
+    const f = onlyAttack('thorn', 'bloom');
+    let rings = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      const times: number[] = [];
+      fightThorn(seed, 'hard', f, (sim) => {
+        const s = sim.state;
+        const a = s.boss?.attack;
+        if (a?.pattern === 'bloom' && s.tick - 1 === a.windStart) {
+          expect(a.points.length).toBeGreaterThanOrEqual(1);
+          expect(a.points.length).toBeLessThanOrEqual(3);
+          for (const [x, y] of a.points) expect(Math.hypot(x - s.hero.x, y - s.hero.y)).toBeGreaterThanOrEqual(90 - 3); // the hero moved one tick
+        }
+        if (s.events.some((e) => e.type === 'boss_bloom')) {
+          times.push(s.tick - 1);
+          const born = s.projectiles.filter((pr) => pr.born === s.tick - 1 && pr.boss > 0);
+          for (const e of s.events) if (e.type === 'spawn' && born.some((b) => b.id === e.id)) expect(e.telegraphTicks).toBeGreaterThanOrEqual(15);
+          // group by bloom centre: the largest angular gap of each ring is >= 0.5 rad
+          const byCentre = new Map<string, number[]>();
+          for (const pr of born) {
+            expect(pr.kind).toBe('rune_shard');
+            expect(pr.parryable).toBe(true);
+            const ang = Math.atan2(pr.vy, pr.vx);
+            const cx = Math.round(pr.x - Math.cos(ang) * 4);
+            const cy = Math.round(pr.y - Math.sin(ang) * 4);
+            const key = `${cx},${cy}`;
+            byCentre.set(key, [...(byCentre.get(key) ?? []), ang]);
+          }
+          for (const angs of byCentre.values()) {
+            rings++;
+            const a2 = angs.map((x) => (x + 2 * Math.PI) % (2 * Math.PI)).sort((x, y) => x - y);
+            let gap = a2[0]! + 2 * Math.PI - a2[a2.length - 1]!;
+            for (let i = 1; i < a2.length; i++) gap = Math.max(gap, a2[i]! - a2[i - 1]!);
+            expect(gap).toBeGreaterThanOrEqual(0.5);
+          }
+        }
+      });
+      for (let i = 1; i < times.length; i++) if (times[i]! - times[i - 1]! < 60) expect(times[i]! - times[i - 1]!).toBe(18);
+    }
+    expect(rings).toBeGreaterThan(100);
+  });
+
+  it('lash: red unparryable blades along the wind-up line; spores: a violet fan aimed at the hero', () => {
+    for (const [pattern, kind, parryable] of [['lash', 'blade', false], ['spores', 'orb_small', true]] as const) {
+      let shots = 0;
+      fightThorn(5, 'hard', onlyAttack('thorn', pattern), (sim) => {
+        const s = sim.state;
+        for (const pr of s.projectiles)
+          if (pr.boss > 0 && pr.born === s.tick - 1) {
+            shots++;
+            expect(pr.kind).toBe(kind);
+            expect(pr.parryable).toBe(parryable);
+          }
+      });
+      expect(shots).toBeGreaterThan(24);
     }
   });
 });

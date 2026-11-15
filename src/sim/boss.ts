@@ -8,7 +8,7 @@ import { dcos, dsin, rotate } from './dmath';
 import { ticks, type SimParams } from './params';
 import { nextFloat, range } from './rng';
 import type { Beam, Boss, BossAttack, BossKind, BossPattern, SimState } from './state';
-import { beginNewAttack, launchNew } from './newBosses';
+import { beginNewAttack, launchNew, newBossClear, newPatternTable, runPending } from './newBosses';
 
 /** Spawner callback (waves.spawnProjectile), injected to avoid an import cycle. */
 export type Spawn = (
@@ -179,7 +179,7 @@ function patternTable(s: SimState, p: SimParams, kind: BossKind): [BossPattern, 
       return [['fan', p.bosses.lich.fan.weight], ['wraiths', p.bosses.lich.wraiths.weight], ['triple', p.bosses.lich.triple.weight]];
     case 'thorn':
     case 'toller':
-      throw new Error(`boss: the ${kind}'s attacks are not implemented yet`);
+      return newPatternTable(s, p, kind);
     default:
       return unknownBoss(kind);
   }
@@ -400,9 +400,12 @@ export function rotateBeams(s: SimState): void {
   s.beams = keep;
 }
 
-/** The final attack is over when none of its projectiles and no beam of it remain. */
+/**
+ * The final attack is over when none of its projectiles and no beam of it remain; for a new boss also nothing may
+ * still be queued (a multi-beat attack) and no wall of hers may stand (FEATURES.bosses).
+ */
 function finalAttackGone(s: SimState, b: Boss): boolean {
-  return !s.projectiles.some((pr) => pr.boss === b.serial) && !s.beams.some((bm) => bm.serial === b.serial);
+  return !s.projectiles.some((pr) => pr.boss === b.serial) && !s.beams.some((bm) => bm.serial === b.serial) && (b.kind === 'eye' || b.kind === 'lich' || newBossClear(s, b));
 }
 
 /** Remove extra segments for a reflected boss projectile (reflectBonusSegments, default 0 = off). */
@@ -421,6 +424,7 @@ export function runBoss(s: SimState, p: SimParams, spawn: Spawn): void {
   if (!b) return;
   const t = s.tick;
   rotateBeams(s);
+  if (b.pending) runPending(s, p, b, spawn); // new bosses only: the later beats of launched attacks
   if (b.deathTick >= 0) {
     if (t >= b.deathTick + ticks(p.bosses.deathSeconds)) s.boss = null;
     return;

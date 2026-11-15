@@ -246,7 +246,7 @@ export const FEATURES: Features = deepFreeze({
       hedge: { weight: 2, telegraphSeconds: 0.75, speed: 50, halfWidth: 3, gapPx: 44, reachFraction: 0.8 },
       bloom: { weight: 2, count: 3, maxCount: 3, staggerSeconds: 0.3, minHeroDist: 90, edgeInset: 30, spacingPx: 60, shards: 10, maxShards: 12, gapRad: 0.6, gapAimRad: 0.8 },
       lash: { weight: 2, count: 3, maxCount: 4, arc: 0.5, speedFactor: 1 },
-      spores: { weight: 3, count: 5, arc: 0.9 },
+      spores: { weight: 3, count: 5, arc: 1.2 },
     },
     toller: {
       enabled: false,

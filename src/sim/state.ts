@@ -75,7 +75,21 @@ export interface BossAttack {
   dirY: number;
   sign: number;
   points: [number, number][];
+  /** New bosses only (the key exists only there): a seeded angle offset per telegraphed point (a bloom's gap). */
+  offs?: number[];
 }
+
+/**
+ * A deferred emission of a NEW boss's attack (FEATURES.bosses), fired on tick `at`. It belongs to the attack `serial`
+ * that was launched (and paid its one segment) earlier; `tele` = the tick its visible cue started.
+ */
+export type BossEmission =
+  /** Thorn Mother: a bloom bursts into its shard ring; the gap is centred on the hero's direction turned by `off`. */
+  | { op: 'bloom'; at: number; serial: number; x: number; y: number; off: number; tele: number }
+  /** The Toller: ring `k` of a toll (its gap at the absolute angle `gap`). */
+  | { op: 'toll'; at: number; serial: number; k: number; gap: number; tele: number }
+  /** The Toller: the pendulum's second pass, from (dirX, dirY) rotating by -sign back to the start line for `n` ticks. */
+  | { op: 'swing'; at: number; serial: number; dirX: number; dirY: number; sign: number; n: number };
 
 /** The rotating eye beam (unparryable). Active (lethal) for ticks [start, end). */
 export interface Beam {
@@ -116,6 +130,8 @@ export interface Boss {
   deathTick: number;
   /** Speed multiplier for this encounter (difficulty speed is already in the params). */
   speed: number;
+  /** New bosses only (the key exists only there): deferred emissions of launched attacks, in `at` order. */
+  pending?: BossEmission[];
 }
 
 export type PickupKind = 'slow' | 'double';
@@ -217,6 +233,8 @@ export interface Wall {
   gap: number;
   gapHalf: number;
   halfWidth: number;
+  /** The boss attack serial of a Thorn Mother hedge (the key exists only on a boss-owned wall). */
+  boss?: number;
 }
 
 /** A rune lighting up before it fires a radial ring of rune shards. */
@@ -309,7 +327,7 @@ export type SimEvent =
   | { type: 'knot'; id: number; x: number; y: number }
   | { type: 'knot_end'; id: number; x: number; y: number; how: 'burst' | 'parry' | 'cancel' }
   /** A briar line was started / is gone (crossed the arena, or withered at a boss intro). Only with FEATURES.briar. */
-  | { type: 'briar'; id: number; axis: 'x' | 'y'; dir: 1 | -1; gap: number }
+  | { type: 'briar'; id: number; axis: 'x' | 'y'; dir: 1 | -1; gap: number; boss?: number }
   | { type: 'briar_end'; id: number; how: 'crossed' | 'withered' }
   /** A pattern-pack set piece started (only with FEATURES.patternPack). */
   | { type: 'pack'; key: PackKey }
@@ -322,6 +340,8 @@ export type SimEvent =
   | { type: 'boss_attack'; kind: BossKind; pattern: BossPattern; remaining: number }
   | { type: 'boss_segment'; remaining: number; reflected: boolean }
   | { type: 'boss_teleport'; x: number; y: number }
+  /** A Thorn Mother bloom burst (FEATURES.bosses.thorn only). */
+  | { type: 'boss_bloom'; x: number; y: number }
   | { type: 'boss_defeated'; kind: BossKind; x: number; y: number; points: number; charges: number }
   | { type: 'pickup_spawn'; id: number; kind: PickupKind }
   | { type: 'pickup_take'; id: number; kind: PickupKind; x: number; y: number }
