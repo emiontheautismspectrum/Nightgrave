@@ -124,9 +124,13 @@ export function newPatternTable(s: SimState, p: SimParams, kind: 'thorn' | 'toll
   }
   const c = tollerRow(p);
   const out: [BossPattern, number][] = [['toll', c.toll.weight]];
-  // never two beams at once: no pendulum while one swings (either pass) or its second pass is still to come
-  const swinging = s.beams.length > 0 || !!s.boss?.pending?.some((e) => e.op === 'swing');
-  if (!swinging) out.push(['pendulum', c.pendulum.weight]);
+  // never two beams at once: no pendulum while one swings (either pass) or its second pass is still to come; and
+  // never a pendulum wind-up over a toll that is still ringing (the previous attack's orbs in flight: walking behind
+  // the start line would mean walking through the rings)
+  const b = s.boss;
+  const swinging = s.beams.length > 0 || !!b?.pending?.some((e) => e.op === 'swing');
+  const ringing = !!b && b.serial > 0 && s.projectiles.some((pr) => pr.boss === b.serial && pr.kind === 'orb_small');
+  if (!swinging && !ringing) out.push(['pendulum', c.pendulum.weight]);
   if (!knellAlive(s)) out.push(['knell', c.knell.weight]); // never two knell rings at once
   return out;
 }
@@ -210,8 +214,9 @@ export function launchNew(s: SimState, p: SimParams, b: Boss, a: BossAttack, pat
       const c = thornRow(p).hedge;
       const speed = (c.speed * p.diffSpeed * b.speed) / TICK_RATE;
       const { w } = planWall(s, p, c, speed);
-      if (placeWall(s, p, w, c, serial)) return;
-      // every gap choice crossed a blood sigil: the root line does not rise, a spore fan is the attack instead
+      // the gap's lane never runs through her (her lash would meet the hero in it point-blank)
+      if (placeWall(s, p, w, c, serial, { x: b.x, y: b.y, r: c.bossClearPx })) return;
+      // every gap choice crossed a blood sigil or her body: the root line does not rise, a spore fan is the attack
       return launchNew(s, p, b, a, 'spores', spawn);
     }
     case 'bloom': {
@@ -249,12 +254,17 @@ export function launchNew(s: SimState, p: SimParams, b: Boss, a: BossAttack, pat
     case 'toll': {
       const c = tollerRow(p).toll;
       const [hx, hy] = aimAt(s, b.x, b.y);
-      const [bx, by] = rotate(hx, hy, a.offs?.[0] ?? 0); // ring 1's gap direction
+      // the rhythm the design asks for: parry ring 1, walk through ring 2's gap, parry ring 3 (the beat is shorter
+      // than the parry cooldown, two beats are longer). Ring 2's gap opens near the hero's direction; every other
+      // ring's gap is turned by whole steps from it (never aligned)
+      const [bx, by] = rotate(hx, hy, a.offs?.[0] ?? 0); // ring 2's gap direction
       const beat = beatTicks(p);
       const { step } = tollGeometry(p);
       const pend = (b.pending ??= []);
-      for (let k = 0; k < Math.max(1, Math.round(c.rings)); k++) {
-        const [gx, gy] = rotate(bx, by, k * a.sign * step);
+      const rings = Math.max(1, Math.round(c.rings));
+      const mid = rings > 1 ? 1 : 0;
+      for (let k = 0; k < rings; k++) {
+        const [gx, gy] = rotate(bx, by, (k - mid) * a.sign * step);
         const e: BossEmission = { op: 'toll', at: s.tick + k * beat, serial, k, gapX: gx, gapY: gy, tele: a.windStart };
         if (k === 0) emit(s, p, b, e, spawn);
         else pend.push(e);

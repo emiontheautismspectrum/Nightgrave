@@ -135,10 +135,11 @@ export function planWall(s: SimState, p: SimParams, c: WallRow, speed: number): 
 
 /**
  * Place the gap of a planned wall (ONE draw) and put it on the field. The gap centre lies within reachFraction of the
- * distance the hero can WALK before the line arrives; never into a blood sigil (three choices, else false: nothing is
- * placed). `boss` = the attack serial of a boss-owned wall (the key exists only then).
+ * distance the hero can WALK before the line arrives; never into a blood sigil, nor (`avoid`, a boss wall) through
+ * the boss's body (three choices, else false: nothing is placed). `boss` = the attack serial of a boss-owned wall
+ * (the key exists only then).
  */
-export function placeWall(s: SimState, p: SimParams, w: Wall, c: WallRow, boss?: number): boolean {
+export function placeWall(s: SimState, p: SimParams, w: Wall, c: WallRow, boss?: number, avoid?: { x: number; y: number; r: number }): boolean {
   const h = s.hero;
   const half = w.gapHalf;
   const axis = w.axis;
@@ -151,6 +152,7 @@ export function placeWall(s: SimState, p: SimParams, w: Wall, c: WallRow, boss?:
   for (const g of [clamp(across + off), clamp(across - off), clamp(across)]) {
     w.gap = g;
     if (s.sigils.some((sg) => inGapCorridor(w, sg.x, sg.y, sg.r))) continue; // never a gap into a blood sigil
+    if (avoid && inGapCorridor(w, avoid.x, avoid.y, avoid.r)) continue; // a boss wall: never a gap through the boss
     w.id = s.nextId++;
     if (boss !== undefined) w.boss = boss;
     (s.walls ??= []).push(w);

@@ -147,9 +147,10 @@ export interface ThornMother extends NewBossRow {
   /**
    * A root line with ONE gap (the `Wall` entity of the briar line, owned by the attack serial): red, lethal, creeping;
    * the dash i-frames pass. The same placement and fairness as the briar line (the gap within `reachFraction` of the
-   * walking reach). Never picked while a wall or a pattern-pack curtain is alive.
+   * walking reach). The gap's lane never passes within `bossClearPx` of her body (else a spore fan is the attack).
+   * Never picked while a wall or a pattern-pack curtain is alive.
    */
-  readonly hedge: AttackRow & { readonly telegraphSeconds: number; readonly speed: number; readonly halfWidth: number; readonly gapPx: number; readonly reachFraction: number };
+  readonly hedge: AttackRow & { readonly telegraphSeconds: number; readonly speed: number; readonly halfWidth: number; readonly gapPx: number; readonly reachFraction: number; readonly bossClearPx: number };
   /**
    * `count` (max `maxCount`) ground blooms at seeded spots >= `minHeroDist` from the hero and `spacingPx` apart light
    * up during the wind-up; each bursts into a violet shard ring of `shards` (max `maxShards`) with ONE gap of `gapRad`
@@ -172,8 +173,9 @@ export interface TheToller extends NewBossRow {
   readonly windupBeats: number;
   /**
    * `rings` violet orb rings on consecutive beats, `count` (max `maxCount`) orbs each, every ring with ONE gap of
-   * `gapRad` (at least 1.6 x the ring spacing, so it reads); ring k's gap is turned by k x `gapStepRad` from the first
-   * (at least the gap + 0.5 rad: two consecutive gaps never overlap).
+   * `gapRad` (at least 1.6 x the ring spacing, so it reads). The rhythm: parry ring 1, walk through ring 2's gap
+   * (centred within `gapAimRad` of the hero's direction), parry ring 3; ring k's gap is turned by (k - 1) x
+   * `gapStepRad` from ring 2's (at least the gap + 0.5 rad: two consecutive gaps never overlap).
    */
   readonly toll: AttackRow & { readonly rings: number; readonly count: number; readonly maxCount: number; readonly gapRad: number; readonly gapStepRad: number; readonly gapAimRad: number; readonly speed: number };
   /**
@@ -244,8 +246,8 @@ export const FEATURES: Features = deepFreeze({
       windupSeconds: 0.5,
       x: 240,
       y: 60,
-      hedge: { weight: 2, telegraphSeconds: 0.75, speed: 50, halfWidth: 3, gapPx: 44, reachFraction: 0.8 },
-      bloom: { weight: 2, count: 3, maxCount: 3, staggerSeconds: 0.3, minHeroDist: 90, edgeInset: 30, spacingPx: 60, shards: 10, maxShards: 12, gapRad: 0.6, gapAimRad: 0.8 },
+      hedge: { weight: 2, telegraphSeconds: 0.75, speed: 50, halfWidth: 3, gapPx: 44, reachFraction: 0.8, bossClearPx: 24 },
+      bloom: { weight: 2, count: 3, maxCount: 3, staggerSeconds: 0.3, minHeroDist: 90, edgeInset: 30, spacingPx: 60, shards: 9, maxShards: 10, gapRad: 0.6, gapAimRad: 0.8 },
       lash: { weight: 2, count: 3, maxCount: 4, arc: 0.5, speedFactor: 1 },
       spores: { weight: 3, count: 5, arc: 1.2 },
     },
@@ -258,9 +260,9 @@ export const FEATURES: Features = deepFreeze({
       y: 58,
       beatTicks: 30,
       windupBeats: 1,
-      toll: { weight: 3, rings: 3, count: 9, maxCount: 10, gapRad: 0.6, gapStepRad: 1.7, gapAimRad: 0.6, speed: 80 },
+      toll: { weight: 3, rings: 3, count: 9, maxCount: 10, gapRad: 1.2, gapStepRad: 1.7, gapAimRad: 0.4, speed: 80 },
       pendulum: { weight: 2, windupBeats: 2, degPerSecond: 55, sweepDeg: 50, halfWidth: 2, length: 440, offsetMinPx: 18, offsetMaxPx: 34 },
-      knell: { weight: 2, count: 12, maxCount: 14, gapRad: 0.6, gapAimRad: 0.6, speedFactor: 0.8 },
+      knell: { weight: 3, count: 15, maxCount: 18, gapRad: 0.6, gapAimRad: 0.6, speedFactor: 1.2 },
     },
   },
 });

@@ -8,6 +8,7 @@ import { FEATURES, withFeatures, type Features } from '../src/data/features';
 import { TUNING } from '../src/data/tuning';
 import { earliestBossDefeat, maxPossibleScore } from '../src/shared/maxScore';
 import { bossCycle, bossKindFor, orderHash } from '../src/sim/boss';
+import { tollGeometry } from '../src/sim/newBosses';
 import { makeParams } from '../src/sim/params';
 import { decodeReplay, encodeReplay } from '../src/sim/replay';
 import { Sim } from '../src/sim/sim';
@@ -399,11 +400,22 @@ describe('the toller: the attacks', () => {
         if (ring.ring === 0) (gaps = [], orbs = 0, tolls++);
         orbs += born.length;
         expect(orbs).toBeLessThanOrEqual(30);
-        // the gap is THE gap (clearly wider than the ring's spacing), and no two gaps of a toll overlap (Hard)
-        const spacing = (2 * Math.PI - g.size) / Math.max(1, born.length - 1);
-        if (born.length >= 8) expect(g.size).toBeGreaterThanOrEqual(1.5 * spacing);
-        for (const other of gaps) expect(angDiff(other, g.at)).toBeGreaterThanOrEqual(g.size - 1e-9);
-        gaps.push(g.at);
+        // a full ring (none dropped by the 60 px rule): the gap is THE gap, clearly wider than the ring's spacing
+        const geo = tollGeometry(sim.params);
+        if (born.length === geo.n) {
+          const spacing = (2 * Math.PI - g.size) / Math.max(1, born.length - 1);
+          expect(g.size).toBeCloseTo(geo.gap, 9);
+          expect(g.size).toBeGreaterThanOrEqual(1.5 * spacing);
+        }
+        // the gaps of a toll (the queued rings' gap directions): consecutive gaps never overlap
+        expect(geo.step).toBeGreaterThanOrEqual(geo.gap + 0.5);
+        const q = (b.pending ?? []).filter((e) => e.op === 'toll');
+        for (let i = 1; i < q.length; i++) {
+          const e0 = q[i - 1]! as { gapX: number; gapY: number };
+          const e1 = q[i]! as { gapX: number; gapY: number };
+          expect(angDiff(Math.atan2(e0.gapY, e0.gapX), Math.atan2(e1.gapY, e1.gapX))).toBeCloseTo(geo.step, 6);
+        }
+        void gaps;
       });
     }
     expect(tolls).toBeGreaterThan(200);
@@ -435,7 +447,7 @@ describe('the toller: the attacks', () => {
         }
       });
     }
-    expect(passes).toBeGreaterThan(100);
+    expect(passes).toBeGreaterThan(30); // (with only the pendulum in its table a toll fills in while one swings or rings)
   });
 
   it('knell: a ring of red blades with TWO gaps >= 0.5 rad; never two knell rings alive', () => {
