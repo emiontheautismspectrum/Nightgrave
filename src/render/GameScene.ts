@@ -13,7 +13,8 @@ import { drawHeroFx } from './heroView';
 import { arcGeom, arcPixels, type ArcGeom } from './knightArc';
 import { heroDef } from '../data/heroes';
 import { HOLLOWS, RUNES } from '../data/arena';
-import type { SimEvent } from '../sim/state';
+import type { BossKind, SimEvent } from '../sim/state';
+import type { Features } from '../data/features';
 import { bestScore, mergeFromDisk, persist, recordRun, save, shouldSaveRun } from '../storage';
 import { ARENA_PROPS, ATLAS, MANIFEST, bgKey, createAnimations, frame, preloadAssets, type SpriteName } from './assets';
 import { audio } from './audio';
@@ -89,6 +90,12 @@ export interface RunConfig {
   makeRun: () => { seed: number; label: string; date?: string };
   /** Dev only (previews/screenshots): start at this wave. Never set in production builds. Such runs are never saved. */
   startWave?: number;
+  /**
+   * Dev preview only (`npm run dev` with ?flags= / ?boss=, src/web/devPreview.ts): the run is simulated under these
+   * variant flags and may force its first boss. Never set in production builds; such a run has no replay, is never
+   * saved, never submitted, never a best, and shows a PREVIEW tag.
+   */
+  preview?: { features: Features; firstBoss?: BossKind };
   isTouch: () => boolean;
   /** Quit to the title screen. */
   quit: (scene: Phaser.Scene) => void;
@@ -772,12 +779,21 @@ export class GameScene extends Phaser.Scene {
       o.setDepth(D_HUD);
   }
 
+  /** A dev run (start wave or preview): never a real run. */
+  private devRun(): boolean {
+    return !!this.cfg.startWave || !!this.cfg.preview;
+  }
+
   private newRun(): void {
     const run = this.cfg.makeRun();
     this.cfg.hero = this.cfg.devHero ?? save().hero;
     if (this.shellView && this.input2) this.syncShell(); // a new hero: its lamps (a no-op when nothing changed)
     // the hero is part of the run definition (it changes the rules); an instant restart keeps the selected hero
-    this.sim = new Sim(run.seed, this.cfg.difficulty, { hero: this.cfg.hero, ...(this.cfg.startWave ? { startWave: this.cfg.startWave } : {}) });
+    this.sim = new Sim(run.seed, this.cfg.difficulty, {
+      hero: this.cfg.hero,
+      ...(this.cfg.startWave ? { startWave: this.cfg.startWave } : {}),
+      ...(this.cfg.preview ? { features: this.cfg.preview.features, ...(this.cfg.preview.firstBoss ? { firstBoss: this.cfg.preview.firstBoss } : {}) } : {}),
+    });
     this.driver = new RunDriver(this.sim);
     this.runZoomed = false;
     for (const o of this.fx) {
@@ -796,7 +812,7 @@ export class GameScene extends Phaser.Scene {
     this.runSeed = run.seed;
     this.submit?.close();
     this.submit = null;
-    setTextValue(this.hudDaily, run.label);
+    setTextValue(this.hudDaily, this.cfg.preview ? tr('run.preview') : run.label);
     for (const s of this.orbs.values()) s.destroy();
     this.orbs.clear();
     for (const v of this.casterViews.values()) for (const o of [v.body, v.tele, v.fx]) o.destroy();
@@ -1029,8 +1045,9 @@ export class GameScene extends Phaser.Scene {
     this.syncView(); // the death panel is drawn on the full arena right away
     const view = this.runZoomed ? ('zoomed' as const) : ('full' as const);
     const meta = { input: [...this.input2.sources], view };
-    // a dev start-wave run is not a real run: no replay (startWave is not recorded) and never saved
-    this.lastReplay = this.cfg.startWave ? null : encodeReplay(st.seed, st.difficulty, hero, this.sim.log, meta);
+    // a dev start-wave or preview run is not a real run: no replay (neither is recorded) and never saved
+    const dev = this.devRun();
+    this.lastReplay = dev ? null : encodeReplay(st.seed, st.difficulty, hero, this.sim.log, meta);
     this.hero.play(`${hero}_death`);
     this.shadow.setVisible(false);
     this.burst('death_burst', st.hero.x, st.hero.y);
@@ -1040,13 +1057,13 @@ export class GameScene extends Phaser.Scene {
     const d = this.cfg.difficulty;
     const prevBest = bestScore(save(), d);
     let isNew = false;
-    if (shouldSaveRun('death', this.cfg.startWave)) {
+    if (shouldSaveRun('death', this.cfg.startWave, !!this.cfg.preview)) {
       mergeFromDisk(); // another tab may have saved scores meanwhile
       isNew = recordRun(save(), d, { score, hero, date: utcDateKey(new Date()), secs }, this.runDate).newRecord;
       persist();
     }
     if (isNew) emitAudioEvent('new_record');
-    const best = Math.max(prevBest, this.cfg.startWave ? 0 : score);
+    const best = Math.max(prevBest, dev ? 0 : score);
     this.panelText.setText(
       [
         isNew ? tr('death.newRecord') : tr('death.score', { score: fmtInt(score) }),
@@ -1068,7 +1085,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.input2.takeConfirm(); // ignore the press that was in flight when we died
     // Hard only, online, never a dev run: offer the board if the score would enter today's top 10
-    if (d === 'hard' && online() && shouldSaveRun('death', this.cfg.startWave)) {
+    if (d === 'hard' && online() && shouldSaveRun('death', this.cfg.startWave, !!this.cfg.preview)) {
       const sim = this.sim;
       this.submit = new SubmitPanel(this, D_HUD + 6, () => this.panelCenterY());
       void this.submit.offer({ date: this.runDate, seed: this.runSeed, score, hero, view, log: sim.log }, () => this.sim === sim);
@@ -1146,7 +1163,7 @@ export class GameScene extends Phaser.Scene {
     this.hudMult.setText(tr('hud.mult', { m: fmtDec(st.multiplier / 100, 2) }));
     this.drawScoreFeedback();
     setTextValue(this.hudWave, st.wave >= 0 ? tr('hud.wave', { n: st.wave + 1 }) : '');
-    setTextValue(this.hudDaily, this.cfg.difficulty === 'hard' ? tr('hud.daily', { date: fmtDayMonth(this.runDate) }) : '');
+    setTextValue(this.hudDaily, this.cfg.preview ? tr('run.preview') : this.cfg.difficulty === 'hard' ? tr('hud.daily', { date: fmtDayMonth(this.runDate) }) : '');
     const touch = this.cfg.isTouch();
     for (const o of Object.values(this.icons)) o.setVisible(!touch);
     if (!touch) {

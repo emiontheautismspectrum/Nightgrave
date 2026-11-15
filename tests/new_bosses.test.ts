@@ -9,7 +9,7 @@ import { TUNING } from '../src/data/tuning';
 import { earliestBossDefeat, maxPossibleScore } from '../src/shared/maxScore';
 import { bossCycle, bossKindFor, orderHash } from '../src/sim/boss';
 import { makeParams } from '../src/sim/params';
-import { encodeReplay } from '../src/sim/replay';
+import { decodeReplay, encodeReplay } from '../src/sim/replay';
 import { Sim } from '../src/sim/sim';
 import type { BossKind, SimState } from '../src/sim/state';
 import { mulberryInputs } from './scripted';
@@ -458,5 +458,21 @@ describe('the toller: the attacks', () => {
         void b;
       });
     expect(rings).toBeGreaterThan(100);
+  });
+});
+
+describe('the dev preview parameters (src/web/devPreview.ts; dev builds only)', () => {
+  it('?flags= by block name, "bosses" for both new bosses, ?boss= forces the first boss; nothing else is accepted', async () => {
+    const { parseDevPreview } = await import('../src/web/devPreview');
+    expect(parseDevPreview(new URLSearchParams(''))).toBeNull();
+    expect(parseDevPreview(new URLSearchParams('flags=nonsense&boss=dragon'))).toBeNull();
+    const a = parseDevPreview(new URLSearchParams('flags=bosses,knot&boss=toller'))!;
+    expect(a.features).toEqual(withFeatures('bosses', 'knot'));
+    expect(a.firstBoss).toBe('toller');
+    expect(parseDevPreview(new URLSearchParams('flags=thorn'))!.features).toEqual(withFeatures('thorn'));
+    expect(parseDevPreview(new URLSearchParams('flags=thorn,toller,briar,patternPack'))!.features).toEqual(withFeatures('bosses', 'briar', 'patternPack'));
+    // a preview run's replay is a variant: production refuses it
+    const f = parseDevPreview(new URLSearchParams('flags=bosses'))!.features;
+    expect(() => decodeReplay(encodeReplay(1, 'hard', 'wisp', [], undefined, f))).toThrow(/different tuning/);
   });
 });

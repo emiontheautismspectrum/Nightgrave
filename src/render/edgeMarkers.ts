@@ -4,13 +4,14 @@
  * A marker sits on the edge of the world window, on the line from the hero towards:
  * - every off-view projectile that can reach the hero within the horizon (violet = parryable, red = unparryable),
  * - every off-view telegraph for its whole telegraph time: rune glows, casters (portal / forest eyes, through the cast),
- *   blood sigils (outline and lethal fill), the boss (always, red while it winds up a beam) and its attack points;
+ *   blood sigils (outline and lethal fill), the boss (always, red while it winds up a red attack) and its attack
+ *   points, and the new bosses' blooms still waiting to burst (FEATURES.bosses);
  * - the hunts (FEATURES.knot / briar only): every off-view hex knot for its whole fuse (violet), every off-view briar
  *   line for its whole life (red, at its point nearest the hero) and its gap (bone = safe passage, `edge_gap`).
  * Bigger = closer (projectiles: sooner).
  */
 import type { SimParams } from '../sim/params';
-import type { SimState } from '../sim/state';
+import type { BossPattern, SimState } from '../sim/state';
 import type { ViewRect } from './camera';
 
 export interface EdgeMarker {
@@ -29,6 +30,9 @@ export interface EdgeMarker {
 
 /** Inset of the markers from the window edge (world px). */
 export const MARKER_INSET = 6;
+
+/** Wind-ups of red (unparryable) boss attacks: the boss marker turns red while one winds up. */
+const RED_WINDUPS: ReadonlySet<BossPattern> = new Set<BossPattern>(['beam', 'pendulum', 'knell', 'lash', 'hedge']);
 
 const inside = (v: ViewRect, x: number, y: number, pad = 0): boolean => x >= v.x0 - pad && x <= v.x1 + pad && y >= v.y0 - pad && y <= v.y1 + pad;
 
@@ -80,8 +84,10 @@ export function edgeMarkers(s: SimState, p: SimParams, v: ViewRect, horizonTicks
   if (b && b.deathTick < 0) {
     const a = b.attack;
     const winding = !!a && t >= a.windStart && t <= a.fire;
-    add('b', b.x, b.y, winding && a?.pattern === 'beam' ? 'red' : 'violet', winding ? 3 : near(b.x, b.y));
+    add('b', b.x, b.y, winding && a && RED_WINDUPS.has(a.pattern) ? 'red' : 'violet', winding ? 3 : near(b.x, b.y));
     if (a && winding) a.points.forEach(([x, y], i) => add(`bp${i}`, x, y, 'violet', near(x, y)));
+    // a new boss's blooms still to burst (FEATURES.bosses.thorn): lit until they burst
+    for (const e of b.pending ?? []) if (e.op === 'bloom') add(`bq${e.serial}:${Math.round(e.x)},${Math.round(e.y)}`, e.x, e.y, 'violet', near(e.x, e.y));
   }
   for (const bm of s.beams) if (t >= bm.start && t < bm.end) add(`m${bm.serial}`, bm.x, bm.y, 'red', 3);
   for (const k of s.knots ?? []) add(`k${k.id}`, k.x, k.y, 'violet', near(k.x, k.y));

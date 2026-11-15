@@ -27,6 +27,11 @@ Mood: dark ambient, slow rhythm, meditative with tension. Duration in seconds.
 | sfx_knot_fuse.mp3 | 0.8 | Hissing arcane fuse catching on a floating violet knot, soft crackle, ominous |
 | sfx_knot_burst.mp3 | 0.5 | Tight radial snap of a magic knot bursting into stone shards, dark fantasy |
 | sfx_briar_creep.mp3 | 1.0 | Low creaking of thorny branches dragging over stone, slow and menacing |
+| sfx_boss_thorn_intro.mp3 | 2.5 | Ancient roots tearing up through earth and stone, a deep wooden groan and a low female hum, ominous |
+| sfx_boss_toller_intro.mp3 | 2.5 | A huge cracked iron bell tolling once in the night, long decay, chains rattling, dark fantasy |
+| sfx_toll.mp3 | 0.9 | Single deep bell toll, short and resonant, slightly cracked, dark fantasy |
+| sfx_bloom.mp3 | 0.4 | Soft organic pop of a magic flower bursting open, whispery violet shimmer |
+| sfx_root_creep.mp3 | 1.0 | Thick roots grinding and creaking through soil and stone, slow and heavy |
 
 ## Music and ambience (loops)
 | File | Dur | Prompt |
@@ -41,6 +46,9 @@ Mood: dark ambient, slow rhythm, meditative with tension. Duration in seconds.
 - The hunts (hex knot, briar line) are dark until their feature blocks are enabled; until a file exists the game
   plays a synthesized fallback. Every hunt cue is also visible (fuse pips, the band's telegraph, the bone gap marker),
   so the fight reads with sound muted.
+- The new bosses (Thorn Mother, the Toller) are dark until their rows of FEATURES.bosses are enabled; their sounds
+  fall back to synthesized ones. The Toller's beat is visible (the bell swings, a bone ring widens on every toll) and
+  the Thorn Mother's cues are lit blooms and stirring roots, so both fights read with sound muted.
 - calm and tense must share tempo and key so the game can crossfade between them as the run gets harder.
 - Check your ElevenLabs plan license for commercial use before publishing.
 - If a track does not loop cleanly, the game adds a crossfade in code.

@@ -15,7 +15,7 @@ import gen_arena  # noqa: E402
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 from nglib import arena_previews as AP  # noqa: E402
-from nglib import board, bosses, effects, heroes, shell, threats  # noqa: E402
+from nglib import board, bosses, bosses2, effects, heroes, shell, threats  # noqa: E402
 from nglib import canvas as C  # noqa: E402
 from nglib import spec  # noqa: E402
 from nglib.pack import pack  # noqa: E402
@@ -45,7 +45,7 @@ def save(a, path):
 
 def gameplay_sprites():
     builders = {}
-    for mod in (heroes.SPRITES, threats.SPRITES, effects.SPRITES, bosses.SPRITES):
+    for mod in (heroes.SPRITES, threats.SPRITES, effects.SPRITES, bosses.SPRITES, bosses2.SPRITES):
         builders.update(mod)
     assert set(builders) == set(spec.SPRITES), set(builders) ^ set(spec.SPRITES)
     sprites = {}
@@ -86,7 +86,9 @@ def boss_board(art, game):
     pal = np.array(RGB + [(11, 13, 18)], dtype=np.uint8)
     rows = [["eye_sentinel_idle", "eye_sentinel_charge", "eye_sentinel_hit"], ["eye_sentinel_death"],
             ["lich_mage_idle", "lich_mage_cast", "lich_mage_hit"], ["lich_mage_teleport_out", "lich_mage_teleport_in"],
-            ["lich_mage_death"], ["eye_beam", "pickup_slow_time", "pickup_double_score", "pickup_glow"]]
+            ["lich_mage_death"], ["eye_beam", "pickup_slow_time", "pickup_double_score", "pickup_glow"],
+            ["thorn_mother_idle", "thorn_mother_cast", "thorn_mother_hit"], ["thorn_mother_death"],
+            ["toller_idle", "toller_cast", "toller_hit"], ["toller_death"], ["root_bloom", "bell_ring", "briar_tile", "briar_post"]]
     W_, pad = 560, 4
     blocks = []
     for row in rows:

@@ -13,6 +13,7 @@ import { save } from './storage';
 import { resolveLang, setLang, t } from './i18n';
 import { isHeroId, type HeroId } from './data/heroes';
 import { BoardPanel } from './web/boardPanel';
+import { parseDevPreview, type DevPreview } from './web/devPreview';
 import { computeLayout } from './web/layout';
 import { initBoardOverlay } from './web/boardOverlay';
 import { isInRun, onRunChange, setRelayout } from './web/runFlag';
@@ -132,9 +133,14 @@ async function boot(): Promise<void> {
   // dev-only hero preview (`npm run dev`, ?hero=knight|wisp): overrides the saved hero for runs, never saved. The whole
   // branch is dead code in a production build (import.meta.env.DEV is false there; tests/prodbundle.test.ts checks it)
   let devHero: HeroId | null = null;
+  // dev-only preview of dark feature blocks (`npm run dev`, ?flags=bosses,knot,briar,patternPack and ?boss=thorn|toller,
+  // src/web/devPreview.ts): the run is simulated under the variant flags; never saved, never submitted, tagged PREVIEW
+  let devPreview: DevPreview | null = null;
   if (import.meta.env.DEV) {
     const h = q.get('hero');
     if (isHeroId(h)) devHero = h;
+    devPreview = parseDevPreview(q);
+    if (devPreview) console.info('[dev preview]', devPreview.flags.join(','), devPreview.firstBoss ?? '');
   }
 
   const runConfig = (): RunConfig => {
@@ -154,6 +160,7 @@ async function boot(): Promise<void> {
             }
           : () => ({ seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 1, label: '' }),
       ...(devWave ? { startWave: devWave } : {}),
+      ...(devPreview ? { preview: { features: devPreview.features, ...(devPreview.firstBoss ? { firstBoss: devPreview.firstBoss } : {}) } } : {}),
       isTouch,
       quit: (scene) => scene.scene.start('title', titleConfig),
     };

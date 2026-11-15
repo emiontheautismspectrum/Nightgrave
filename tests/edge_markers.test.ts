@@ -4,7 +4,7 @@
  * Also: the camera is render-only (the sim result is identical with and without it).
  */
 import { describe, expect, it } from 'vitest';
-import { Sim } from '../src/sim/sim';
+import { Sim, type SimOptions } from '../src/sim/sim';
 import { FollowCam, type ViewRect } from '../src/render/camera';
 import { edgeMarkers } from '../src/render/edgeMarkers';
 import { PORTRAIT } from '../src/data/view';
@@ -38,8 +38,8 @@ function makeCam(phone: [string, number, number, number] = PHONES[0]!): FollowCa
 
 interface Track { born: number; offAtBirth: boolean; seen: boolean[]; hitAt: number; sx: number; sy: number }
 
-function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 3600, phone = PHONES[0]!, features?: Features) {
-  const sim = new Sim(seed, 'hard', { startWave, ...(features ? { features } : {}) });
+function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 3600, phone = PHONES[0]!, features?: Features, extra: SimOptions = {}) {
+  const sim = new Sim(seed, 'hard', { startWave, ...(features ? { features } : {}), ...extra });
   const bot = new SkilledBot(seed);
   const cam = makeCam(phone);
   cam.reset(sim.state.hero.x, sim.state.hero.y);
@@ -353,4 +353,25 @@ describe('phone portrait: the hunts (FEATURES.knot / briar, every enabled combin
     }
     expect(lines).toBeGreaterThan(2);
   });
+});
+
+describe('phone portrait: the new bosses (FEATURES.bosses)', () => {
+  for (const kind of ['thorn', 'toller'] as const)
+    it(`${kind}: every off-view boss threat (bloom spots, rings, blades, root walls and gaps) is marked >= 15 ticks before it can hit`, { timeout: 120_000 }, () => {
+      const f = withFeatures('bosses');
+      const fails: string[] = [];
+      let checked = 0;
+      let lines = 0;
+      [1, 7, 42, 1234, 99991, 31337, 5, 11, 77, 404, 2024, 8080].forEach((seed, i) => {
+        const r = audit(seed, 3, i % 2 === 0, 60 * 40, PHONES[i % PHONES.length]!, f, { firstBoss: kind });
+        fails.push(...r.fails);
+        checked += r.checked;
+        lines += r.hunts.lines;
+      });
+      expect(fails).toEqual([]);
+      console.log(`edge markers, ${kind}: ${checked} off-view threats, ${lines} root walls`);
+      // the Toller stands in view at the top more often (its rings start at the bell): fewer off-view births
+      expect(checked).toBeGreaterThan(kind === 'thorn' ? 20 : 4);
+      if (kind === 'thorn') expect(lines).toBeGreaterThan(0);
+    });
 });

@@ -22,6 +22,10 @@ describe('production bundle', () => {
       expect(js).not.toMatch(/get\("play"\)|get\('play'\)/);
       expect(js).not.toMatch(/get\("wave"\)|get\('wave'\)/);
       expect(js).not.toMatch(/get\("hero"\)|get\('hero'\)/); // the dev-only ?hero= helper
+      // the dev preview of dark blocks (?flags=, ?boss=, src/web/devPreview.ts) is dead code in production
+      expect(js).not.toMatch(/get\("flags"\)|get\('flags'\)|get\("boss"\)|get\('boss'\)/);
+      expect(js).not.toContain('[dev preview]');
+      expect(js).not.toContain('parseDevPreview');
       // no source maps anywhere, no source-map comment in any bundle
       const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]));
       const every = walk(out);

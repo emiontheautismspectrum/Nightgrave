@@ -8,7 +8,8 @@ import { TICK_RATE } from '../data/tuning';
 import { ticks } from '../sim/params';
 import type { SimParams } from '../sim/params';
 import { parryActiveTicks } from '../sim/sim';
-import type { Boss, SimEvent, SimState } from '../sim/state';
+import type { Boss, BossKind, SimEvent, SimState } from '../sim/state';
+import { unknownBoss } from '../sim/boss';
 import { ATLAS, frame, type SpriteName } from './assets';
 import { save } from '../storage';
 import { t } from '../i18n';
@@ -18,6 +19,36 @@ const BAR_H = 10;
 const BAR_FULL = { x: 48, y: 250, w: 384 };
 const BAR_ZOOMED = { x: 8, y: 324, w: 200 };
 const HIT_TICKS = 8;
+/** Per boss kind: the sprite family, the banner key, the anchor of the body (origin) and its translucency box. */
+interface BossLook {
+  name: 'eye_sentinel' | 'lich_mage' | 'thorn_mother' | 'toller';
+  banner: 'boss.eye' | 'boss.lich' | 'boss.thorn' | 'boss.toller';
+  /** Sprite origin y (0..1) placed at the sim position (+ dy); the eye hovers (depth over the y-sort). */
+  originY: number;
+  dy: number;
+  /** [x0, y0, x1, y1] around the sim position; base = the y it sorts by (0 = everything over it fades). */
+  box: [number, number, number, number];
+  hovers: boolean;
+}
+
+/** EXHAUSTIVE: a new kind must get its own look here (never another boss's art, banner or box). */
+export function bossLook(kind: BossKind): BossLook {
+  switch (kind) {
+    case 'eye':
+      return { name: 'eye_sentinel', banner: 'boss.eye', originY: 0.5, dy: 0, box: [-22, -20, 22, 22], hovers: true };
+    case 'lich':
+      return { name: 'lich_mage', banner: 'boss.lich', originY: 1, dy: 4, box: [-12, -36, 12, 4], hovers: false };
+    case 'thorn':
+      // her chest (where the shots leave) at the sim position; the root cloak spreads below it
+      return { name: 'thorn_mother', banner: 'boss.thorn', originY: 28 / 48, dy: 0, box: [-20, -28, 20, 20], hovers: false };
+    case 'toller':
+      // the bell's lip (where the rings leave) at the sim position; the robe hangs below it
+      return { name: 'toller', banner: 'boss.toller', originY: 18 / 56, dy: 0, box: [-20, -18, 20, 38], hovers: false };
+    default:
+      return unknownBoss(kind);
+  }
+}
+
 const COL = { bone: 0xd9d2c0, bg0: 0x0b0d12, violet: 0x9b6bff, violetDark: 0x3d2a78, blood: 0xd12b3a, bloodDark: 0x6e1423, teal: 0x4fd1c5, gold: 0xffd86b, ember: 0xff7a2f };
 
 export class BossView {
@@ -31,6 +62,10 @@ export class BossView {
   private timers: { icon: Phaser.GameObjects.Sprite; ring: Phaser.GameObjects.Image }[];
   private ember: UIText;
   private barAt: { x: number; y: number; w: number } = BAR_FULL;
+  /** The new bosses' cues (pooled, created only when such a boss appears): bloom spots and toll markers. */
+  private bloomPool: Phaser.GameObjects.Sprite[] = [];
+  private ringPool: Phaser.GameObjects.Sprite[] = [];
+  private tolls: number[] = [];
   private zoomed = false;
 
   constructor(
@@ -67,6 +102,8 @@ export class BossView {
   }
 
   reset(): void {
+    this.tolls = [];
+    for (const sp of [...this.bloomPool, ...this.ringPool]) sp.setVisible(false);
     for (const b of this.beams.values()) b.destroy();
     this.beams.clear();
     this.scene.tweens.killTweensOf(this.vignette);
@@ -77,13 +114,14 @@ export class BossView {
   box(st: SimState): [number, number, number, number, number] | null {
     const b = st.boss;
     if (!b) return null;
-    return b.kind === 'eye' ? [b.x - 22, b.y - 20, b.x + 22, b.y + 22, 0] : [b.x - 12, b.y - 36, b.x + 12, b.y + 4, b.y + 4];
+    const L = bossLook(b.kind);
+    return [b.x + L.box[0], b.y + L.box[1], b.x + L.box[2], b.y + L.box[3], L.hovers ? 0 : b.y + L.box[3]];
   }
 
   onEvent(e: SimEvent, st: SimState): void {
     switch (e.type) {
       case 'boss_intro':
-        snap(setTextValue(this.banner, t(e.kind === 'eye' ? 'boss.eye' : 'boss.lich')).setAlpha(1));
+        snap(setTextValue(this.banner, t(bossLook(e.kind).banner)).setAlpha(1));
         this.scene.tweens.killTweensOf(this.banner);
         this.scene.tweens.add({ targets: this.banner, alpha: 0, delay: 1500, duration: 400 });
         // the screen edges darken for the intro, then settle back
@@ -93,6 +131,9 @@ export class BossView {
         break;
       case 'boss_segment':
         if (st.boss) this.shatter(st.boss, e.remaining);
+        break;
+      case 'boss_toll':
+        this.tolls.push(st.tick - 1); // the toll marker widens from the bell (the beat, readable muted)
         break;
       case 'boss_defeated': {
         const s = this.scene.add.sprite(Math.round(e.x), Math.round(e.y), ATLAS, frame('death_burst')).setScale(2).setDepth(this.depth.fog - 1);
@@ -127,6 +168,7 @@ export class BossView {
     this.body.setVisible(!!b);
     this.bar.setVisible(!!b && !this.zoomed);
     if (b) this.drawBoss(st, p, b);
+    else for (const sp of [...this.bloomPool, ...this.ringPool]) sp.setVisible(false);
     // beams: a tiled sprite rotated along the beam direction
     const seen = new Set<number>();
     for (const bm of st.beams) {
@@ -148,41 +190,94 @@ export class BossView {
 
   private drawBoss(st: SimState, p: SimParams, b: Boss): void {
     const t = st.tick;
+    const L = bossLook(b.kind);
+    const name = L.name;
     const eye = b.kind === 'eye';
-    const name = eye ? 'eye_sentinel' : 'lich_mage';
+    const lich = b.kind === 'lich';
     const a = b.attack;
     const prog = (s0: number, s1: number, n: number) => Math.max(0, Math.min(n - 1, Math.floor(((t - s0) / Math.max(1, s1 - s0)) * n)));
     let f: [string, number];
     let alpha = 1;
     let rise = 0;
+    // the idle frame: the Toller's bell swings on its beat (centre, right, centre, left over two beats), the others loop
+    const beat = b.kind === 'toller' && p.toller ? Math.max(1, Math.round(p.toller.beatTicks)) : 0;
+    const phase = beat ? ((((t - b.introEnd + beat / 4) % (2 * beat)) + 2 * beat) % (2 * beat)) : 0; // an extreme on every beat
+    const idle = (): [string, number] => [`${name}_idle`, beat ? (Math.floor(phase / (beat / 2)) + 1) & 3 : (t >> 3) & 3];
     if (b.deathTick >= 0) f = [`${name}_death`, prog(b.deathTick, b.deathTick + ticks(p.bosses.deathSeconds), 6)];
     else if (t < b.introEnd) {
-      // intro: the eye rises from behind the tree line, the lich materialises at the portal
+      // intro: the eye rises from behind the tree line, the lich materialises at the portal, the new bosses rise out
+      // of the ground (dithered in)
       if (eye) {
         f = [`${name}_idle`, (t >> 3) & 3];
         rise = Math.round((1 - (t - b.start) / Math.max(1, b.introEnd - b.start)) * 40);
         alpha = Math.min(1, (t - b.start) / 40);
-      } else f = [`${name}_teleport_in`, prog(b.start, b.introEnd, 4)];
+      } else if (lich) f = [`${name}_teleport_in`, prog(b.start, b.introEnd, 4)];
+      else {
+        f = [`${name}_death`, 5 - prog(b.start, b.introEnd, 6)];
+        rise = -Math.round((1 - (t - b.start) / Math.max(1, b.introEnd - b.start)) * 8);
+      }
     } else if (b.hitTick >= 0 && t - b.hitTick < HIT_TICKS) f = [`${name}_hit`, (t - b.hitTick) < HIT_TICKS / 2 ? 0 : 1];
-    else if (a && !eye && t < a.tpIn) f = [`${name}_teleport_out`, prog(a.tpOut, a.tpIn, 4)];
-    else if (a && !eye && t < a.windStart) f = [`${name}_teleport_in`, prog(a.tpIn, a.windStart, 4)];
+    else if (a && lich && t < a.tpIn) f = [`${name}_teleport_out`, prog(a.tpOut, a.tpIn, 4)];
+    else if (a && lich && t < a.windStart) f = [`${name}_teleport_in`, prog(a.tpIn, a.windStart, 4)];
     else if (a && t >= a.windStart) f = [eye ? `${name}_charge` : `${name}_cast`, prog(a.windStart, a.fire, eye ? 3 : 4)];
-    else f = [`${name}_idle`, (t >> 3) & 3];
+    else f = idle();
     this.body.setFrame(frame(f[0] as SpriteName, f[1])).setAlpha(alpha);
-    if (eye) this.body.setOrigin(0.5, 0.5).setPosition(b.x, b.y - rise).setDepth(this.depth.fog - 2);
-    else this.body.setOrigin(0.5, 1).setPosition(b.x, b.y + 4).setDepth(this.depth.ysort + b.y + 4);
+    if (L.hovers) this.body.setOrigin(0.5, L.originY).setPosition(b.x, b.y - rise).setDepth(this.depth.fog - 2);
+    else {
+      const base = b.y + L.box[3];
+      this.body.setOrigin(0.5, L.originY).setPosition(b.x, b.y + L.dy - rise).setDepth(this.depth.ysort + base);
+    }
 
-    // telegraphs during the wind-up: the beam's thin start line, the spawn points
+    // telegraphs during the wind-up: the beam's / pendulum's / lash's thin start line, the spawn points, the bloom
+    // spots, the knell's red ring and the hedge's stirring roots
+    let blooms = 0;
+    const bloomAt = (x: number, y: number, fr: number): void => {
+      const sp = this.bloomPool[blooms] ?? (this.bloomPool[blooms] = this.scene.add.sprite(0, 0, ATLAS, frame('root_bloom' as SpriteName)));
+      sp.setVisible(true).setFrame(frame('root_bloom' as SpriteName, fr)).setPosition(Math.round(x), Math.round(y)).setDepth(this.depth.ysort + y - 8);
+      blooms++;
+    };
     if (a && t >= a.windStart && t < a.fire) {
       const k = (t - a.windStart) / Math.max(1, a.fire - a.windStart);
-      if (a.pattern === 'beam') {
-        this.gfx.lineStyle(1, k > 0.6 ? COL.blood : COL.bloodDark, 1);
-        this.gfx.lineBetween(b.x, b.y, b.x + a.dirX * 440, b.y + a.dirY * 440);
-      } else if (a.pattern === 'spawns') {
-        this.gfx.lineStyle(1, COL.violet, 1);
-        for (const [x, y] of a.points) this.gfx.strokeCircle(Math.round(x), Math.round(y), Math.max(2, Math.round(8 - k * 6)));
+      switch (a.pattern) {
+        case 'beam':
+        case 'pendulum':
+          this.gfx.lineStyle(1, k > 0.6 ? COL.blood : COL.bloodDark, 1);
+          this.gfx.lineBetween(b.x, b.y, b.x + a.dirX * 440, b.y + a.dirY * 440);
+          break;
+        case 'lash':
+          this.gfx.lineStyle(1, k > 0.6 ? COL.blood : COL.bloodDark, 1);
+          this.gfx.lineBetween(b.x, b.y, b.x + a.dirX * 140, b.y + a.dirY * 140);
+          break;
+        case 'spawns':
+          this.gfx.lineStyle(1, COL.violet, 1);
+          for (const [x, y] of a.points) this.gfx.strokeCircle(Math.round(x), Math.round(y), Math.max(2, Math.round(8 - k * 6)));
+          break;
+        case 'bloom':
+          for (const [x, y] of a.points) bloomAt(x, y, Math.min(3, Math.floor(k * 4)));
+          break;
+        case 'knell':
+          this.gfx.lineStyle(1, k > 0.6 ? COL.blood : COL.bloodDark, 1);
+          this.gfx.strokeCircle(Math.round(b.x), Math.round(b.y), Math.round(22 - k * 10));
+          break;
+        case 'hedge':
+          // roots stirring at her feet (red): the wall rises at the far edge when the wind-up ends
+          this.gfx.lineStyle(1, k > 0.6 ? COL.blood : COL.bloodDark, 1);
+          for (let i = -2; i <= 2; i++) this.gfx.lineBetween(b.x + i * 6, b.y + 18, b.x + i * 9, b.y + 22 + (i & 1) * 2);
+          break;
+        default:
+          break;
       }
     }
+    // blooms launched but not yet burst stay fully lit until they burst (FEATURES.bosses.thorn)
+    for (const e of b.pending ?? []) if (e.op === 'bloom') bloomAt(e.x, e.y, 3);
+    for (let i = blooms; i < this.bloomPool.length; i++) this.bloomPool[i]!.setVisible(false);
+    // the Toller's toll markers: a bone ring widening from the bell on every toll beat
+    this.tolls = this.tolls.filter((s0) => t - s0 < 20);
+    this.tolls.forEach((s0, i) => {
+      const sp = this.ringPool[i] ?? (this.ringPool[i] = this.scene.add.sprite(0, 0, ATLAS, frame('bell_ring' as SpriteName)).setDepth(this.depth.fog - 1));
+      sp.setVisible(true).setFrame(frame('bell_ring' as SpriteName, Math.min(3, Math.floor((t - s0) / 5)))).setPosition(Math.round(b.x), Math.round(b.y));
+    });
+    for (let i = this.tolls.length; i < this.ringPool.length; i++) this.ringPool[i]!.setVisible(false);
 
     // the bar: frame + one cell per segment (remaining = bone, removed = dark)
     const B = this.barAt;

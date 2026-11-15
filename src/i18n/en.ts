@@ -24,6 +24,8 @@ export const en = {
   'hero.wisp.short': 'WISP',
   'boss.eye': 'EYE SENTINEL',
   'boss.lich': 'LICH MAGE',
+  'boss.thorn': 'THORN MOTHER',
+  'boss.toller': 'THE TOLLER',
   'unit.seconds': '{n}S',
 
   // ---- title screen
@@ -149,6 +151,8 @@ export const en = {
   'hud.wave': 'WAVE {n}',
   'hud.daily': 'HARD {date}',
   'run.dailyLabel': 'HARD - DAILY {date}',
+  /** The tag of a dev preview run (`npm run dev` with ?flags=): never saved, never submitted. */
+  'run.preview': 'PREVIEW',
   'hud.mult': 'X{m}',
   'hud.x2': 'X2',
   'pause.title': 'PAUSED',

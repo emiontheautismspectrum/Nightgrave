@@ -40,6 +40,12 @@ export const SYNTH: Record<SfxEvent, Voice> = {
   knot_fuse: { f0: 330, f1: 360, dur: 0.6, type: 'triangle', gain: 0.04, noise: 0.35 },
   knot_burst: { f0: 520, f1: 160, dur: 0.3, type: 'square', gain: 0.06, noise: 0.45 },
   briar_creep: { f0: 90, f1: 70, dur: 0.8, type: 'sawtooth', gain: 0.035, noise: 0.6 },
+  // the new bosses (FEATURES.bosses): synthesized until the files exist
+  boss_intro_thorn: { f0: 70, f1: 45, dur: 1.6, type: 'sawtooth', gain: 0.07, noise: 0.5 },
+  boss_intro_toller: { f0: 196, f1: 194, dur: 2.0, type: 'sine', gain: 0.12, noise: 0.05 },
+  toll: { f0: 392, f1: 388, dur: 0.9, type: 'sine', gain: 0.07, noise: 0.02 },
+  bloom: { f0: 520, f1: 260, dur: 0.35, type: 'triangle', gain: 0.05, noise: 0.3 },
+  root_creep: { f0: 60, f1: 48, dur: 0.9, type: 'sawtooth', gain: 0.035, noise: 0.55 },
 };
 
 let noiseBuf: AudioBuffer | null = null;

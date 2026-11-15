@@ -40,8 +40,11 @@ Threats
 - The hunts (dark until FEATURES.knot / FEATURES.briar are enabled; docs/FEATURES.md):
   - hex_knot 12x12 4f: a stationary HOLLOW violet ring (never a filled orb) with four 2x2 bone fuse pips at N/E/S/W;
     frame i has 4 - i pips lit (the burnt ones violet_dark). The pips ARE the fuse: no number is shown.
-  - briar_tile 8x8 2f (blood): a thorny band 6 px thick, tiled along a briar line (turned 90 degrees for a vertical
-    line); frame 1 shifts the thorns (the line creeps). briar_post 8x12 (blood, bone tip): one at each side of the gap.
+  - briar_tile 8x8 2f (blood): ROOTS, not flat vines (U3 restyle; the keys stay briar_*): a sinuous root 6 px thick in
+    the shape of the clearing's ground roots, blood_dark bark around a blood core, rootlets ending in glowing blood
+    tips, seamless along the band (period 8); turned 90 degrees for a vertical line; frame 1 shifts the twist (the
+    roots creep). briar_post 8x12 (blood, bone glint): a thick root curling up out of the ground at each side of the
+    gap. The same sprites draw the briar line and the Thorn Mother's hedge.
   - edge_gap 5x5 (bone diamond): on both arena edges the gap passes, from the line's first tick; in the zoomed phone
     view the same bone colour marks an off-view gap on the window edge (bone = safe passage).
   - Readability: hex_knot is checked as violet, briar_tile and briar_post as blood (`check_readability.py`).
@@ -54,6 +57,20 @@ Bosses
 - eye_sentinel 48x48: idle 4f, charge 3f, hit 2f, death 6f; eye_beam segment 16x4 2f
 - lich_mage 32x40: idle 4f, cast 4f, teleport_out 4f, teleport_in 4f, hit 2f, death 6f
 - boss_bar 384x10 frame (9-slice style; segments drawn in code, max 15)
+- The new bosses (dark until their rows of FEATURES.bosses are enabled; tools/nglib/bosses2.py; body rule as above:
+  dark stone, forest, moss, bone, violet_dark; bright violet only in the cast frames' glow):
+  - thorn_mother 40x48: idle 4f, cast 4f, hit 2f, death 6f. A huge hunched matriarch grown from roots: a crown of
+    thorns, a pale bone mask with hollow eyes, a cloak of twisted roots spreading into the ground; the root-arms rise
+    on the cast frames. Drawn with her chest (where shots leave) at the sim position; she rises out of the ground at
+    the intro (the death frames reversed).
+  - toller 40x56: idle 4f, cast 4f, hit 2f, death 6f. A tall robed figure with a bell for a head and hanging chains;
+    the idle frames are the bell's swing (centre, right, centre, left), chosen from the fight's 30-tick beat so an
+    extreme falls on every beat; the clapper strikes on the cast frames. The bell's lip is at the sim position.
+  - root_bloom 16x16 4f (violet): a ground bloom opening over the wind-up (it bursts into violet shards); fully lit
+    while a launched bloom waits for its turn.
+  - bell_ring 32x32 4f (bone): a thin ring widening from the bell on every toll beat (the rhythm, readable muted).
+  - Telegraphs drawn in code: the pendulum's and the lash's thin start lines (blood_dark -> blood), the knell's
+    shrinking red ring, the hedge's stirring red roots at her feet.
 
 Pickups
 - pickup_slow_time 12x12 4f (teal hourglass), pickup_double_score 12x12 4f (gold "x2" rune)

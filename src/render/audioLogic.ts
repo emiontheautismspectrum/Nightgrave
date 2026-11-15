@@ -2,14 +2,15 @@
  * Audio decisions as pure logic (no DOM, no Phaser, no Web Audio): file manifest, voice limits, pitch variation,
  * music selection with hysteresis, and sound events derived on the render side by diffing sim state between frames.
  */
-import type { SimEvent, SimState } from '../sim/state';
+import type { BossKind, SimEvent, SimState } from '../sim/state';
 
 export type SfxEvent =
   | 'parry' | 'parry_chain' | 'dash' | 'death' | 'orb_spawn' | 'rune_charge' | 'rune_burst' | 'blade_whoosh'
   | 'wraith_wail' | 'boss_intro_eye' | 'boss_intro_lich' | 'boss_hit' | 'boss_death' | 'pickup_slow'
   | 'pickup_double' | 'new_record' | 'ui_click' | 'ui_confirm'
   | 'guard_gain' | 'guard_ready' | 'guard_break' | 'trail'
-  | 'knot_fuse' | 'knot_burst' | 'briar_creep';
+  | 'knot_fuse' | 'knot_burst' | 'briar_creep'
+  | 'boss_intro_thorn' | 'boss_intro_toller' | 'toll' | 'bloom' | 'root_creep';
 export type MusicTrack = 'music_menu' | 'music_run_calm' | 'music_run_tense' | 'music_boss';
 export const AMBIENCE = 'amb_graveyard';
 
@@ -24,7 +25,29 @@ export const SFX_FILE: Record<SfxEvent, string> = {
   guard_gain: 'sfx_guard_gain', guard_ready: 'sfx_guard_ready', guard_break: 'sfx_guard_break', trail: 'sfx_trail',
   // the hunts (FEATURES.knot / briar; never heard while the blocks are off)
   knot_fuse: 'sfx_knot_fuse', knot_burst: 'sfx_knot_burst', briar_creep: 'sfx_briar_creep',
+  // the new bosses (FEATURES.bosses; never heard while the rows are off)
+  boss_intro_thorn: 'sfx_boss_thorn_intro', boss_intro_toller: 'sfx_boss_toller_intro', toll: 'sfx_toll', bloom: 'sfx_bloom',
+  root_creep: 'sfx_root_creep',
 };
+
+/** EXHAUSTIVE: every boss kind has its own intro sound (a new kind never borrows another boss's). */
+export function bossIntroSfx(kind: BossKind): SfxEvent {
+  switch (kind) {
+    case 'eye':
+      return 'boss_intro_eye';
+    case 'lich':
+      return 'boss_intro_lich';
+    case 'thorn':
+      return 'boss_intro_thorn';
+    case 'toller':
+      return 'boss_intro_toller';
+    default:
+      return noKind(kind);
+  }
+}
+function noKind(kind: never): never {
+  throw new Error(`audio: unknown boss kind ${String(kind)}`);
+}
 export const ALL_SFX = Object.keys(SFX_FILE) as SfxEvent[];
 /** Hero sounds not yet in docs/AUDIO_LIST.md: synthesized only until a file with that stem is added. */
 export const SYNTH_ONLY_SFX: readonly SfxEvent[] = ['guard_gain', 'guard_ready', 'guard_break', 'trail'];
@@ -133,7 +156,7 @@ export class SoundDiffer {
           }
           break;
         case 'boss_intro':
-          out.push(e.kind === 'eye' ? 'boss_intro_eye' : 'boss_intro_lich');
+          out.push(bossIntroSfx(e.kind));
           break;
         case 'boss_segment':
           out.push('boss_hit');
@@ -148,7 +171,13 @@ export class SoundDiffer {
           knotBurst ||= e.how === 'burst';
           break;
         case 'briar':
-          out.push('briar_creep');
+          out.push(e.boss ? 'root_creep' : 'briar_creep'); // a Thorn Mother hedge creaks like roots, not thorns
+          break;
+        case 'boss_toll':
+          out.push('toll');
+          break;
+        case 'boss_bloom':
+          out.push('bloom');
           break;
         case 'pickup_take':
           out.push(e.kind === 'slow' ? 'pickup_slow' : 'pickup_double');
