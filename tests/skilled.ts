@@ -11,7 +11,8 @@
  */
 import { BTN_DASH, BTN_PARRY, type InputFrame } from '../src/sim/input';
 import { dashCooldownLeft, isFading, parryCooldownLeft, type Sim } from '../src/sim/sim';
-import { botInput } from './bot';
+import { inParryZone } from '../src/sim/parryZone';
+import { botInput, wallSoon } from './bot';
 
 export const REACTION_TICKS = 12;
 /** Ticks before a planned parry press at which an arc hero starts turning to the threat. */
@@ -42,11 +43,18 @@ export class SkilledBot {
     const seen = s.projectiles.filter((pr) => t - pr.born >= REACTION_TICKS && !isFading(s, pr));
     const all = s.projectiles;
     s.projectiles = seen;
+    // the hunts (FEATURES.knot / briar only): a knot or a briar line is perceived after the same reaction time
+    const knots = s.knots;
+    const walls = s.walls;
+    if (knots) s.knots = knots.filter((k) => t - k.start >= REACTION_TICKS);
+    if (walls) s.walls = walls.filter((w) => t - w.start >= REACTION_TICKS);
     let f: InputFrame;
     try {
       f = botInput(sim, { parry: false, beamDash: true });
     } finally {
       s.projectiles = all;
+      if (knots) s.knots = knots;
+      if (walls) s.walls = walls;
     }
     // aim error: a few px of jitter that changes every ~0.3 s
     if (t >= this.jitter.until) this.jitter = { x: (this.rnd() - 0.5) * 8, y: (this.rnd() - 0.5) * 8, until: t + 18 };
@@ -55,7 +63,7 @@ export class SkilledBot {
     // walk to a pickup when no perceived threat is close
     const near = seen.some((pr) => Math.hypot(pr.x - h.x, pr.y - h.y) < 70);
     const beam = s.beams.length > 0 || s.boss?.attack?.pattern === 'beam';
-    if (s.pickup && !near && !beam && !(f.buttons & BTN_DASH)) f = { cursor: true, mx: Math.round(s.pickup.x), my: Math.round(s.pickup.y), buttons: f.buttons };
+    if (s.pickup && !near && !beam && !(f.buttons & BTN_DASH) && !wallSoon(sim, 240)) f = { cursor: true, mx: Math.round(s.pickup.x), my: Math.round(s.pickup.y), buttons: f.buttons };
 
     // parry: find the first perceived violet threat that will actually reach the hero and when it gets "close"
     let buttons = f.buttons & ~BTN_PARRY;
@@ -90,6 +98,26 @@ export class SkilledBot {
         }
       }
       if (best < 40) this.parryAt = t + Math.max(0, Math.round(best)) + Math.round((this.rnd() - 0.5) * 4.999);
+      // a hex knot (FEATURES.knot only) inside the zone and seen for the reaction time: press within 0-2 ticks, but
+      // only in a lull (no perceived violet shot reaching the hero within the parry cooldown), as a careful player would
+      // while the fuse leaves time; in the last second of the fuse it presses anyway
+      const lull = !seen.some((pr) => {
+        if (!pr.parryable) return false;
+        const rx = pr.x - h.x;
+        const ry = pr.y - h.y;
+        const v2 = pr.vx * pr.vx + pr.vy * pr.vy || 1e-9;
+        const tc = -(rx * pr.vx + ry * pr.vy) / v2;
+        return tc >= 0 && tc < p.parryCooldown + 6 && Math.hypot(rx + pr.vx * tc, ry + pr.vy * tc) < p.heroRadius + pr.radius + 6;
+      });
+      if (this.parryAt < 0)
+        for (const k of s.knots ?? [])
+          if (!lull && k.burst - t > 60) continue;
+          else
+          if (t - k.start >= REACTION_TICKS && inParryZone(h.x, h.y, h.aimX, h.aimY, k.x, k.y, k.r - 1, p) >= 0) {
+            this.parryAt = t + Math.floor(this.rnd() * 3);
+            this.target = k.id;
+            break;
+          }
     }
     if (this.parryAt >= 0 && t >= this.parryAt) {
       buttons |= BTN_PARRY;
@@ -98,8 +126,8 @@ export class SkilledBot {
     }
     // an arc hero faces the threat from TURN_LEAD ticks before the press until the end of the pulse (or the threat's end)
     const turning = (this.parryAt >= 0 && this.parryAt - t <= TURN_LEAD) || t < this.turnUntil;
-    const tgt = turning && !p.parryFull ? s.projectiles.find((pr) => pr.id === this.target) : undefined;
-    if (tgt && !(buttons & BTN_DASH)) {
+    const tgt = turning && !p.parryFull ? (s.projectiles.find((pr) => pr.id === this.target) ?? s.knots?.find((k) => k.id === this.target)) : undefined;
+    if (tgt && !(buttons & BTN_DASH) && !wallSoon(sim, 40)) {
       const rx = tgt.x - h.x;
       const ry = tgt.y - h.y;
       const d = Math.hypot(rx, ry) || 1;

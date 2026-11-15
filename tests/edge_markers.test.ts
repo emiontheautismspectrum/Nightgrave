@@ -14,8 +14,13 @@ import { SkilledBot } from './skilled';
 import type { Features } from '../src/data/features';
 import { PACK_KEYS } from '../src/data/features';
 import { onlyPiece, PACK } from './pack_tools';
+import { COMBOS } from './hunt_tools';
+import { withFeatures } from '../src/data/features';
+import { huntSprites } from '../src/render/huntsView';
 
 const FAIR_TICKS = 15;
+/** A briar line's gap is marked (or in view) at least this long before the line reaches the hero. */
+const GAP_TICKS = 45;
 /** "Could hit": the gap between the threat and the hero is within this many px. */
 const CONTACT_GAP = 12;
 const inView = (v: ViewRect, x: number, y: number) => x >= v.x0 && x <= v.x1 && y >= v.y0 && y <= v.y1;
@@ -48,6 +53,10 @@ function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 360
   /** Off-view threats of the pattern pack that were audited, per set piece. */
   const pack: Record<string, number> = {};
   const packOf = new Map<number, string>();
+  /** The hunts (FEATURES.knot / briar): knots off-view at creation, lines and gaps audited before arrival. */
+  const hunts = { knots: 0, lines: 0, gaps: 0 };
+  const knotOff = new Map<number, boolean>();
+  const lineSeen = new Map<number, { start: number; seen: boolean[]; gap: boolean[]; arrive: number }>();
   while (sim.state.alive && sim.state.tick < maxTicks) {
     const s = sim.state;
     const h = s.hero;
@@ -70,6 +79,23 @@ function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 360
       const gap = Math.hypot(pr.x - h.x, pr.y - h.y) - pr.radius - sim.params.heroRadius;
       if (tr.hitAt < 0 && gap <= CONTACT_GAP) tr.hitAt = s.tick;
     }
+    for (const k of s.knots ?? []) {
+      if (!knotOff.has(k.id)) knotOff.set(k.id, !inView(v, k.x, k.y));
+      if (inView(v, k.x, k.y)) tickCues.push(k);
+      // a knot off-view when it appeared is marked (or in view) for its whole fuse
+      if (knotOff.get(k.id) && !inView(v, k.x, k.y) && !keys.has(`k${k.id}`)) fails.push(`seed ${seed} wave ${startWave}: knot ${k.id} unmarked at ${s.tick}`);
+    }
+    for (const w of s.walls ?? []) {
+      let tr = lineSeen.get(w.id);
+      if (!tr) lineSeen.set(w.id, (tr = { start: s.tick, seen: [], gap: [], arrive: -1 }));
+      const across = Math.min(w.axis === 'x' ? sim.params.y1 : sim.params.x1, Math.max(w.axis === 'x' ? sim.params.y0 : sim.params.x0, w.axis === 'x' ? h.y : h.x));
+      const [nx, ny] = w.axis === 'x' ? [w.pos, across] : [across, w.pos];
+      const [gx, gy] = w.axis === 'x' ? [w.pos, w.gap] : [w.gap, w.pos];
+      tr.seen[s.tick] = inView(v, nx, ny) || keys.has(`w${w.id}`);
+      tr.gap[s.tick] = inView(v, gx, gy) || keys.has(`g${w.id}`);
+      const gapPx = Math.abs((w.axis === 'x' ? h.x : h.y) - w.pos) - w.halfWidth - sim.params.heroRadius;
+      if (tr.arrive < 0 && gapPx <= CONTACT_GAP) tr.arrive = s.tick;
+    }
     for (const g of s.sigils) {
       let tr = sig.get(g.id);
       if (!tr) sig.set(g.id, (tr = { born: s.tick, offAtBirth: !inView(v, g.x, g.y), seen: [], hitAt: g.fill, sx: g.x, sy: g.y, fill: g.fill }));
@@ -91,14 +117,30 @@ function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 360
       }
     }
   }
+  for (const off of knotOff.values()) if (off) hunts.knots++;
+  for (const [id, tr] of lineSeen) {
+    if (tr.arrive < 0) continue; // never came close (the run ended first)
+    hunts.lines++;
+    // the line: marked or in view from its first tick to its arrival; its gap: >= 45 ticks before the arrival
+    for (let t = tr.start; t < tr.arrive; t++)
+      if (!tr.seen[t]) {
+        fails.push(`seed ${seed} wave ${startWave}: briar ${id} unmarked at ${t} (arrives ${tr.arrive})`);
+        break;
+      }
+    if (tr.arrive - tr.start < GAP_TICKS) fails.push(`seed ${seed} wave ${startWave}: briar ${id} arrived ${tr.arrive - tr.start} ticks after it appeared`);
+    let run = 0;
+    for (let t = tr.start; t < tr.arrive; t++) run = tr.gap[t] ? run + 1 : 0;
+    if (run < GAP_TICKS) fails.push(`seed ${seed} wave ${startWave}: briar ${id} gap marked only ${run} ticks before the line arrived`);
+    else hunts.gaps++;
+  }
   for (const [id, tr] of sig) {
-    if (!tr.offAtBirth) continue;
+    if (!tr.offAtBirth || tr.fill > sim.state.tick) continue; // (a run that ended before the fill never met it)
     checked++;
     let run = 0;
     for (let t = tr.born; t < tr.fill; t++) run = tr.seen[t] ? run + 1 : 0;
     if (run < FAIR_TICKS) fails.push(`seed ${seed} wave ${startWave}: sigil ${id} marked only ${run} ticks before its fill`);
   }
-  return { fails, checked, pack, score: sim.score, ticks: sim.state.tick };
+  return { fails, checked, pack, hunts, score: sim.score, ticks: sim.state.tick };
 }
 
 describe('phone portrait: fairness edge markers', () => {
@@ -263,5 +305,52 @@ describe('phone portrait: the pattern pack (FEATURES.patternPack, enabled varian
     }
     expect(runes).toBeGreaterThan(0);
     expect(casters).toBeGreaterThan(0);
+  });
+});
+
+describe('phone portrait: the hunts (FEATURES.knot / briar, every enabled combination)', () => {
+  for (const combo of COMBOS)
+    it(`${combo.join(' + ')}: off-view knots are marked for their whole fuse, lines until they arrive, gaps >= 45 ticks before`, { timeout: 120_000 }, () => {
+      const base = withFeatures(...combo);
+      // the hunt rows weigh three times as much here, so the audit sees many of them
+      const f = { ...base, knot: { ...base.knot, weight: base.knot.weight * 3 }, briar: { ...base.briar, weight: base.briar.weight * 3 } };
+      const fails: string[] = [];
+      const tot = { knots: 0, lines: 0, gaps: 0 };
+      let checked = 0;
+      const seeds = [1, 7, 42, 1234, 99991, 31337];
+      seeds.forEach((seed, i) => {
+        for (const w of [4, 5, 6, 8, 9, 12]) {
+          const r = audit(seed, w, i % 2 === 0, 3600, PHONES[i % PHONES.length]!, f);
+          fails.push(...r.fails);
+          checked += r.checked;
+          tot.knots += r.hunts.knots;
+          tot.lines += r.hunts.lines;
+          tot.gaps += r.hunts.gaps;
+        }
+      });
+      expect(fails).toEqual([]);
+      console.log(`edge markers, ${combo.join('+')}: ${JSON.stringify(tot)}, ${checked} off-view threats`);
+      if (combo.includes('knot')) expect(tot.knots).toBeGreaterThan(5);
+      if (combo.includes('briar')) expect(tot.lines).toBeGreaterThan(5);
+      expect(tot.gaps).toBe(tot.lines);
+    });
+
+  it('the full view (desktop, landscape): every line shows its gap markers on both edges from its first tick', () => {
+    const kb = withFeatures('knot', 'briar');
+    const sim = new Sim(21, 'hard', { hero: 'wisp', features: { ...kb, briar: { ...kb.briar, weight: 4 } }, startWave: 4 });
+    const bot = new SkilledBot(21);
+    const first = new Map<number, number>();
+    let lines = 0;
+    while (sim.state.tick < 60 * 90) {
+      const s = sim.state;
+      const list = huntSprites(s, sim.params);
+      for (const w of s.walls ?? []) {
+        if (!first.has(w.id)) (first.set(w.id, s.tick), lines++);
+        expect(list.filter((e) => e.name === 'edge_gap' && e.key.startsWith(`wg${w.id}:`))).toHaveLength(2);
+      }
+      s.alive = true;
+      sim.step(bot.input(sim));
+    }
+    expect(lines).toBeGreaterThan(2);
   });
 });

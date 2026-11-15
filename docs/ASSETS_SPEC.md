@@ -37,6 +37,14 @@ Threats
 - rune_shard 8x8 2f (violet)
 - blade 16x16 4f spin (blood red, unparryable)
 - wraith 16x16 4f, wraith_fade 4f (violet, translucent via dithering)
+- The hunts (dark until FEATURES.knot / FEATURES.briar are enabled; docs/FEATURES.md):
+  - hex_knot 12x12 4f: a stationary HOLLOW violet ring (never a filled orb) with four 2x2 bone fuse pips at N/E/S/W;
+    frame i has 4 - i pips lit (the burnt ones violet_dark). The pips ARE the fuse: no number is shown.
+  - briar_tile 8x8 2f (blood): a thorny band 6 px thick, tiled along a briar line (turned 90 degrees for a vertical
+    line); frame 1 shifts the thorns (the line creeps). briar_post 8x12 (blood, bone tip): one at each side of the gap.
+  - edge_gap 5x5 (bone diamond): on both arena edges the gap passes, from the line's first tick; in the zoomed phone
+    view the same bone colour marks an off-view gap on the window edge (bone = safe passage).
+  - Readability: hex_knot is checked as violet, briar_tile and briar_post as blood (`check_readability.py`).
 
 Effects
 - parry_pulse 24x24 4f, parry_spark 4x4 8f, dash_trail 16x16 3f, hit_flash 16x16 2f

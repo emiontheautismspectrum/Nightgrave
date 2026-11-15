@@ -1,6 +1,6 @@
 import { TICK_RATE, TUNING, type Difficulty } from '../data/tuning';
 import { HERO_RULES, heroDef, type AnyHeroId } from '../data/heroes';
-import { FEATURES, type Features, type PatternPack } from '../data/features';
+import { FEATURES, type BriarLine, type Features, type HexKnot, type PatternPack } from '../data/features';
 import { dcos, dsin, PI } from './dmath';
 
 /** Tuning converted to tick units for one run. Derived purely from TUNING + difficulty. */
@@ -109,6 +109,8 @@ export interface SimParams {
    * through these fields, so a disabled block is never read.
    */
   pack: PatternPack | null;
+  knot: HexKnot | null;
+  briar: BriarLine | null;
 }
 
 export const ticks = (seconds: number): number => Math.max(1, Math.round(seconds * TICK_RATE));
@@ -227,5 +229,7 @@ export function makeParams(difficulty: Difficulty, hero: AnyHeroId = 'classic', 
     pickups: T.pickups,
     parryActiveByCharge: emberTable(active),
     pack: features.patternPack.enabled === true ? features.patternPack : null,
+    knot: features.knot.enabled === true ? features.knot : null,
+    briar: features.briar.enabled === true ? features.briar : null,
   };
 }

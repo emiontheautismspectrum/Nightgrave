@@ -10,6 +10,8 @@ import { botInput } from './bot';
 import { SkilledBot } from './skilled';
 import { mulberryInputs } from './scripted';
 import { PACK } from './pack_tools';
+import { COMBOS } from './hunt_tools';
+import { withFeatures } from '../src/data/features';
 
 describe('dailySeed', () => {
   it('is stable (golden values) and differs per day', () => {
@@ -56,6 +58,40 @@ describe('maxPossibleScore', () => {
       ]
     `);
     console.log(`maxPossibleScore, pattern-pack variant: best bot score / bound ${best.toFixed(3)}`);
+  });
+
+  it('the hunt variants (knot, briar, both, with and without the pack): every bot run stays below the bound of its flags', { timeout: 120_000 }, () => {
+    let best = 0;
+    let knots = 0;
+    let lines = 0;
+    for (const combo of COMBOS) {
+      const f = withFeatures(...combo);
+      for (const hero of ['knight', 'wisp'] as const)
+        for (let seed = 1; seed <= 4; seed++) {
+          const sim = new Sim(seed * 7919 + combo.length, 'hard', { hero, features: f, startWave: [4, 5, 6, 10][seed - 1]! });
+          const bot = new SkilledBot(seed);
+          while (sim.state.alive && sim.state.tick < 60 * 150) {
+            sim.step(seed % 2 ? bot.input(sim) : botInput(sim));
+            for (const e of sim.state.events) (e.type === 'knot' && knots++, e.type === 'briar' && lines++);
+            if (sim.state.tick % 60 === 0) expect(sim.score).toBeLessThanOrEqual(maxPossibleScore(sim.state.tick, f));
+          }
+          expect(sim.score).toBeLessThanOrEqual(maxPossibleScore(sim.state.tick, f));
+          if (sim.state.tick > 600) best = Math.max(best, sim.score / maxPossibleScore(sim.state.tick, f));
+        }
+      // an enabled block never lowers the bound; the production bound did not move
+      for (const t of [0, 1, 600, 3600, 36000]) expect(maxPossibleScore(t, f)).toBeGreaterThanOrEqual(maxPossibleScore(t));
+    }
+    expect(knots).toBeGreaterThan(30);
+    expect(lines).toBeGreaterThan(10);
+    expect(best).toBeLessThan(0.5);
+    // the knot's burst is counted in the spawn bound (one knot + its shards per pick); a line adds no projectile
+    const K = withFeatures('knot');
+    expect(maxSpawnsPerSecond(K)).toBeGreaterThanOrEqual(maxSpawnsPerSecond());
+    expect(maxSpawnsPerSecond(withFeatures('briar'))).toBe(maxSpawnsPerSecond());
+    const bigK = { ...K, knot: { ...K.knot, shards: 40 } };
+    expect(maxSpawnsPerSecond(bigK)).toBeGreaterThan(maxSpawnsPerSecond() + 10);
+    expect(maxSpawnsPerSecond()).toBeCloseTo(45.1636, 3);
+    console.log(`maxPossibleScore, hunt variants: best bot score / bound ${best.toFixed(3)}`);
   });
 
   it('real bot runs always stay below it (and it is not absurdly loose)', () => {

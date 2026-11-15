@@ -314,7 +314,7 @@ describe('audio logic (no real audio)', () => {
     expect(buildManifest({}).size).toBe(0);
     const list = readFileSync('docs/AUDIO_LIST.md', 'utf8');
     for (const e of ALL_SFX) if (!SYNTH_ONLY_SFX.includes(e)) expect(list).toContain(`${SFX_FILE[e]}.mp3`);
-    expect(ALL_SFX.length).toBe(22);
+    expect(ALL_SFX.length).toBe(25);
     expect(SYNTH_ONLY_SFX).toHaveLength(4);
   });
 

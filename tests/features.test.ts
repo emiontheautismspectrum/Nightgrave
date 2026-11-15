@@ -105,7 +105,7 @@ describe('feature flags: an enabled variant', () => {
     // the same odd value in a DISABLED block is never looked at
     expect(tuningHash({ ...FEATURES, patternPack: { ...FEATURES.patternPack, spiral: { ...FEATURES.patternPack.spiral, turns: NaN } } })).toBe('f0214eba');
     // "enabled" must be exactly true everywhere: a truthy 1 is off for the sim AND for the fingerprint
-    const one = { patternPack: { ...FEATURES.patternPack, enabled: 1 as unknown as boolean } };
+    const one = { ...FEATURES, patternPack: { ...FEATURES.patternPack, enabled: 1 as unknown as boolean } };
     expect(tuningHash(one)).toBe('f0214eba');
     expect(makeParams('hard', 'knight', one).pack).toBeNull();
   });
@@ -118,7 +118,7 @@ describe('feature flags: an enabled variant', () => {
     expect(tuningHash(edited)).not.toBe(v);
     const reordered = Object.fromEntries(Object.entries(VARIANT.patternPack).reverse()) as unknown as Features['patternPack'];
     expect(Object.keys(reordered)).not.toEqual(Object.keys(VARIANT.patternPack));
-    expect(tuningHash({ patternPack: reordered })).toBe(v);
+    expect(tuningHash({ ...VARIANT, patternPack: reordered })).toBe(v);
   });
 
   it('reaches the sim through SimParams (and only there)', () => {
@@ -143,6 +143,29 @@ describe('feature flags: an enabled variant', () => {
     const again = playReplay(r, { features: VARIANT });
     expect(again.score).toBe(sim.score);
     expect(again.state.tick).toBe(sim.state.tick);
+  });
+
+  it('every combination of blocks: its own fingerprint, its replay refused by production, played back under its flags', () => {
+    const combos: FeatureKey[][] = [];
+    for (let m = 1; m < 1 << KEYS.length; m++) combos.push(KEYS.filter((_k, i) => m & (1 << i)));
+    expect(combos.length).toBe((1 << KEYS.length) - 1);
+    const hashes = new Set<string>(['f0214eba']);
+    for (const combo of combos) {
+      const f = withFeatures(...combo);
+      for (const k of KEYS) expect(f[k].enabled, `${combo} ${k}`).toBe(combo.includes(k));
+      const h = tuningHash(f);
+      expect(hashes.has(h), combo.join('+')).toBe(false);
+      hashes.add(h);
+      const sim = new Sim(99, 'hard', { hero: 'wisp', features: f });
+      for (const fr of mulberryInputs(3, 60 * 20)) sim.step(fr);
+      const r = JSON.parse(JSON.stringify(replayOf(sim))) as { tuning: string };
+      expect(r.tuning).toBe(h);
+      expect(() => decodeReplay(r), combo.join('+')).toThrow(/different tuning/);
+      expect(() => playReplay(r), combo.join('+')).toThrow(/different tuning/);
+      expect(playReplay(r, { features: f }).score).toBe(sim.score);
+      // never under the flags of another combination either
+      for (const other of combos) if (other !== combo) expect(() => decodeReplay(r, withFeatures(...other))).toThrow(/different tuning/);
+    }
   });
 
   it('a replay is never re-simulated under flags other than the ones its fingerprint names', () => {

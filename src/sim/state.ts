@@ -175,6 +175,44 @@ export type PackEvent =
    */
   | { op: 'lead'; at: number; pack: PackKey; speed: number; minDist: number; lead: number; hx: number; hy: number; t0: number };
 
+/**
+ * A hex knot (FEATURES.knot): a stationary harmless body on a fuse. Alive for ticks [start, burst); at `burst` it bursts
+ * into `shards` rune shards at `speed` px/tick, the first one at angle `angle`; a pulse that covers it destroys it first.
+ */
+export interface Knot {
+  id: number;
+  x: number;
+  y: number;
+  r: number;
+  start: number;
+  burst: number;
+  shards: number;
+  speed: number;
+  angle: number;
+}
+
+/**
+ * A briar line (FEATURES.briar): a band of thorns across the whole arena with ONE gap. `axis` is the axis it MOVES along
+ * ('x': a vertical band sweeping left / right; 'y': a horizontal band sweeping up / down), `dir` the direction. Its
+ * centre line is at `pos` on that axis; it is lethal (unparryable) where the hero is within halfWidth + the hero radius
+ * of it, except inside the gap: |cross - gap| <= gapHalf - the hero radius. [start, move) telegraph at the entering
+ * edge (outside the arena, harmless), then it creeps at `speed` px/tick (Slow Time slows it); removed past `endPos`.
+ */
+export interface Wall {
+  id: number;
+  axis: 'x' | 'y';
+  dir: 1 | -1;
+  pos: number;
+  startPos: number;
+  endPos: number;
+  start: number;
+  move: number;
+  speed: number;
+  gap: number;
+  gapHalf: number;
+  halfWidth: number;
+}
+
 /** A rune lighting up before it fires a radial ring of rune shards. */
 export interface Telegraph {
   id: number;
@@ -258,6 +296,15 @@ export type SimEvent =
   | { type: 'caster'; id: number; kind: CasterKind; source: number }
   | { type: 'caster_fire'; id: number; attack: CasterAttack }
   | { type: 'caster_fizzle'; id: number }
+  /**
+   * A hex knot appeared / ended: its fuse ran out (burst), a pulse destroyed it (parry), or a boss wave began with it
+   * still there (cancel: never happens under the creation rule). Only with FEATURES.knot.
+   */
+  | { type: 'knot'; id: number; x: number; y: number }
+  | { type: 'knot_end'; id: number; x: number; y: number; how: 'burst' | 'parry' | 'cancel' }
+  /** A briar line was started / is gone (crossed the arena, or withered at a boss intro). Only with FEATURES.briar. */
+  | { type: 'briar'; id: number; axis: 'x' | 'y'; dir: 1 | -1; gap: number }
+  | { type: 'briar_end'; id: number; how: 'crossed' | 'withered' }
   /** A pattern-pack set piece started (only with FEATURES.patternPack). */
   | { type: 'pack'; key: PackKey }
   | { type: 'wave'; wave: number }
@@ -336,4 +383,13 @@ export interface SimState {
   events: SimEvent[];
   /** Deferred emissions of the pattern pack. The field exists only while FEATURES.patternPack is enabled. */
   packQueue?: PackEvent[];
+  /** Hex knots on the field. The field exists only while FEATURES.knot is enabled. */
+  knots?: Knot[];
+  /**
+   * parryStart of the pulse whose FIRST kill was a knot (FEATURES.knot only; set lazily): that pulse's first projectile
+   * kill still earns the Knight's guard charge, so the order of the kills never decides it.
+   */
+  knotPulse?: number;
+  /** Briar lines on the field. The field exists only while FEATURES.briar is enabled. */
+  walls?: Wall[];
 }

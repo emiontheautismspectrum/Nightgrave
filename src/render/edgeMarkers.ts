@@ -4,7 +4,9 @@
  * A marker sits on the edge of the world window, on the line from the hero towards:
  * - every off-view projectile that can reach the hero within the horizon (violet = parryable, red = unparryable),
  * - every off-view telegraph for its whole telegraph time: rune glows, casters (portal / forest eyes, through the cast),
- *   blood sigils (outline and lethal fill), the boss (always, red while it winds up a beam) and its attack points.
+ *   blood sigils (outline and lethal fill), the boss (always, red while it winds up a beam) and its attack points;
+ * - the hunts (FEATURES.knot / briar only): every off-view hex knot for its whole fuse (violet), every off-view briar
+ *   line for its whole life (red, at its point nearest the hero) and its gap (bone = safe passage, `edge_gap`).
  * Bigger = closer (projectiles: sooner).
  */
 import type { SimParams } from '../sim/params';
@@ -21,7 +23,7 @@ export interface EdgeMarker {
   sy: number;
   /** Direction from the hero to the source (radians). */
   ang: number;
-  color: 'violet' | 'red';
+  color: 'violet' | 'red' | 'bone';
   size: 1 | 2 | 3;
 }
 
@@ -82,5 +84,15 @@ export function edgeMarkers(s: SimState, p: SimParams, v: ViewRect, horizonTicks
     if (a && winding) a.points.forEach(([x, y], i) => add(`bp${i}`, x, y, 'violet', near(x, y)));
   }
   for (const bm of s.beams) if (t >= bm.start && t < bm.end) add(`m${bm.serial}`, bm.x, bm.y, 'red', 3);
+  for (const k of s.knots ?? []) add(`k${k.id}`, k.x, k.y, 'violet', near(k.x, k.y));
+  for (const w of s.walls ?? []) {
+    // the band's point nearest the hero (straight across), and the gap where it is now
+    const across = Math.min(w.axis === 'x' ? p.y1 : p.x1, Math.max(w.axis === 'x' ? p.y0 : p.x0, w.axis === 'x' ? h.y : h.x));
+    const [nx, ny] = w.axis === 'x' ? [w.pos, across] : [across, w.pos];
+    const [gx, gy] = w.axis === 'x' ? [w.pos, w.gap] : [w.gap, w.pos];
+    const d = Math.abs((w.axis === 'x' ? h.x : h.y) - w.pos);
+    add(`w${w.id}`, nx, ny, 'red', bySize(d, 60, 120));
+    add(`g${w.id}`, gx, gy, 'bone', 3);
+  }
   return out;
 }

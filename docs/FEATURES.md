@@ -100,3 +100,70 @@ pack is marked on the edge of the zoomed phone view at least 15 ticks before it 
 Bot report (the targets of the pack and per-piece numbers, today's rules against the variant):
 `npx vite-node tools/bot/pack_report.ts 100 hard`. Read it before enabling: a 100-seed median moves by 10-20% between
 seed sets (the first boss opens a hole in the survival distribution at 70-80 s), so check 300 seeds as well.
+
+### `knot` (dark): hex knot
+
+A stationary hollow violet ring with four fuse pips (`src/sim/hunts.ts`; rows in `FEATURES.knot`). Pool order:
+existing patterns, the pack, the knot, the briar line; still ONE draw. Unlocks at wave 4 (after the first boss; see the
+balance note below).
+
+| Row | Value | Meaning |
+|---|---|---|
+| `weight`, `unlockWave` | 1.5, 4 | its row in the director's pool (ROADMAP_V2 proposed 2; see below) |
+| `maxActive` | 2 | knots alive at once (a burst is at most 2 x 8 = 16 shards) |
+| `fuseSeconds` | 4 | counted in ticks: NOT slowed by Slow Time, the same on every difficulty |
+| `shards` | 8 | ordinary `rune_shard`s (speed: shard speed x difficulty x wave speed, like a rune burst) |
+| `minHeroDist`, `edgeInset`, `spacingPx` | 90, 30, 40 | placement: from the hero, inside the arena edge, from another knot |
+| `radius` | 5 | the body the parry zone tests (the ONE zone function: Knight arc and Wisp circle as for orbs) |
+| `trailProof` | true | the Wisp's ember trail does not destroy knots |
+| `bossLeadSeconds` | 1 | no knot is created whose fuse would end later than 1 s before a boss wave |
+
+Rules: the body is harmless and a dash does not touch it; its life ends only at the burst or a parry. A pulse that
+covers it destroys it: it counts as one kill of the pulse, pays like a parried projectile (the pulse's first kill
+`parryBase` x the multiplier and one multiplier step, later kills `extraKillPoints`; x2 under Double Score) and
+refreshes the reset timer; it is never PERFECT, never gives a guard charge and is never a boss reflect. Should a knot
+still be alive when a boss wave begins (impossible under the creation rule), it is removed without a burst.
+
+### `briar` (dark): briar line
+
+A new entity kind `Wall` (`src/sim/hunts.ts`; rows in `FEATURES.briar`): a band of thorns across the whole arena with
+ONE gap. Red: unparryable, lethal on touch; the dash i-frames pass through it (the Knight's guard i-frames do not).
+Unlocks at wave 4.
+
+| Row | Value | Meaning |
+|---|---|---|
+| `weight`, `unlockWave` | 1, 4 | its row in the director's pool |
+| `maxActive` | 1 | lines alive at once |
+| `telegraphSeconds` | 0.75 | the band waits, dimmed, at its entering edge (outside the reachable area) before it moves |
+| `speed` | 55 | px/s x the difficulty and wave speed (worst case Hard at the cap: 96.8 px/s; the hero walks 150); Slow Time slows it |
+| `halfWidth`, `gapPx` | 3, 44 | the band and its gap (a hero centre within 19 px of the gap centre is safe) |
+| `reachFraction` | 0.8 | the gap centre lies within 80% of the distance the hero can WALK before the line arrives |
+| `bossLeadSeconds` | 1 | no line is started that would (unslowed) still be alive 1 s before a boss wave |
+
+Rules: it enters from the edge farther from the hero; the axis is a seeded coin. No line starts while a pattern-pack
+`curtain` is alive and no curtain while a line is alive; the gap never opens into a blood sigil (else the line does
+not start and an orb fan plays instead) and no sigil is placed in the gap corridor while the line is alive. A line
+kept alive by Slow Time withers at the boss intro. Collision is O(1) per line per tick.
+
+### The hunts: cues, render, tests
+
+- Every cue is visible: the knot's pips are its fuse (no number), the band's telegraph stands at its edge, the bone
+  `edge_gap` marks the gap on both arena edges from the line's first tick; in the zoomed phone view off-view knots
+  (violet), lines (red) and gaps (bone) are marked on the window edge (`src/render/edgeMarkers.ts`). Render reads a
+  pure draw list (`src/render/huntsView.ts`), empty while the blocks are off. Sounds `sfx_knot_fuse`,
+  `sfx_knot_burst`, `sfx_briar_creep` fall back to synthesized ones; the fight reads muted.
+- Tests: `tests/hunts.test.ts` (rules, the boss rule, walking-only solvers on 200 seeds from the centre, corners and
+  edges: knot bursts ignored by the hero, briar lines with and without blood sigils; Easy and Medium spot checks),
+  `tests/hunts_view.test.ts`, `tests/edge_markers.test.ts` (every enabled combination), `tests/features.test.ts`
+  (every combination of blocks has its own fingerprint and is refused by production), `tests/shared.test.ts` (the
+  score bound counts the knot and its burst; a line adds no projectile).
+- Enabling: `withFeatures('knot')`, `withFeatures('briar')`, or both, with or without `'patternPack'`, for bots and
+  tests. Bot report: `npx vite-node tools/bot/hunts_report.ts 50 hard` (targets in its header). Switching a block on
+  for players is the usual rules change above (paused cut-over, ROADMAP_V2 section 6).
+
+Balance note (Hard, `tools/bot/hunts_report.ts 100 hard 150`): with the knot at wave 2 (the ROADMAP_V2 proposal) the
+immortal Wisp's hazard in waves 0-2 rose by 23% over 300 seeds (+33% on seeds 1-150, +12% on 151-300); the bot that
+ignores knots showed +8%, so the cost was the hunt itself right before the first boss. Weight 1.0 and `maxActive` 1
+did not move it; `unlockWave` 4 (after the first boss, with the briar line) did. At 4 every Hard target passes: knots
+parried 89-100%, hazard of waves 0-2 unchanged and of waves 4-6 -10% to +6%, heroes within 3-9%, median survival
+97-100% of the same flags without the hunts, knots 0% and briar lines 1% of deaths.

@@ -74,8 +74,58 @@ export interface PatternPack {
   readonly stalkerPair: PackRow & { readonly idleSeconds: number; readonly staggerSeconds: number };
 }
 
+/**
+ * HEX KNOT (package B1 "Hunts"): a stationary hollow violet ring on a fuse, far from the hero. Its body is harmless.
+ * A pulse that covers it (the ONE parry zone, radius `radius`) destroys it: it scores like a parried projectile (the
+ * first kill of a pulse pays parryBase x the multiplier and steps it, later kills extraKillPoints) and refreshes the
+ * chain, but it is never PERFECT and gives no guard charge. Not destroyed when the fuse ends (counted in ticks, not
+ * slowed by Slow Time, the same on every difficulty), it bursts into `shards` rune shards. No knot is created in the
+ * last `fuseSeconds + bossLeadSeconds` before a boss wave, so every fuse has ended when the boss arrives.
+ */
+export interface HexKnot {
+  readonly enabled: boolean;
+  readonly weight: number;
+  readonly unlockWave: number;
+  readonly maxActive: number;
+  readonly fuseSeconds: number;
+  readonly shards: number;
+  /** Created at least this far from the hero and this far inside the arena edge, and `spacingPx` from another knot. */
+  readonly minHeroDist: number;
+  readonly edgeInset: number;
+  readonly spacingPx: number;
+  /** The body radius the parry zone tests against (the sprite is 12 x 12). */
+  readonly radius: number;
+  /** The Wisp's ember trail does not destroy knots (ROADMAP_V2 open question 4). */
+  readonly trailProof: boolean;
+  readonly bossLeadSeconds: number;
+}
+
+/**
+ * BRIAR LINE (package B1 "Hunts"): a band of thorns (red, unparryable, lethal on touch; the dash i-frames pass) across
+ * the whole arena with ONE gap of `gapPx`. It enters from the edge farther from the hero after `telegraphSeconds` of
+ * warning and creeps at `speed` px/s (x the difficulty and wave speed, slowed by Slow Time like projectiles). The gap
+ * centre lies within `reachFraction` of the distance the hero can WALK before the line arrives. At most `maxActive`;
+ * never with a pattern-pack curtain alive (both ways); none is started that would (unslowed) still be alive
+ * `bossLeadSeconds` before a boss wave, and a line still there at a boss intro withers.
+ */
+export interface BriarLine {
+  readonly enabled: boolean;
+  readonly weight: number;
+  readonly unlockWave: number;
+  readonly maxActive: number;
+  readonly telegraphSeconds: number;
+  readonly speed: number;
+  /** Half the thickness of the band (px). */
+  readonly halfWidth: number;
+  readonly gapPx: number;
+  readonly reachFraction: number;
+  readonly bossLeadSeconds: number;
+}
+
 export interface Features {
   readonly patternPack: PatternPack;
+  readonly knot: HexKnot;
+  readonly briar: BriarLine;
 }
 export type FeatureKey = keyof Features;
 
@@ -103,12 +153,14 @@ export const FEATURES: Features = deepFreeze({
     slowThenFast: { weight: 1.2, unlockWave: 11, wraiths: 2, delaySeconds: 1.2, fastFactor: 1.4, minDist: 150, leadFraction: 0.7 },
     stalkerPair: { weight: 1.2, unlockWave: 13, idleSeconds: 1.2, staggerSeconds: 0.7 },
   },
+  knot: { enabled: false, weight: 1.5, unlockWave: 4, maxActive: 2, fuseSeconds: 4, shards: 8, minHeroDist: 90, edgeInset: 30, spacingPx: 40, radius: 5, trailProof: true, bossLeadSeconds: 1 },
+  briar: { enabled: false, weight: 1, unlockWave: 4, maxActive: 1, telegraphSeconds: 0.75, speed: 55, halfWidth: 3, gapPx: 44, reachFraction: 0.8, bossLeadSeconds: 1 },
 });
 
 /** A copy of the production flags with the named blocks enabled (bots and tests; never the game). */
 export function withFeatures(...enable: FeatureKey[]): Features {
   const out = { ...FEATURES } as { -readonly [K in FeatureKey]: Features[K] };
-  for (const k of enable) out[k] = { ...FEATURES[k], enabled: true };
+  for (const k of enable) (out as Record<FeatureKey, unknown>)[k] = { ...FEATURES[k], enabled: true };
   return deepFreeze(out); // frozen: the flags a run was built from can never drift from the rules it simulates
 }
 

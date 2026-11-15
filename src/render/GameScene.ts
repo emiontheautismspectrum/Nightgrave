@@ -32,6 +32,7 @@ import { FollowCam } from './camera';
 import { getScreen, onScreenChange } from '../web/screen';
 import { textFieldFocused } from '../web/textFocus';
 import { edgeMarkers } from './edgeMarkers';
+import { huntSprites } from './huntsView';
 import { decayAlpha, doubleActive, LABEL, LABEL_MS, labelSpot, multColor, type LabelBounds } from './multFeedback';
 import { emitAudioEvent } from './events';
 import { InputCollector } from './input';
@@ -519,7 +520,7 @@ export class GameScene extends Phaser.Scene {
     if (st.alive) {
       for (const m of edgeMarkers(st, this.sim.params, this.follow.rect(), PORTRAIT.horizonTicks)) {
         this.markerCount++;
-        const col = m.color === 'violet' ? 0x9b6bff : 0xd12b3a;
+        const col = m.color === 'violet' ? 0x9b6bff : m.color === 'bone' ? 0xd9d2c0 : 0xd12b3a;
         const len = 3 + m.size * 2;
         const w = 1.5 + m.size;
         const dx = Math.cos(m.ang);
@@ -801,6 +802,8 @@ export class GameScene extends Phaser.Scene {
     for (const v of this.casterViews.values()) for (const o of [v.body, v.tele, v.fx]) o.destroy();
     for (const sp of this.sigilViews.values()) sp.destroy();
     this.sigilViews.clear();
+    for (const sp of this.huntViews.values()) sp.destroy();
+    this.huntViews.clear();
     this.casterViews.clear();
     for (const p of this.props) p.s.setAlpha(1);
     this.overhang.setAlpha(1);
@@ -1086,6 +1089,7 @@ export class GameScene extends Phaser.Scene {
     this.pulse.setPosition(hx, hy - 2).setDepth(D_YSORT + hy + 4.1);
     this.drawCasters();
     this.drawSigils();
+    this.drawHunts();
     this.bossView.draw(st, p);
     this.drawChevron();
     this.drawKnightArc();
@@ -1278,6 +1282,32 @@ export class GameScene extends Phaser.Scene {
     }
     this.lastDir.x = h.dirX;
     this.lastDir.y = h.dirY;
+  }
+
+  private huntViews = new Map<string, Phaser.GameObjects.Sprite>();
+  /**
+   * The hunts (FEATURES.knot / briar; nothing while the blocks are off): hex knots with their fuse pips, briar lines
+   * and their bone gap markers, from the pure draw list of huntsView.ts (frames from sim ticks).
+   */
+  private drawHunts(): void {
+    const st = this.sim.state;
+    if (!st.knots && !st.walls && this.huntViews.size === 0) return;
+    const seen = new Set<string>();
+    for (const h of huntSprites(st, this.sim.params)) {
+      seen.add(h.key);
+      let sp = this.huntViews.get(h.key);
+      if (!sp) {
+        sp = this.add.sprite(h.x, h.y, ATLAS, frame(h.name));
+        this.huntViews.set(h.key, sp);
+      }
+      sp.setPosition(h.x, h.y).setFrame(frame(h.name, h.frame)).setAngle(h.angle).setAlpha(h.alpha)
+        .setDepth(h.base < 0 ? D_GROUND_TELE + 2 : D_YSORT + h.base);
+    }
+    for (const [key, sp] of this.huntViews)
+      if (!seen.has(key)) {
+        sp.destroy();
+        this.huntViews.delete(key);
+      }
   }
 
   private sigilViews = new Map<number, Phaser.GameObjects.Sprite>();
@@ -1488,6 +1518,10 @@ export class GameScene extends Phaser.Scene {
       boxes.push([pr.x - hh, pr.y - hh, pr.x + hh, pr.y + hh, pr.y + hh]);
     }
     for (const c of st.casters) if (st.tick >= c.appear0) boxes.push([c.x - 10, c.y - 20, c.x + 10, c.y + 4, c.y + 4]);
+    // the hunts (FEATURES.knot / briar only): a knot, a moving briar band
+    for (const k of st.knots ?? []) boxes.push([k.x - 6, k.y - 6, k.x + 6, k.y + 6, k.y + 6]);
+    for (const w of st.walls ?? [])
+      if (st.tick >= w.move) boxes.push(w.axis === 'x' ? [w.pos - 6, ARENA_RECT[1], w.pos + 6, ARENA_RECT[3], ARENA_RECT[3]] : [ARENA_RECT[0], w.pos - 6, ARENA_RECT[2], w.pos + 6, w.pos + 6]);
     const bb = this.bossView.box(st);
     if (bb) boxes.push(bb);
     if (st.pickup) boxes.push([st.pickup.x - 7, st.pickup.y - 7, st.pickup.x + 7, st.pickup.y + 7, st.pickup.y + 6]);

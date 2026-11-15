@@ -402,6 +402,18 @@
    "h": 8,
    "w": 14
   },
+  "briar_post": {
+   "frames": 1,
+   "group": "gameplay",
+   "h": 12,
+   "w": 8
+  },
+  "briar_tile": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 8,
+   "w": 8
+  },
   "cabin_smoke": {
    "frames": 6,
    "group": "arena",
@@ -473,6 +485,12 @@
    "group": "gameplay",
    "h": 8,
    "w": 8
+  },
+  "edge_gap": {
+   "frames": 1,
+   "group": "gameplay",
+   "h": 5,
+   "w": 5
   },
   "ember_particle": {
    "frames": 4,
@@ -712,6 +730,12 @@
    "frames": 1,
    "group": "gameplay",
    "h": 6,
+   "w": 12
+  },
+  "hex_knot": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 12,
    "w": 12
   },
   "hit_flash": {
