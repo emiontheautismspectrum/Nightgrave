@@ -86,8 +86,8 @@ export interface BossAttack {
 export type BossEmission =
   /** Thorn Mother: a bloom bursts into its shard ring; the gap is centred on the hero's direction turned by `off`. */
   | { op: 'bloom'; at: number; serial: number; x: number; y: number; off: number; tele: number }
-  /** The Toller: ring `k` of a toll (its gap at the absolute angle `gap`). */
-  | { op: 'toll'; at: number; serial: number; k: number; gap: number; tele: number }
+  /** The Toller: ring `k` of a toll (its gap centred on the unit direction gapX, gapY). */
+  | { op: 'toll'; at: number; serial: number; k: number; gapX: number; gapY: number; tele: number }
   /** The Toller: the pendulum's second pass, from (dirX, dirY) rotating by -sign back to the start line for `n` ticks. */
   | { op: 'swing'; at: number; serial: number; dirX: number; dirY: number; sign: number; n: number };
 

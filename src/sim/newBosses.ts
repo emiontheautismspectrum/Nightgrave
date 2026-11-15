@@ -79,11 +79,14 @@ export function tollGeometry(p: SimParams): { n: number; gap: number; step: numb
   return { n, gap, step: Math.max(c.gapStepRad, gap + 0.5) };
 }
 
-/** `n` projectiles evenly over the circle minus ONE gap of `gap` rad centred at `gapAt` (the gap is exact). */
-function gappedRing(n: number, gapAt: number, gap: number): number[] {
-  const out: number[] = [];
+/**
+ * `n` unit directions evenly over the circle minus ONE gap of `gap` rad centred on the unit direction (gx, gy); the
+ * gap is exact. Vector math only (dmath rotations: no engine-dependent Math functions in the sim).
+ */
+function gappedRing(n: number, gx: number, gy: number, gap: number): [number, number][] {
+  const out: [number, number][] = [];
   const span = 2 * PI - gap;
-  for (let k = 0; k < n; k++) out.push(gapAt + gap / 2 + (n === 1 ? span / 2 : (span * k) / (n - 1)));
+  for (let k = 0; k < n; k++) out.push(rotate(gx, gy, gap / 2 + (n === 1 ? span / 2 : (span * k) / (n - 1))));
   return out;
 }
 
@@ -91,17 +94,17 @@ function gappedRing(n: number, gapAt: number, gap: number): number[] {
  * `n` projectiles over the circle minus TWO gaps of `gap` rad centred at g1 and g2 (g2 - g1 within (gap, 2 pi - gap)):
  * each arc between the gaps gets its share, its ends exactly on the gap edges.
  */
-function twoGapRing(n: number, g1: number, g2: number, gap: number): number[] {
-  const d = ((g2 - g1) % (2 * PI) + 2 * PI) % (2 * PI);
+function twoGapRing(n: number, gx: number, gy: number, d: number, gap: number): [number, number][] {
+  // gap 1 on (gx, gy), gap 2 turned by d (0 < d < 2 pi) from it
   const la = Math.max(0, d - gap);
   const lb = Math.max(0, 2 * PI - d - gap);
   const na = Math.max(0, Math.min(n, Math.round((n * la) / (la + lb || 1))));
-  const out: number[] = [];
+  const out: [number, number][] = [];
   const arc = (from: number, len: number, m: number): void => {
-    for (let k = 0; k < m; k++) out.push(from + (m === 1 ? len / 2 : (len * k) / (m - 1)));
+    for (let k = 0; k < m; k++) out.push(rotate(gx, gy, from + (m === 1 ? len / 2 : (len * k) / (m - 1))));
   };
-  arc(g1 + gap / 2, la, na);
-  arc(g1 + d + gap / 2, lb, n - na);
+  arc(gap / 2, la, na);
+  arc(d + gap / 2, lb, n - na);
   return out;
 }
 
@@ -246,12 +249,13 @@ export function launchNew(s: SimState, p: SimParams, b: Boss, a: BossAttack, pat
     case 'toll': {
       const c = tollerRow(p).toll;
       const [hx, hy] = aimAt(s, b.x, b.y);
-      const base = Math.atan2(hy, hx) + (a.offs?.[0] ?? 0);
+      const [bx, by] = rotate(hx, hy, a.offs?.[0] ?? 0); // ring 1's gap direction
       const beat = beatTicks(p);
       const { step } = tollGeometry(p);
       const pend = (b.pending ??= []);
       for (let k = 0; k < Math.max(1, Math.round(c.rings)); k++) {
-        const e: BossEmission = { op: 'toll', at: s.tick + k * beat, serial, k, gap: base + k * a.sign * step, tele: a.windStart };
+        const [gx, gy] = rotate(bx, by, k * a.sign * step);
+        const e: BossEmission = { op: 'toll', at: s.tick + k * beat, serial, k, gapX: gx, gapY: gy, tele: a.windStart };
         if (k === 0) emit(s, p, b, e, spawn);
         else pend.push(e);
       }
@@ -273,12 +277,9 @@ export function launchNew(s: SimState, p: SimParams, b: Boss, a: BossAttack, pat
       const c = tollerRow(p).knell;
       const n = scaled(p, c.count, c.maxCount);
       const [hx, hy] = aimAt(s, b.x, b.y);
-      const g1 = Math.atan2(hy, hx) + (a.offs?.[0] ?? 0);
-      const g2 = g1 + PI + (a.offs?.[1] ?? 0);
+      const [gx, gy] = rotate(hx, hy, a.offs?.[0] ?? 0); // gap 1 near the hero's direction, gap 2 across
       const v = p.bladeSpeed * b.speed * c.speedFactor;
-      for (const ang of twoGapRing(n, g1, g2, readableGap(n, c.gapRad))) {
-        const dx = dcos(ang);
-        const dy = dsin(ang);
+      for (const [dx, dy] of twoGapRing(n, gx, gy, PI + (a.offs?.[1] ?? 0), readableGap(n, c.gapRad))) {
         shot(s, p, spawn, serial, tele, 'blade', b.x + dx * 10, b.y + dy * 10, dx * v, dy * v, false);
       }
       return;
@@ -299,11 +300,9 @@ function emit(s: SimState, p: SimParams, b: Boss, e: BossEmission, spawn: Spawn)
       const c = thornRow(p).bloom;
       const n = scaled(p, c.shards, c.maxShards);
       const [hx, hy] = aimAt(s, e.x, e.y);
-      const gapAt = Math.atan2(hy, hx) + e.off;
+      const [gx, gy] = rotate(hx, hy, e.off);
       const v = p.shardSpeed * b.speed;
-      for (const ang of gappedRing(n, gapAt, readableGap(n, c.gapRad))) {
-        const dx = dcos(ang);
-        const dy = dsin(ang);
+      for (const [dx, dy] of gappedRing(n, gx, gy, readableGap(n, c.gapRad))) {
         shot(s, p, spawn, e.serial, s.tick - e.tele, 'rune_shard', e.x + dx * 4, e.y + dy * 4, dx * v, dy * v, false, true);
       }
       s.events.push({ type: 'boss_bloom', x: e.x, y: e.y });
@@ -313,9 +312,7 @@ function emit(s: SimState, p: SimParams, b: Boss, e: BossEmission, spawn: Spawn)
       const c = tollerRow(p).toll;
       const { n, gap } = tollGeometry(p);
       const v = (c.speed * p.diffSpeed * b.speed) / TICK_RATE;
-      for (const ang of gappedRing(n, e.gap, gap)) {
-        const dx = dcos(ang);
-        const dy = dsin(ang);
+      for (const [dx, dy] of gappedRing(n, e.gapX, e.gapY, gap)) {
         shot(s, p, spawn, e.serial, s.tick - e.tele, 'orb_small', b.x + dx * 10, b.y + dy * 10, dx * v, dy * v, false);
       }
       s.events.push({ type: 'boss_toll', ring: e.k });
