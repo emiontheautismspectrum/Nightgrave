@@ -8,12 +8,13 @@ import { dcos, dsin, rotate } from './dmath';
 import { ticks, type SimParams } from './params';
 import { nextFloat, range } from './rng';
 import type { Beam, Boss, BossAttack, BossKind, BossPattern, SimState } from './state';
+import { beginNewAttack, launchNew } from './newBosses';
 
 /** Spawner callback (waves.spawnProjectile), injected to avoid an import cycle. */
 export type Spawn = (
   s: SimState,
   p: SimParams,
-  kind: 'orb_small' | 'orb_large' | 'wraith',
+  kind: 'orb_small' | 'orb_large' | 'wraith' | 'rune_shard' | 'blade',
   x: number,
   y: number,
   vx: number,
@@ -26,9 +27,69 @@ const d2 = (ax: number, ay: number, bx: number, by: number): number => (ax - bx)
 
 export const isBossWave = (p: SimParams, wave: number): boolean =>
   p.bosses.everyNthWave > 0 && (wave + 1) % p.bosses.everyNthWave === 0;
-/** Boss kind for a boss wave: the n-th boss wave (0-based) alternates eye, lich, eye, ... */
-export const bossKindFor = (p: SimParams, wave: number): BossKind =>
-  (Math.floor((wave + 1) / p.bosses.everyNthWave) - 1) % 2 === 0 ? 'eye' : 'lich';
+/** The bosses of one cycle: the Eye and the Lich, then every ENABLED new boss (FEATURES.bosses), in this order. */
+export function bossCycle(p: SimParams): BossKind[] {
+  const out: BossKind[] = ['eye', 'lich'];
+  if (p.thorn) out.push('thorn');
+  if (p.toller) out.push('toller');
+  return out;
+}
+
+/** A 32-bit integer mix (no PRNG state: the boss order never shifts a spawn schedule). */
+function mix32(x: number): number {
+  x = (x ^ (x >>> 16)) >>> 0;
+  x = Math.imul(x, 0x7feb352d) >>> 0;
+  x = (x ^ (x >>> 15)) >>> 0;
+  x = Math.imul(x, 0x846ca68b) >>> 0;
+  return (x ^ (x >>> 16)) >>> 0;
+}
+/** The integer hash of (seed, cycle, i) the order is built from. */
+export const orderHash = (seed: number, cycle: number, i: number): number =>
+  mix32((seed >>> 0) ^ mix32(Math.imul(cycle + 1, 0x9e3779b1) ^ Math.imul(i + 1, 0x85ebca6b)));
+
+/**
+ * Boss kind for a boss wave. With only the old bosses the n-th boss wave (0-based) alternates eye, lich, eye, ...
+ * exactly as before. With a new boss enabled, every cycle of k = |bossCycle| boss waves holds each enabled boss once,
+ * in an order that is a permutation (Fisher-Yates) driven by an INTEGER HASH of (seed, cycle index): no PRNG draw.
+ */
+export function bossKindFor(p: SimParams, wave: number, seed: number): BossKind {
+  const n = Math.max(0, Math.floor((wave + 1) / p.bosses.everyNthWave) - 1);
+  const kinds = bossCycle(p);
+  if (kinds.length === 2) return n % 2 === 0 ? 'eye' : 'lich';
+  const k = kinds.length;
+  const cycle = Math.floor(n / k);
+  for (let i = k - 1; i > 0; i--) {
+    const j = orderHash(seed, cycle, i) % (i + 1);
+    [kinds[i], kinds[j]] = [kinds[j]!, kinds[i]!];
+  }
+  return kinds[n % k]!;
+}
+
+/** A switch over every boss kind ends here: a new kind can never fall through to another boss's rules. */
+export function unknownBoss(kind: never): never {
+  throw new Error(`boss: unknown kind ${String(kind)}`);
+}
+
+/** The segments, cadence and default wind-up of a kind (the old bosses from TUNING, the new ones from their row). */
+export function bossRow(p: SimParams, kind: BossKind): { segments: number; cadenceSeconds: number; windupSeconds: number } {
+  switch (kind) {
+    case 'eye':
+      return p.bosses.eye;
+    case 'lich':
+      return p.bosses.lich;
+    case 'thorn':
+      return need(p.thorn, kind);
+    case 'toller':
+      return need(p.toller, kind);
+    default:
+      return unknownBoss(kind);
+  }
+}
+/** A new boss's row; it exists only while the row is enabled (a disabled boss is never in the cycle). */
+function need<T>(row: T | null, kind: BossKind): T {
+  if (!row) throw new Error(`boss: ${kind} is not enabled`);
+  return row;
+}
 
 const clampSegments = (n: number): number => Math.max(10, Math.min(15, Math.round(n)));
 /** Density-scaled count, capped so neighbours stay >= minGapRad apart over `arc` (a full ring: 2*pi). */
@@ -47,19 +108,36 @@ export function lichSpots(p: SimParams): [number, number][] {
   return out;
 }
 
-export function startBoss(s: SimState, p: SimParams, wave: number): void {
-  const kind = bossKindFor(p, wave);
+/**
+ * Start the boss of a boss wave. `forced` (an UNRECORDED dev option, like startWave: the game's dev preview only; the
+ * verifier and the Worker never pass it) makes the FIRST boss of the run that kind, if it is in the cycle.
+ */
+export function startBoss(s: SimState, p: SimParams, wave: number, forced?: BossKind): void {
+  const first = s.bossMet.eye + s.bossMet.lich + (s.bossMet.thorn ?? 0) + (s.bossMet.toller ?? 0) === 0;
+  const kind = forced && first && bossCycle(p).includes(forced) ? forced : bossKindFor(p, wave, s.seed);
   const B = p.bosses;
-  const encounter = s.bossMet[kind];
-  s.bossMet[kind]++;
-  const cfg = kind === 'eye' ? B.eye : B.lich;
-  const segments = clampSegments(cfg.segments);
+  const encounter = s.bossMet[kind] ?? 0;
+  s.bossMet[kind] = encounter + 1;
+  const segments = clampSegments(bossRow(p, kind).segments);
   const introEnd = s.tick + ticks(B.introSeconds);
-  // the lich materialises at a seeded spot >= minHeroDist from the hero (portal or a hollow)
-  let x: number = B.eye.x;
-  let y: number = B.eye.y;
-  if (kind === 'lich') {
-    [x, y] = pickLichSpot(s, p, -1, -1);
+  let x: number;
+  let y: number;
+  switch (kind) {
+    case 'eye':
+      [x, y] = [B.eye.x, B.eye.y];
+      break;
+    case 'lich':
+      // the lich materialises at a seeded spot >= minHeroDist from the hero (portal or a hollow)
+      [x, y] = pickLichSpot(s, p, -1, -1);
+      break;
+    case 'thorn':
+    case 'toller': {
+      const r = need(kind === 'thorn' ? p.thorn : p.toller, kind);
+      [x, y] = [r.x, r.y];
+      break;
+    }
+    default:
+      return unknownBoss(kind);
   }
   s.boss = {
     kind,
@@ -92,11 +170,23 @@ function pickLichSpot(s: SimState, p: SimParams, curX: number, curY: number): [n
   return best;
 }
 
+/** The weighted attack table of a kind (a new boss may leave an attack out while it cannot start). */
+function patternTable(s: SimState, p: SimParams, kind: BossKind): [BossPattern, number][] {
+  switch (kind) {
+    case 'eye':
+      return [['ring', p.bosses.eye.ring.weight], ['beam', p.bosses.eye.beam.weight], ['spawns', p.bosses.eye.spawns.weight]];
+    case 'lich':
+      return [['fan', p.bosses.lich.fan.weight], ['wraiths', p.bosses.lich.wraiths.weight], ['triple', p.bosses.lich.triple.weight]];
+    case 'thorn':
+    case 'toller':
+      throw new Error(`boss: the ${kind}'s attacks are not implemented yet`);
+    default:
+      return unknownBoss(kind);
+  }
+}
+
 function pickPattern(s: SimState, p: SimParams, kind: BossKind): BossPattern {
-  const opts: [BossPattern, number][] =
-    kind === 'eye'
-      ? [['ring', p.bosses.eye.ring.weight], ['beam', p.bosses.eye.beam.weight], ['spawns', p.bosses.eye.spawns.weight]]
-      : [['fan', p.bosses.lich.fan.weight], ['wraiths', p.bosses.lich.wraiths.weight], ['triple', p.bosses.lich.triple.weight]];
+  const opts = patternTable(s, p, kind);
   let total = 0;
   for (const [, w] of opts) total += w;
   let r = nextFloat(s) * total;
@@ -111,20 +201,31 @@ function pickPattern(s: SimState, p: SimParams, kind: BossKind): BossPattern {
 function beginAttack(s: SimState, p: SimParams, b: Boss): void {
   const t = s.tick;
   const pattern = pickPattern(s, p, b.kind);
-  let tpOut = t;
+  const tpOut = t;
   let tpIn = t;
   let wind: number;
-  if (b.kind === 'lich') {
-    tpIn = t + ticks(p.bosses.lich.teleportOutSeconds);
-    wind = Math.max(15, ticks(p.bosses.lich.windupSeconds));
-    const windStart = tpIn + ticks(p.bosses.lich.teleportInSeconds);
-    b.attack = { pattern, tpOut, tpIn, windStart, fire: windStart + wind, dirX: 0, dirY: 0, sign: 1, points: [] };
-    return;
+  switch (b.kind) {
+    case 'lich': {
+      tpIn = t + ticks(p.bosses.lich.teleportOutSeconds);
+      wind = Math.max(15, ticks(p.bosses.lich.windupSeconds));
+      const windStart = tpIn + ticks(p.bosses.lich.teleportInSeconds);
+      b.attack = { pattern, tpOut, tpIn, windStart, fire: windStart + wind, dirX: 0, dirY: 0, sign: 1, points: [] };
+      return;
+    }
+    case 'eye': {
+      wind = Math.max(15, ticks(pattern === 'beam' ? p.bosses.eye.beam.windupSeconds : p.bosses.eye.windupSeconds));
+      const a: BossAttack = { pattern, tpOut, tpIn, windStart: t, fire: t + wind, dirX: 0, dirY: 0, sign: 1, points: [] };
+      prepareTelegraph(s, p, b, a);
+      b.attack = a;
+      return;
+    }
+    case 'thorn':
+    case 'toller':
+      b.attack = beginNewAttack(s, p, b, pattern);
+      return;
+    default:
+      unknownBoss(b.kind);
   }
-  wind = Math.max(15, ticks(pattern === 'beam' ? p.bosses.eye.beam.windupSeconds : p.bosses.eye.windupSeconds));
-  const a: BossAttack = { pattern, tpOut, tpIn, windStart: t, fire: t + wind, dirX: 0, dirY: 0, sign: 1, points: [] };
-  prepareTelegraph(s, p, b, a);
-  b.attack = a;
 }
 
 /** Fix what the wind-up shows: the beam's start line, or the spawn points. Called when the wind-up starts. */
@@ -257,7 +358,7 @@ function launch(s: SimState, p: SimParams, b: Boss, a: BossAttack, spawn: Spawn)
       const expires = s.tick + p.wraithLife;
       shoot('wraith', b.x + dx * 12, b.y + dy * 12, dx * v, dy * v, { homing: p.wraithSteer, expires, fadeEnd: expires + p.wraithFade });
     }
-  } else {
+  } else if (a.pattern === 'triple') {
     const c = p.bosses.lich.triple;
     const [ax, ay] = aim(b.x, b.y);
     const v = p.largeSpeed * b.speed * 1.3;
@@ -265,6 +366,8 @@ function launch(s: SimState, p: SimParams, b: Boss, a: BossAttack, spawn: Spawn)
       const o = 8 - k * c.spacingPx; // three in a row along the aim line, the first one leading
       shoot('orb_large', b.x + ax * o, b.y + ay * o, ax * v, ay * v);
     }
+  } else {
+    launchNew(s, p, b, a, a.pattern, spawn);
   }
 }
 
@@ -347,7 +450,7 @@ export function runBoss(s: SimState, p: SimParams, spawn: Spawn): void {
   if (t === a.fire) {
     launch(s, p, b, a, spawn);
     b.attack = null;
-    const cad = ticks((b.kind === 'eye' ? p.bosses.eye : p.bosses.lich).cadenceSeconds);
+    const cad = ticks(bossRow(p, b.kind).cadenceSeconds);
     const pre = a.fire - a.tpOut;
     b.nextAt = t + Math.max(1, cad - pre);
   }

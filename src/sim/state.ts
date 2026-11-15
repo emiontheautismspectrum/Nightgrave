@@ -1,6 +1,6 @@
 import type { Difficulty } from '../data/tuning';
 import type { AnyHeroId } from '../data/heroes';
-import type { PackKey } from '../data/features';
+import type { NewBossKind, PackKey } from '../data/features';
 
 /** Sentinel start tick meaning "never happened" (JSON-safe, unlike -Infinity). */
 export const NEVER = -1_000_000_000;
@@ -53,8 +53,14 @@ export interface Sigil {
   gone: number;
 }
 
-export type BossKind = 'eye' | 'lich';
-export type BossPattern = 'ring' | 'beam' | 'spawns' | 'fan' | 'wraiths' | 'triple';
+/** The old bosses (always in the cycle) and the new ones (FEATURES.bosses, only while their row is enabled). */
+export type OldBossKind = 'eye' | 'lich';
+export type BossKind = OldBossKind | NewBossKind;
+export type BossPattern =
+  | 'ring' | 'beam' | 'spawns' // eye
+  | 'fan' | 'wraiths' | 'triple' // lich
+  | 'hedge' | 'bloom' | 'lash' | 'spores' // thorn mother
+  | 'toll' | 'pendulum' | 'knell'; // the toller
 
 /** A boss attack in progress: [windStart, fire) wind-up (telegraph), launched at `fire`. */
 export interface BossAttack {
@@ -361,8 +367,8 @@ export interface SimState {
   waveClock: number;
   boss: Boss | null;
   beams: Beam[];
-  /** Bosses met so far per kind (the next encounter's speed bonus). */
-  bossMet: Record<BossKind, number>;
+  /** Bosses met so far per kind (the next encounter's speed bonus). A new kind has a key only while it is enabled. */
+  bossMet: Record<OldBossKind, number> & Partial<Record<NewBossKind, number>>;
   bossesDefeated: number;
   /** The last wave a boss was started for (-1 = none). */
   bossWave: number;

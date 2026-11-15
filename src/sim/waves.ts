@@ -9,13 +9,19 @@ import { huntsAtBoss, inGapCorridor, startBriar, startKnot } from './hunts';
 import { packPick, packWeight, startPackPattern } from './patternPack';
 import type { SimParams } from './params';
 import { nextFloat, range } from './rng';
-import type { Caster, CasterAttack, CasterKind, Projectile, ProjectileKind, SimState } from './state';
+import type { BossKind, Caster, CasterAttack, CasterKind, Projectile, ProjectileKind, SimState } from './state';
 
 export interface DirectorOptions {
   /** Test-only: start the run at this wave (all threat types unlocked). Not part of replays. */
   startWave?: number;
   /** Test-only: disable bosses (boss waves play as normal waves). Default true. */
   bosses?: boolean;
+  /**
+   * Dev preview / tests only: the FIRST boss of the run is this kind, if it is in the cycle (enabled). Not part of
+   * replays (like startWave): the game passes it only for a preview run, which is never saved or submitted; the
+   * verifier and the Worker never pass it.
+   */
+  firstBoss?: BossKind;
 }
 
 const dist2 = (ax: number, ay: number, bx: number, by: number): number => (ax - bx) * (ax - bx) + (ay - by) * (ay - by);
@@ -461,7 +467,7 @@ export function runDirector(s: SimState, p: SimParams, opts: DirectorOptions): v
   if (opts.bosses !== false && isBossWave(p, wave) && s.bossWave !== wave) {
     // the boss replaces this wave; the wave clock stays paused until it is defeated and the break is over
     s.bossWave = wave;
-    startBoss(s, p, wave);
+    startBoss(s, p, wave, opts.firstBoss);
     if (s.knots || s.walls) huntsAtBoss(s); // the hunts never reach into a boss fight (FEATURES.knot, FEATURES.briar)
     s.waveClock = (wave - startWave + 1) * p.waveTicks;
     fireTelegraphs(s, p);
