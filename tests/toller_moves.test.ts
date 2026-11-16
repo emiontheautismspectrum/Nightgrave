@@ -648,3 +648,18 @@ describe('entity caps with every block on (U3b)', () => {
     console.log(`U3b entity caps: ${JSON.stringify(caps)}`);
   });
 });
+
+describe('review fixes (adversarial review of U3b)', () => {
+  it('a held dash key never stalls a Toller fight (an iron chain without the dash ready becomes a toll, no wait)', { timeout: 120_000 }, () => {
+    const f = withFeatures('toller', 'bossMoves');
+    for (let seed = 1; seed <= 20; seed++) {
+      const sim = new Sim(seed, 'hard', { hero: 'wisp', features: f, startWave: 3, firstBoss: 'toller' });
+      while (sim.state.bossesDefeated === 0 && sim.state.tick < 60 * 120) {
+        sim.state.alive = true;
+        sim.step({ cursor: false, mx: 0, my: 0, buttons: BTN_DASH });
+        for (const e of sim.state.events) if (e.type === 'chain_bind' && e.kind === 'iron') expect(sim.state.tick - 1 - sim.state.hero.dashStart).toBeGreaterThanOrEqual(sim.params.dashCooldown);
+      }
+      expect(sim.state.bossesDefeated, `seed ${seed}`).toBe(1);
+    }
+  });
+});

@@ -73,11 +73,17 @@ export const isTollerMove = (k: BossPattern): k is 'peal' | 'echo' | 'chains' =>
 
 /**
  * Must the drawn new move wait before it starts? While an earlier hazard is alive (the hero answers one thing at a
- * time), and for an IRON chain while the hero's dash is not ready (the escape must exist). The Toller then waits on
- * its beat with the move kept (no new draw) and starts it on the first beat the field is clear.
+ * time). The Toller then waits on its beat with the move kept (no new draw) and starts it on the first beat the field
+ * is clear (every hazard ends on its own: projectiles leave, a ring lives <= its life, a bind <= maxSeconds).
  */
-export const mustWait = (s: SimState, p: SimParams, b: Boss, k: 'peal' | 'echo' | 'chains'): boolean =>
-  earlierHazardsAlive(s, b) || (k === 'chains' && chainKind(s, p, b, b.serial + 1) === 'iron' && !dashReady(s, p));
+export const mustWait = (s: SimState, _p: SimParams, b: Boss): boolean => earlierHazardsAlive(s, b);
+
+/**
+ * The move that really starts: an IRON chain is cast only while the hero's dash is ready (the escape must exist); when
+ * it is not, a toll starts instead (no draw, never a wait: a held dash key could otherwise stall the fight forever).
+ */
+export const startableMove = (s: SimState, p: SimParams, b: Boss, k: 'peal' | 'echo' | 'chains'): BossPattern =>
+  k === 'chains' && chainKind(s, p, b, b.serial + 1) === 'iron' && !dashReady(s, p) ? 'toll' : k;
 
 /** A wind-up of `n` beats (>= 2 for a ring), never below 15 ticks. */
 const beats = (n: number, beat: number, min: number): number => Math.max(15, Math.max(min, Math.round(n)) * beat);

@@ -264,7 +264,7 @@ always matches its attack. Motion begins at the intro's end.
 | Thorn Mother | stands; before every 3rd attack she SINKS (0.6 s, roots pull her down; no marker, no threat) and EMERGES (0.6 s) at a hashed band spot >= 90 px from the hero, then winds up there. The sink comes on top of her cadence |
 | The Toller | does not drift; it teleports only with its `peal` |
 
-With the block on, a swinging beam (the Eye's beam, the pendulum) whose safe side (behind its start line) would lie
+With the block on (or `bossMoves`, whose peal teleports the Toller), a swinging beam (the Eye's beam, the pendulum) whose safe side (behind its start line) would lie
 outside the arena turns the other way (no draw: the drawn sign is flipped). Without that, a body high in the band
 with the hero on the top edge left the walking hero no answer; production has the same case once in 200 seeds (Eye,
 seed 729, top-right corner), which stays as it is while the block is off.
@@ -276,7 +276,7 @@ rows need `bosses.toller` enabled too, else they are ignored: tested with a seal
 |---|---|
 | `peal` (weight 0.55) | 2-beat wind-up (the ring forms as red ticks around the bell); a RING (radius 8) expands from the bell at 90 px/s x difficulty speed x encounter bonus, never slower than leaving the arena in 4.5 s; then the Toller teleports to a hashed band spot (>= 30 px inside, y <= 120) >= 90 px from the hero and its next attack starts 1 beat sooner (`hastenCount` 1, `hastenBeats` 1: 2 beats = 1.0 s instead of 3 beats = 1.5 s; never below 2 beats, always on the beat) |
 | `echo` (0.5) | like the peal (no teleport, no hasten), 100 px/s with a floor that keeps its whole life <= 8 s; holds 0.5 s at the farthest arena corner + 20 px (outside the arena), then contracts back to the bell at 70% of its speed; gaps cut persist, a cut on the way back pays nothing. While it is out beyond the hero (until it passed him back) no other attack starts or launches (`ownsReturn`) |
-| `chains` (0.6) | the chain lands on the hero's position fixed at the wind-up start, after >= 0.75 s (2 beats); a highlighted circle of 16 px marks it. A hero inside at the landing (the launch: the segment goes there) is BOUND, no damage; a hero who walked out, or is dashing, is not. Variant by hash of the serial (weights 1 : 1): IRON (ash grey): bound 2.0 s, cannot move (the aim still follows the input), the parry works, the dash breaks it at once; cast only while the dash is ready, and an iron chain landing on a hero whose dash is on cooldown misses. PARRY-BREAK (violet): bound until 3 parry pulses were fired (every pulse counts, a whiff too) or 5.0 s; the DASH IS DISABLED while bound; the boss then launches only the allowed patterns (`allow`: the toll), one at a time (no start while an earlier hazard lives), its rings 2 beats apart (longer than the 0.9 s parry cooldown) |
+| `chains` (0.6) | the chain lands on the hero's position fixed at the wind-up start, after >= 0.75 s (2 beats); a highlighted circle of 16 px marks it. A hero inside at the landing (the launch: the segment goes there) is BOUND, no damage; a hero who walked out, or is dashing, is not. Variant by hash of the serial (weights 1 : 1): IRON (ash grey): bound 2.0 s, cannot move (the aim still follows the input), the parry works, the dash breaks it at once; cast only while the dash is ready (else a toll starts instead: never a wait, so a held dash key cannot stall the fight), and an iron chain landing on a hero whose dash is on cooldown misses. PARRY-BREAK (violet): bound until 3 parry pulses were fired (every pulse counts, a whiff too) or 5.0 s; the DASH IS DISABLED while bound; the boss then launches only the allowed patterns (`allow`: the toll), one at a time (no start while an earlier hazard lives), its rings 2 beats apart (longer than the 0.9 s parry cooldown) |
 
 **The ring** (`Ring`, `s.rings`, one at a time): a FULL red circle, 2 px half-width, not a ring of orbs. The hero dies
 where his circle overlaps the band outside every gap: O(1) (distance to the centre within the band, and the unit
@@ -333,10 +333,10 @@ overrides `NG_ROWS` for the bosses, `NG_MOVES` for bossMoves; first encounter, t
 | Eye | 0.46 -> 0.25 (0.28 / 0.22) | 78% / 78% | 28.1 s (26-30) | - |
 | Lich | 0.15 -> 0.33 (0.48 / 0.18) | 66% / 84% | 28.8 s (27-33) | soulfire 21%, grasp 21% |
 | Thorn Mother | 0.44 -> 0.59 (0.66 / 0.52) | 52% / 66% | 32.3 s (30-37) | (her sink is no attack) |
-| The Toller | 0.39 -> 0.67 (0.92 / 0.42) | 52% / 68% | 36.3 s (23-51) | echo 4%, peal 1%, chains 0% (binds survived 100%) |
+| The Toller | 0.39 -> 0.67 (0.94 / 0.40) | 52% / 68% | 36.3 s (23-51) | echo 4%, peal 1%, chains 0% (binds survived 100%) |
 
 Simple bots (`tests/bossbots.test.ts`, every block on): Easy 8-10 of 10 for both bots and every boss; Medium 8-10 of
-10, except the parry bot against the Toller (5 of 10; 4 of 10 without the U3b blocks: its old toll handling). Rows
+10, except the parry bot against the Toller (4 of 10, as without the U3b blocks: its old toll handling). Rows
 tuned in the balance pass: new-move weights (peal 2 -> 0.55, echo 1.5 -> 0.5, chains 1.5 -> 0.6), `hastenCount`
 2 -> 1, the ring's `minHeroDist` 90 -> 70 (at 90 the hero in the centre, 77 px from the bell, never saw a ring),
 `echo.ownsReturn`, soulfire 0.95 x speed (weight 1.4), grasp 3 hands at 1.2 x speed aimed within 1.0 rad. Targets

@@ -9,7 +9,7 @@ import { ticks, tollerMoves, type SimParams } from './params';
 import { nextFloat, range } from './rng';
 import type { Beam, Boss, BossAttack, BossKind, BossPattern, SimState } from './state';
 import { beatTicks, beginNewAttack, launchNew, newBossClear, newPatternTable, onBeat, runPending } from './newBosses';
-import { breakBound, earlierHazardsAlive, isTollerMove, mustWait, ringBlocks } from './tollerMoves';
+import { breakBound, earlierHazardsAlive, isTollerMove, mustWait, ringBlocks, startableMove } from './tollerMoves';
 import { lichMoveTable, lichMoveWindup, prepareGrasp } from './lichMoves';
 import { emergeSpot, moveBoss, sinkDue } from './bossMotion';
 
@@ -269,12 +269,12 @@ function beginAttack(s: SimState, p: SimParams, b: Boss): void {
       b.attack = beginNewAttack(s, p, b, pattern);
       return;
     case 'toller':
-      if (isTollerMove(pattern) && mustWait(s, p, b, pattern)) {
+      if (isTollerMove(pattern) && mustWait(s, p, b)) {
         b.waitFor = pattern; // FEATURES.bossMoves: wait (on the beat) until the field is clear
         b.nextAt = onBeat(p, b, t + 1);
         return;
       }
-      b.attack = beginNewAttack(s, p, b, pattern);
+      b.attack = beginNewAttack(s, p, b, isTollerMove(pattern) ? startableMove(s, p, b, pattern) : pattern);
       return;
     default:
       unknownBoss(b.kind);
@@ -289,7 +289,7 @@ function beginAttack(s: SimState, p: SimParams, b: Boss): void {
  * Otherwise `sign` as drawn. No PRNG draw.
  */
 export function reachableBeamSign(s: SimState, p: SimParams, b: Boss, ux: number, uy: number, q: number, sign: number, halfWidth: number): number {
-  if (!p.motion) return sign;
+  if (!p.motion && !p.moves) return sign;
   const h = s.hero;
   const cs = Math.sqrt(1 - q * q);
   const reachable = (sg: number): boolean => {

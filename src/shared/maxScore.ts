@@ -99,7 +99,11 @@ export function maxPossibleScore(durationTicks: number, features: Features = FEA
   const kills = Math.min(Math.ceil((n / TICK_RATE) * maxSpawnsPerSecond(features) * (1 + T.newThreats.split.children)), pulses * maxKills);
   const firsts = Math.min(pulses, kills);
   const extras = Math.max(0, kills - firsts);
-  const parry = (firsts * T.score.parryBase + extras * T.score.extraKillPoints) * T.multiplier.cap * dbl;
+  // FEATURES.bossMoves with the Toller: the first cut of a ring pays one parryBase on top of a pulse's kills; at most
+  // one ring per Toller attack (the hastened cadence)
+  const to = features.bossMoves.enabled === true && features.bosses.toller.enabled === true ? features.bosses.toller : null;
+  const ringCuts = to ? Math.ceil(n / t(hastenedCadence(to.cadenceSeconds, to.beatTicks, features.bossMoves.toller.peal.hastenBeats))) : 0;
+  const parry = (firsts * T.score.parryBase + extras * T.score.extraKillPoints + ringCuts * T.score.parryBase) * T.multiplier.cap * dbl;
   // pickups: the first, then one per minimum interval
   const first = t(T.pickups.firstSeconds);
   const pickups = n >= first ? (1 + Math.floor((n - first) / t(T.pickups.intervalMinSeconds))) * T.pickups.points : 0;
