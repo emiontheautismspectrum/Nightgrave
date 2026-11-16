@@ -104,3 +104,179 @@ describe('bossOrder: every boss wave draws its kind, never the same twice in a r
     }
   });
 });
+
+// ------------------------------------------------------------------ block 2: boss motion
+
+const MOTION = withFeatures('bossMotion', 'bosses');
+const IDLE = { cursor: false, mx: 0, my: 0, buttons: 0 };
+
+/** A whole first-encounter fight (immortal hero, the given inputs), calling `each` after every tick. */
+function fight(kind: BossKind, seed: number, f: Features, each: (sim: Sim, prev: { x: number; y: number } | null) => void, d: 'easy' | 'medium' | 'hard' = 'hard'): Sim {
+  const sim = new Sim(seed, d, { hero: seed % 2 ? 'knight' : 'wisp', features: f, startWave: 3, firstBoss: kind });
+  const frames = mulberryInputs(seed, 60 * 100);
+  let i = 0;
+  while (sim.state.bossesDefeated === 0 && sim.state.tick < 60 * 100) {
+    const b0 = sim.state.boss;
+    const prev = b0 && b0.deathTick < 0 ? { x: b0.x, y: b0.y } : null;
+    sim.state.alive = true;
+    sim.step(frames[i++ % frames.length]!);
+    each(sim, prev);
+  }
+  return sim;
+}
+
+describe('bossMotion: the bodies move, and hold still whenever an attack is in progress', () => {
+  const M = MOTION.bossMotion;
+  const inBand = (x: number, y: number): boolean => x >= 48 + M.inset - 1e-9 && x <= 432 - M.inset + 1e-9 && y >= 27 + M.inset - 1e-9 && y <= M.yMax + 1e-9;
+
+  for (const kind of ['eye', 'lich'] as const)
+    it(`${kind}: still in the intro, then drifts at <= ${kind === 'eye' ? M.eye.speed : M.lich.speed} px/s; held from the attack start to the launch and while a beam / emission lives`, () => {
+      const speed = (kind === 'eye' ? M.eye.speed : M.lich.speed) / 60;
+      for (let seed = 1; seed <= 12; seed++) {
+        let moved = 0;
+        let held = 0;
+        let start: [number, number] | null = null;
+        let beamOrigin: [number, number] | null = null;
+        fight(kind, seed, MOTION, (sim, prev) => {
+          const s = sim.state;
+          const b = s.boss;
+          if (!b || !prev || b.deathTick >= 0) return;
+          const t = s.tick - 1;
+          if (t < b.introEnd) {
+            start ??= [b.x, b.y];
+            expect([b.x, b.y]).toEqual(start);
+            return;
+          }
+          const step = Math.hypot(b.x - prev.x, b.y - prev.y);
+          const teleport = s.events.some((e) => e.type === 'boss_teleport');
+          if (!teleport) expect(step).toBeLessThanOrEqual(speed + 1e-9);
+          if (step > 0 && !teleport) {
+            moved++;
+            // a moving body has no attack, beam or emission in progress (the hold); an attack may START on the tick
+            // of a move (after it: its telegraph is fixed from the new position)
+            if (b.attack) expect(b.attack.tpOut, `seed ${seed} tick ${t}`).toBe(t);
+            expect(s.beams.length).toBe(0);
+          }
+          if ((b.attack && b.attack.tpOut < t) || s.beams.length) {
+            held++;
+            if (!teleport) expect(step).toBe(0);
+          }
+          // a telegraph fixed at the wind-up start is the attack's origin: the beam leaves from the body of the wind-up
+          if (b.attack?.pattern === 'beam' && t === b.attack.windStart) beamOrigin = [b.x, b.y];
+          for (const bm of s.beams) if (bm.start === t && beamOrigin) expect([bm.x, bm.y]).toEqual(beamOrigin);
+          // the eye never leaves the band; the lich, outside it after a teleport, only ever drifts back in
+          if (kind === 'eye') expect(inBand(b.x, b.y)).toBe(true);
+        });
+        expect(moved, `seed ${seed}`).toBeGreaterThan(0);
+        expect(held).toBeGreaterThan(0);
+      }
+    });
+
+  it('a drift target is in the band and never within minHeroDist of the hero when it is picked', () => {
+    let picks = 0;
+    for (const kind of ['eye', 'lich'] as const)
+      for (let seed = 1; seed <= 20; seed++) {
+        let n = 0;
+        fight(kind, seed, MOTION, (sim) => {
+          const b = sim.state.boss;
+          if (!b?.drift || b.drift.n === n) return;
+          n = b.drift.n;
+          picks++;
+          expect(inBand(b.drift.tx, b.drift.ty)).toBe(true);
+          expect(Math.hypot(b.drift.tx - sim.state.hero.x, b.drift.ty - sim.state.hero.y)).toBeGreaterThanOrEqual(M.minHeroDist);
+        });
+      }
+    expect(picks).toBeGreaterThan(40);
+  });
+
+  it('thorn mother: sinks before every 3rd attack, emerges >= 90 px from the hero, launches nothing while sunk, one segment per launch', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      let sinks = 0;
+      let launches = 0;
+      let sunkSince = -1;
+      fight('thorn', seed, MOTION, (sim, prev) => {
+        const s = sim.state;
+        const b = s.boss;
+        const t = s.tick - 1;
+        for (const e of s.events) {
+          if (e.type === 'boss_sink') {
+            sinks++;
+            expect(b!.serial % M.thorn.relocateEvery).toBe(0);
+            expect(b!.serial).toBeGreaterThan(0);
+            sunkSince = t;
+          }
+          if (e.type === 'boss_teleport') {
+            expect(t - sunkSince).toBe(Math.round(M.thorn.sinkSeconds * 60));
+            expect(Math.hypot(e.x - s.hero.x, e.y - s.hero.y)).toBeGreaterThanOrEqual(M.thorn.emergeMinHeroDist);
+            expect(inBand(e.x, e.y)).toBe(true);
+          }
+          if (e.type === 'boss_attack') {
+            launches++;
+            const a = sunkSince >= 0 ? t - sunkSince : 1e9;
+            expect(a).toBeGreaterThanOrEqual(Math.round((M.thorn.sinkSeconds + M.thorn.emergeSeconds) * 60) + 15);
+            sunkSince = -1;
+          }
+        }
+        // she never moves otherwise
+        if (b && prev && !s.events.some((e) => e.type === 'boss_teleport')) expect([b.x, b.y]).toEqual([prev.x, prev.y]);
+      });
+      expect(launches).toBe(12);
+      expect(sinks).toBe(3); // before attacks 4, 7 and 10
+    }
+  });
+
+  it('the toller does not drift (it teleports only with its peal, FEATURES.bossMoves)', () => {
+    fight('toller', 3, MOTION, (sim, prev) => {
+      const b = sim.state.boss;
+      if (b && prev) expect([b.x, b.y]).toEqual([prev.x, prev.y]);
+    });
+  });
+
+  it('NO PRNG draw: with the same inputs the PRNG walks the same values with and without motion', () => {
+    for (const kind of ['eye', 'lich', 'toller'] as const) {
+      const trace = (f: Features): number[] => {
+        const out: number[] = [];
+        fight(kind, 9, f, (sim) => {
+          if (out[out.length - 1] !== sim.state.rng) out.push(sim.state.rng);
+        });
+        return out;
+      };
+      expect(trace(MOTION), kind).toEqual(trace(withFeatures('bosses')));
+    }
+  });
+
+  it('NO PRNG draw for the thorn mother either: her sink and her emerging spot draw nothing', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      let before = 0;
+      let checked = 0;
+      const sim = new Sim(seed, 'hard', { hero: 'wisp', features: MOTION, startWave: 3, firstBoss: 'thorn' });
+      const frames = mulberryInputs(seed, 60 * 100);
+      for (let i = 0; sim.state.bossesDefeated === 0 && i < 60 * 100; i++) {
+        before = sim.state.rng;
+        sim.state.alive = true;
+        sim.step(frames[i]!);
+        const ev = sim.state.events;
+        if (ev.some((e) => e.type === 'boss_teleport') && !ev.some((e) => e.type === 'pickup_spawn')) {
+          expect(sim.state.rng).toBe(before);
+          checked++;
+        }
+      }
+      expect(checked).toBeGreaterThan(0);
+    }
+  });
+
+  it('block off: no drift key, the bodies stand (production and the new bosses alone)', () => {
+    for (const f of [FEATURES, withFeatures('bosses')])
+      for (const kind of ['eye', 'thorn'] as const) {
+        if (kind === 'thorn' && f === FEATURES) continue;
+        fight(kind, 4, f, (sim, prev) => {
+          const b = sim.state.boss;
+          if (!b) return;
+          expect('drift' in b).toBe(false);
+          if (prev) expect([b.x, b.y]).toEqual([prev.x, prev.y]);
+          expect(sim.state.events.some((e) => e.type === 'boss_sink')).toBe(false);
+        });
+      }
+    void IDLE;
+  });
+});

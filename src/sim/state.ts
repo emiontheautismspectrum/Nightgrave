@@ -132,6 +132,11 @@ export interface Boss {
   speed: number;
   /** New bosses only (the key exists only there): deferred emissions of launched attacks, in `at` order. */
   pending?: BossEmission[];
+  /**
+   * FEATURES.bossMotion only (the key exists only there, from the first moving tick): the drift target and the number
+   * of targets picked so far (the hash input of the next one).
+   */
+  drift?: { tx: number; ty: number; n: number };
 }
 
 export type PickupKind = 'slow' | 'double';
@@ -340,6 +345,8 @@ export type SimEvent =
   | { type: 'boss_attack'; kind: BossKind; pattern: BossPattern; remaining: number }
   | { type: 'boss_segment'; remaining: number; reflected: boolean }
   | { type: 'boss_teleport'; x: number; y: number }
+  /** The Thorn Mother sinks into the ground to relocate (FEATURES.bossMotion only). */
+  | { type: 'boss_sink'; x: number; y: number }
   /** A Thorn Mother bloom burst (FEATURES.bosses.thorn only). */
   | { type: 'boss_bloom'; x: number; y: number }
   /** A Toller toll ring (0-based ring of the attack; FEATURES.bosses.toller only). */

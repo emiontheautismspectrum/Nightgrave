@@ -84,7 +84,9 @@ export function edgeMarkers(s: SimState, p: SimParams, v: ViewRect, horizonTicks
   if (b && b.deathTick < 0) {
     const a = b.attack;
     const winding = !!a && t >= a.windStart && t <= a.fire;
-    add('b', b.x, b.y, winding && a && RED_WINDUPS.has(a.pattern) ? 'red' : 'violet', winding ? 3 : near(b.x, b.y));
+    // FEATURES.bossMotion: a sinking Thorn Mother is no threat (she reappears, marked again, from the tick she emerges)
+    const sinking = !!a && b.kind === 'thorn' && a.tpIn > a.tpOut && t >= a.tpOut && t < a.tpIn;
+    if (!sinking) add('b', b.x, b.y, winding && a && RED_WINDUPS.has(a.pattern) ? 'red' : 'violet', winding ? 3 : near(b.x, b.y));
     if (a && winding) a.points.forEach(([x, y], i) => add(`bp${i}`, x, y, 'violet', near(x, y)));
     // a new boss's blooms still to burst (FEATURES.bosses.thorn): lit until they burst
     for (const e of b.pending ?? []) if (e.op === 'bloom') add(`bq${e.serial}:${Math.round(e.x)},${Math.round(e.y)}`, e.x, e.y, 'violet', near(e.x, e.y));

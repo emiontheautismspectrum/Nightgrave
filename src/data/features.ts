@@ -206,6 +206,40 @@ export interface BossOrder {
   readonly enabled: boolean;
 }
 
+/** A drifting body (BOSS MOTION): its speed (px/s, along a straight line to its target) and its render-only bob. */
+interface DriftRow {
+  readonly speed: number;
+  /** RENDER ONLY (the sim's x, y carry no bob): amplitude (px) and period (s) of the bob drawn on top. */
+  readonly bobPx: number;
+  readonly bobSeconds: number;
+}
+
+/**
+ * BOSS MOTION (package U3b): the bodies move (src/sim/bossMotion.ts). Every body is HELD (does not move) from the
+ * start of an attack (the Lich's teleport-out, every wind-up) to its launch, and while a beam, a deferred emission or
+ * a ring of the boss is alive: telegraphs fixed at the wind-up start always match the attack. Motion begins at the
+ * intro's end. Targets and spots come from an integer hash of (seed, boss start, pick): no PRNG draw.
+ */
+export interface BossMotion {
+  readonly enabled: boolean;
+  /** The drift band: at least `inset` px inside the arena on every side, and no lower than y = `yMax`. */
+  readonly inset: number;
+  readonly yMax: number;
+  /** A drift target is never within this distance of the hero at the moment it is picked. */
+  readonly minHeroDist: number;
+  /** Eye Sentinel: slides between seeded targets in the band. */
+  readonly eye: DriftRow;
+  /** Lich Mage: drifts the same way; its teleports stay as they are, and the drift goes on from the new spot. */
+  readonly lich: DriftRow;
+  /**
+   * Thorn Mother: stands; before every `relocateEvery`-th attack she SINKS (`sinkSeconds`, she cannot launch) and
+   * EMERGES (`emergeSeconds`) at a seeded band spot >= `emergeMinHeroDist` from the hero, then winds up there.
+   */
+  readonly thorn: { readonly relocateEvery: number; readonly sinkSeconds: number; readonly emergeSeconds: number; readonly emergeMinHeroDist: number };
+  /** The Toller does not drift (speed 0): it teleports only with its `peal` (FEATURES.bossMoves). */
+  readonly toller: { readonly speed: number };
+}
+
 export interface Features {
   readonly patternPack: PatternPack;
   readonly knot: HexKnot;
@@ -213,11 +247,12 @@ export interface Features {
   /** A GROUP block: it has no flag of its own, each row (`thorn`, `toller`) has one. */
   readonly bosses: NewBosses;
   readonly bossOrder: BossOrder;
+  readonly bossMotion: BossMotion;
 }
 export type FeatureKey = keyof Features;
 /** Every switch: the plain blocks and the rows of the `bosses` group. */
 export type FeatureFlag = Exclude<FeatureKey, 'bosses'> | NewBossKind;
-export const FEATURE_FLAGS: readonly FeatureFlag[] = ['patternPack', 'knot', 'briar', ...NEW_BOSS_KINDS, 'bossOrder'];
+export const FEATURE_FLAGS: readonly FeatureFlag[] = ['patternPack', 'knot', 'briar', ...NEW_BOSS_KINDS, 'bossOrder', 'bossMotion'];
 /** Is this switch on (exactly true)? */
 export function flagOn(features: Features, flag: FeatureFlag): boolean {
   return flag === 'thorn' || flag === 'toller' ? features.bosses[flag].enabled === true : features[flag].enabled === true;
@@ -277,6 +312,16 @@ export const FEATURES: Features = deepFreeze({
     },
   },
   bossOrder: { enabled: false },
+  bossMotion: {
+    enabled: false,
+    inset: 30,
+    yMax: 120,
+    minHeroDist: 80,
+    eye: { speed: 14, bobPx: 2, bobSeconds: 2.4 },
+    lich: { speed: 12, bobPx: 2, bobSeconds: 1.6 },
+    thorn: { relocateEvery: 3, sinkSeconds: 0.6, emergeSeconds: 0.6, emergeMinHeroDist: 90 },
+    toller: { speed: 0 },
+  },
 });
 
 /**

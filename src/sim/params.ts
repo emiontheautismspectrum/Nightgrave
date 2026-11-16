@@ -1,6 +1,6 @@
 import { TICK_RATE, TUNING, type Difficulty } from '../data/tuning';
 import { HERO_RULES, heroDef, type AnyHeroId } from '../data/heroes';
-import { FEATURES, type BossOrder, type BriarLine, type Features, type HexKnot, type PatternPack, type TheToller, type ThornMother } from '../data/features';
+import { FEATURES, type BossMotion, type BossOrder, type BriarLine, type Features, type HexKnot, type PatternPack, type TheToller, type ThornMother } from '../data/features';
 import { dcos, dsin, PI } from './dmath';
 
 /** Tuning converted to tick units for one run. Derived purely from TUNING + difficulty. */
@@ -116,6 +116,8 @@ export interface SimParams {
   toller: TheToller | null;
   /** FEATURES.bossOrder when it is ENABLED, else null (the fixed cycle of boss.ts). */
   order: BossOrder | null;
+  /** FEATURES.bossMotion when it is ENABLED, else null (the bodies stand where they appear, as today). */
+  motion: BossMotion | null;
 }
 
 export const ticks = (seconds: number): number => Math.max(1, Math.round(seconds * TICK_RATE));
@@ -239,5 +241,6 @@ export function makeParams(difficulty: Difficulty, hero: AnyHeroId = 'classic', 
     thorn: features.bosses.thorn.enabled === true ? features.bosses.thorn : null,
     toller: features.bosses.toller.enabled === true ? features.bosses.toller : null,
     order: features.bossOrder.enabled === true ? features.bossOrder : null,
+    motion: features.bossMotion.enabled === true ? features.bossMotion : null,
   };
 }

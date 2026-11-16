@@ -217,11 +217,21 @@ export class BossView {
         rise = -Math.round((1 - (t - b.start) / Math.max(1, b.introEnd - b.start)) * 8);
       }
     } else if (b.hitTick >= 0 && t - b.hitTick < HIT_TICKS) f = [`${name}_hit`, (t - b.hitTick) < HIT_TICKS / 2 ? 0 : 1];
-    else if (a && lich && t < a.tpIn) f = [`${name}_teleport_out`, prog(a.tpOut, a.tpIn, 4)];
+    else if (a && b.kind === 'thorn' && a.tpIn > a.tpOut && t < a.windStart) {
+      // FEATURES.bossMotion: roots pull her down [tpOut, tpIn) (gone at tpIn), she rises at the new spot [tpIn, windStart)
+      const sinking = t < a.tpIn;
+      const k = sinking ? (t - a.tpOut) / Math.max(1, a.tpIn - a.tpOut) : 1 - (t - a.tpIn) / Math.max(1, a.windStart - a.tpIn);
+      f = [`${name}_death`, Math.min(5, Math.floor(k * 6))];
+      rise = -Math.round(k * 8);
+      alpha = 1 - k;
+    } else if (a && lich && t < a.tpIn) f = [`${name}_teleport_out`, prog(a.tpOut, a.tpIn, 4)];
     else if (a && lich && t < a.windStart) f = [`${name}_teleport_in`, prog(a.tpIn, a.windStart, 4)];
     else if (a && t >= a.windStart) f = [eye ? `${name}_charge` : `${name}_cast`, prog(a.windStart, a.fire, eye ? 3 : 4)];
     else f = idle();
     this.body.setFrame(frame(f[0] as SpriteName, f[1])).setAlpha(alpha);
+    // FEATURES.bossMotion: the drifting bodies bob (RENDER ONLY: the sim position carries no bob)
+    const drift = p.motion && (eye || lich) ? (eye ? p.motion.eye : p.motion.lich) : null;
+    if (drift && b.deathTick < 0 && t >= b.introEnd) rise += Math.round(Math.sin((2 * Math.PI * (t - b.introEnd)) / Math.max(1, drift.bobSeconds * TICK_RATE)) * drift.bobPx);
     if (L.hovers) this.body.setOrigin(0.5, L.originY).setPosition(b.x, b.y - rise).setDepth(this.depth.fog - 2);
     else {
       const base = b.y + L.box[3];

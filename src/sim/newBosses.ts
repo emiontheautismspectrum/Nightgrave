@@ -13,7 +13,7 @@ import { dcos, dsin, PI, rotate } from './dmath';
 import { inGapCorridor, placeWall, planWall } from './hunts';
 import { ticks, type SimParams } from './params';
 import { nextFloat, range } from './rng';
-import type { Spawn } from './boss';
+import { reachableBeamSign, type Spawn } from './boss';
 import type { Beam, Boss, BossAttack, BossEmission, BossPattern, SimState } from './state';
 
 /** The attacks of the new bosses. */
@@ -192,9 +192,9 @@ export function beginNewAttack(s: SimState, p: SimParams, b: Boss, pattern: Boss
     const dy = s.hero.y - b.y;
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
     const q = Math.min(0.93, range(s, r.offsetMinPx, r.offsetMaxPx) / dist);
-    const sign = nextFloat(s) < 0.5 ? -1 : 1;
-    const cs = Math.sqrt(1 - q * q);
     const [ux, uy] = [dx / dist, dy / dist];
+    const sign = reachableBeamSign(s, p, b, ux, uy, q, nextFloat(s) < 0.5 ? -1 : 1, r.halfWidth);
+    const cs = Math.sqrt(1 - q * q);
     a.dirX = ux * cs + uy * sign * q;
     a.dirY = -ux * sign * q + uy * cs;
     a.sign = sign;

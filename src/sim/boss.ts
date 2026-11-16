@@ -9,6 +9,7 @@ import { ticks, type SimParams } from './params';
 import { nextFloat, range } from './rng';
 import type { Beam, Boss, BossAttack, BossKind, BossPattern, SimState } from './state';
 import { beginNewAttack, launchNew, newBossClear, newPatternTable, onBeat, runPending } from './newBosses';
+import { emergeSpot, moveBoss, sinkDue } from './bossMotion';
 
 /** Spawner callback (waves.spawnProjectile), injected to avoid an import cycle. */
 export type Spawn = (
@@ -241,12 +242,50 @@ function beginAttack(s: SimState, p: SimParams, b: Boss): void {
       return;
     }
     case 'thorn':
+      if (sinkDue(p, b)) {
+        // FEATURES.bossMotion: she sinks [t, tpIn), emerges at a new spot [tpIn, windStart), then winds up there (the
+        // wind-up and its telegraph are prepared at windStart, from the new spot: runBoss)
+        const m = p.motion!.thorn;
+        tpIn = t + ticks(m.sinkSeconds);
+        const windStart = tpIn + ticks(m.emergeSeconds);
+        wind = Math.max(15, ticks(need(p.thorn, b.kind).windupSeconds));
+        b.attack = { pattern, tpOut, tpIn, windStart, fire: windStart + wind, dirX: 0, dirY: 0, sign: 1, points: [] };
+        s.events.push({ type: 'boss_sink', x: b.x, y: b.y });
+        return;
+      }
+      b.attack = beginNewAttack(s, p, b, pattern);
+      return;
     case 'toller':
       b.attack = beginNewAttack(s, p, b, pattern);
       return;
     default:
       unknownBoss(b.kind);
   }
+}
+
+/**
+ * A swinging beam's turn (sign) when its start line is offset by `q` x the distance from the hero's direction (unit
+ * ux, uy from the body). Only while FEATURES.bossMotion (or bossMoves) is enabled, where a body can stand anywhere in
+ * its band: if the point the hero must walk to (just behind the start line, the side the beam turns away from) lies
+ * outside the hero's area, the beam turns the other way (the hero's other side), so walking always answers it.
+ * Otherwise `sign` as drawn. No PRNG draw.
+ */
+export function reachableBeamSign(s: SimState, p: SimParams, b: Boss, ux: number, uy: number, q: number, sign: number, halfWidth: number): number {
+  if (!p.motion) return sign;
+  const h = s.hero;
+  const cs = Math.sqrt(1 - q * q);
+  const reachable = (sg: number): boolean => {
+    const dx = ux * cs + uy * sg * q;
+    const dy = -ux * sg * q + uy * cs;
+    const nx = dy * sg; // the side the beam turns away from
+    const ny = -dx * sg;
+    const need = Math.max(0, -((h.x - b.x) * nx + (h.y - b.y) * ny)) + p.heroRadius + halfWidth + 4;
+    const ex = h.x + nx * need;
+    const ey = h.y + ny * need;
+    const i = p.heroInset;
+    return ex >= p.x0 + i && ex <= p.x1 - i && ey >= p.y0 + i && ey <= p.y1 - i;
+  };
+  return reachable(sign) || !reachable(-sign) ? sign : -sign;
 }
 
 /** Fix what the wind-up shows: the beam's start line, or the spawn points. Called when the wind-up starts. */
@@ -260,9 +299,9 @@ function prepareTelegraph(s: SimState, p: SimParams, b: Boss, a: BossAttack): vo
     // start line offset from the hero by a reachable 18-34 px (perpendicular), sweeping towards and past him;
     // everything behind the start line is safe for the whole sweep (it only rotates away from it)
     const q = Math.min(0.93, range(s, c.offsetMinPx, c.offsetMaxPx) / r);
-    const sign = nextFloat(s) < 0.5 ? -1 : 1;
-    const cs = Math.sqrt(1 - q * q);
     const [ux, uy] = [dx / r, dy / r];
+    const sign = reachableBeamSign(s, p, b, ux, uy, q, nextFloat(s) < 0.5 ? -1 : 1, c.halfWidth);
+    const cs = Math.sqrt(1 - q * q);
     // rotate the hero direction by -sign * asin(q)
     a.dirX = ux * cs + uy * sign * q;
     a.dirY = -ux * sign * q + uy * cs;
@@ -464,14 +503,23 @@ export function runBoss(s: SimState, p: SimParams, spawn: Spawn): void {
     return;
   }
   if (t < b.introEnd) return;
+  if (p.motion) moveBoss(s, p, b); // FEATURES.bossMotion: never while an attack, a beam or an emission is in progress
   if (!b.attack && t >= b.nextAt) beginAttack(s, p, b);
-  const a = b.attack;
+  let a = b.attack;
   if (!a) return;
   if (b.kind === 'lich' && t === a.tpIn) {
     [b.x, b.y] = pickLichSpot(s, p, b.x, b.y);
     s.events.push({ type: 'boss_teleport', x: b.x, y: b.y });
   }
   if (b.kind === 'lich' && t === a.windStart) prepareTelegraph(s, p, b, a);
+  if (b.kind === 'thorn' && a.tpIn > a.tpOut) {
+    // FEATURES.bossMotion: the Thorn Mother emerges at a seeded spot, then winds up there (from the new spot)
+    if (t === a.tpIn) {
+      [b.x, b.y] = emergeSpot(s, p, b);
+      s.events.push({ type: 'boss_teleport', x: b.x, y: b.y });
+    }
+    if (t === a.windStart) a = b.attack = { ...beginNewAttack(s, p, b, a.pattern), tpOut: a.tpOut, tpIn: a.tpIn };
+  }
   if (t === a.fire) {
     launch(s, p, b, a, spawn);
     b.attack = null;

@@ -179,6 +179,9 @@ export class SoundDiffer {
         case 'boss_bloom':
           out.push('bloom');
           break;
+        case 'boss_sink':
+          out.push('root_creep'); // FEATURES.bossMotion: roots pull the Thorn Mother down
+          break;
         case 'pickup_take':
           out.push(e.kind === 'slow' ? 'pickup_slow' : 'pickup_double');
           break;

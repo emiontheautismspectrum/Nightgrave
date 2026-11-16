@@ -7,7 +7,7 @@ import { withFeatures, type Features, type NewBossKind, type TheToller, type Tho
 import type { Difficulty } from '../src/data/tuning';
 import type { InputFrame } from '../src/sim/input';
 import { Sim, type SimOptions } from '../src/sim/sim';
-import type { BossPattern, SimState } from '../src/sim/state';
+import type { BossKind, BossPattern, SimState } from '../src/sim/state';
 import type { PackKey } from '../src/data/features';
 import type { Piece, SolveOptions } from './pack_tools';
 
@@ -32,7 +32,7 @@ const IDLE: InputFrame = { cursor: false, mx: 0, my: 0, buttons: 0 };
  * Start a fight with `kind` (forced first boss) on wave 3, the hero standing at (hx, hy), stepped idle up to the tick
  * before the first wind-up. The result is a `Piece` for walkingSolver.
  */
-export function startFight(kind: NewBossKind, seed: number, hx: number, hy: number, features: Features, difficulty: Difficulty = 'hard', options: SimOptions = {}): Piece {
+export function startFight(kind: BossKind, seed: number, hx: number, hy: number, features: Features, difficulty: Difficulty = 'hard', options: SimOptions = {}): Piece {
   const sim = new Sim(seed, difficulty, { hero: 'wisp', ...options, features, startWave: 3, firstBoss: kind });
   const s = sim.state;
   s.streamTimer = 1e9;
