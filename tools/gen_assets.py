@@ -17,7 +17,7 @@ import gen_arena  # noqa: E402
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 from nglib import arena_previews as AP  # noqa: E402
-from nglib import board, bosses, bosses2, effects, heroes, lich_king, shell, thorn_queen, threats  # noqa: E402
+from nglib import board, bosses, bosses2, effects, heroes, lich_king, shell, thorn_queen, threats, toller_fx  # noqa: E402
 from nglib import canvas as C  # noqa: E402
 from nglib import spec  # noqa: E402
 from nglib.pack import pack  # noqa: E402
@@ -65,7 +65,7 @@ def save(a, path):
 def gameplay_sprites():
     builders = {}
     for mod in (heroes.SPRITES, threats.SPRITES, effects.SPRITES, bosses.SPRITES, bosses2.SPRITES, thorn_queen.SPRITES,
-                lich_king.SPRITES):
+                lich_king.SPRITES, toller_fx.SPRITES):
         builders.update(mod)
     assert set(builders) == set(spec.SPRITES), set(builders) ^ set(spec.SPRITES)
     sprites = {}

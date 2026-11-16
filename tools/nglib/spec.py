@@ -36,6 +36,8 @@ SPRITES = {
     "lich_king_hit": (40, 64, 2), "lich_king_death": (40, 64, 6), "lich_king_teleport_out": (40, 64, 4),
     "lich_king_teleport_in": (40, 64, 4), "lich_king_soulfire": (40, 40, 6),
     "bone_hand": (16, 16, 4), "grasp_crack": (24, 24, 4),
+    "toller_tp_out": (40, 56, 4), "toller_tp_in": (40, 56, 4), "toller_throw": (40, 56, 4),
+    "chain_iron": (8, 8, 2), "chain_violet": (8, 8, 2), "chain_wrap_iron": (16, 16, 2), "chain_wrap_violet": (16, 16, 2),
     # pickups
     "pickup_slow_time": (12, 12, 4), "pickup_double_score": (12, 12, 4), "pickup_glow": (16, 16, 4),
 }

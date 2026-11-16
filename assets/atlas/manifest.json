@@ -450,6 +450,30 @@
    "h": 4,
    "w": 4
   },
+  "chain_iron": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 8,
+   "w": 8
+  },
+  "chain_violet": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 8,
+   "w": 8
+  },
+  "chain_wrap_iron": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "chain_wrap_violet": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
   "crate_0": {
    "frames": 2,
    "group": "arena",
@@ -1357,6 +1381,24 @@
    "w": 40
   },
   "toller_idle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 56,
+   "w": 40
+  },
+  "toller_throw": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 56,
+   "w": 40
+  },
+  "toller_tp_in": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 56,
+   "w": 40
+  },
+  "toller_tp_out": {
    "frames": 4,
    "group": "gameplay",
    "h": 56,
