@@ -4,7 +4,9 @@
 A skeleton king, 40 x 64, tall and thin: a jagged bone crown, a skull with teal-lit sockets, pale hair, an open
 ribcage, a tattered dark-blue cloak with pointed shoulders and moon-pale ribbons, a bone staff with a teal flame in
 its forked head, a teal flame in the raised free hand, no legs: the cloak dissolves into a trailing tail of teal
-smoke. The cloak's hem (row ANCHOR_Y) is the sim position, as the old lich's robe hem is; the tail trails below it.
+smoke. He is anchored as the old lich is (src/render/bossArt.ts): the sim position is row ANCHOR_Y, so the crown tip
+is 36 px above it and the cloak's hem (row 40) 4 px below it, where the old robe's top and hem are; the tail trails
+below the hem.
 
 Layers (tools/nglib/layers.py): cloak, sleeves, hair, ribbons, tabard, ribs, skull, staff, hands; the crown, the
 flames (with their dithered halo) and the smoke tail go on after the outline pass (thin spikes, light sources and
@@ -21,7 +23,7 @@ from . import layers as L
 
 W, H = 40, 64
 CX = 20
-ANCHOR_Y = 40  # the cloak's hem: the sim position
+ANCHOR_Y = 36  # the sim position (the hem is row 40, 4 px below it, as the old lich's)
 
 LEG = {"B": "bone", "S": "stone", "s": "stone_dark", "K": "bg0", "k": "bg1", "T": "teal", "O": "moon", "f": "fog"}
 
@@ -101,7 +103,7 @@ def _cloak(r, hem=0):
             if y > end or ((x + hem) % 5 == 4 and y > 37):
                 continue
             rel = (x - CX) / max(1.0, hw)
-            col = "stone" if rel < -0.4 else "stone_dark"
+            col = "stone" if rel < -0.15 else "stone_dark"
             if (x in (14, 23, 27) or (x == 17 and y > 30)) and y > 20:
                 col = "fog"  # deep folds
             if rel > 0.8 and y > 24:
@@ -109,6 +111,12 @@ def _cloak(r, hem=0):
             if x == 24 and y > 27:
                 col = "mist"  # the lining shows in one fold
             C.put(a, x, y, col)
+        # the moon rim: the lit (left) edge of every row, and a paler second pixel on the upper cloak
+        xl = int(round(CX - hw))
+        if a[y, xl] != C.T:
+            C.put(a, xl, y, "moon")
+        elif xl + 1 < W and a[y, xl + 1] != C.T:
+            C.put(a, xl + 1, y, "moon")
     # pointed shoulders, a moon rim on the lit one
     for side in (-1, 1):
         C.put(a, CX + side * 10, 17, "stone_dark")
@@ -127,12 +135,12 @@ def _sleeves(r, lift=0, plant=0):
         top = int(round(18 + (11 - x) * (hy + 1 - 18) / 6.0))
         drape = 3 + (TATTER[(x * 3) % len(TATTER)] if x % 2 == 0 else 1) + (2 if x < 9 else 0)
         for y in range(top, top + drape + 1):
-            C.put(a, x, y, "stone" if y < top + 2 else "stone_dark")
+            C.put(a, x, y, "moon" if y == top else ("stone" if y < top + 3 else "stone_dark"))
     for x in range(29, 36):
         top = int(round(18 + (x - 29) * (25 + plant - 18) / 5.0))
         drape = 3 + (TATTER[(x * 5) % len(TATTER)] if x % 2 else 1) + (2 if x > 31 else 0)
         for y in range(top, top + drape + 1):
-            C.put(a, x, y, "stone_dark" if y < top + 3 else "fog")
+            C.put(a, x, y, "stone" if y == top else ("stone_dark" if y < top + 4 else "fog"))
     return hy
 
 

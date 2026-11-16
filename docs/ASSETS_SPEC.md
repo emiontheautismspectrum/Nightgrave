@@ -93,8 +93,9 @@ Bosses
     stone_dark / stone / fog with a few mist pixels in one fold; ribbons, hair and rim light = moon; skeleton, crown
     and staff = bone (shadow: stone); flames and smoke = teal, dithered (a solid core, a checkered middle, a Bayer
     edge; no partial alpha). NO violet and NO red on the body: violet sparks only on the cast row, red ground cracks
-    only on the grasp row (he plants the staff). The cloak's hem (row 40) is at the sim position, where the old lich's
-    robe hem is; the smoke tail trails below it. Teal vs the Slow Time pickup: the flames sit on his own silhouette
+    only on the grasp row (he plants the staff). Anchored as the old lich is: the sim position is row 36, so the
+    crown tip is 36 px above it and the cloak's hem 4 px below it (the old robe's top and hem); the smoke tail trails
+    below the hem. Teal vs the Slow Time pickup: the flames sit on his own silhouette
     (in the staff's fork, in his claws) and the tail is 3-4x the pickup's size; the pickup is a small bone-framed
     hourglass with a glow ring.
   - Overlays and effects: lich_king_soulfire 40x40 6f (violet embers circling in over his chest: the soulfire

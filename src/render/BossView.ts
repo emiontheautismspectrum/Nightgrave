@@ -8,9 +8,8 @@ import { TICK_RATE } from '../data/tuning';
 import { ticks } from '../sim/params';
 import type { SimParams } from '../sim/params';
 import { parryActiveTicks } from '../sim/sim';
-import type { Boss, BossKind, Chain, Ring, SimEvent, SimState } from '../sim/state';
-import { unknownBoss } from '../sim/boss';
-import { inRingGap } from '../sim/tollerMoves';
+import type { Boss, Chain, Ring, SimEvent, SimState } from '../sim/state';
+import { BossMemo, bossFx, bossLook, bossPose, HIT_TICKS, ringRuns, useNewBossArt } from './bossArt';
 import { ringReturning } from './edgeMarkers';
 import { ATLAS, frame, type SpriteName } from './assets';
 import { save } from '../storage';
@@ -20,36 +19,7 @@ const BAR_H = 10;
 /** Full view: the classic bar under the arena; zoomed phone portrait: above the touch buttons, screen width. */
 const BAR_FULL = { x: 48, y: 250, w: 384 };
 const BAR_ZOOMED = { x: 8, y: 324, w: 200 };
-const HIT_TICKS = 8;
-/** Per boss kind: the sprite family, the banner key, the anchor of the body (origin) and its translucency box. */
-interface BossLook {
-  name: 'eye_sentinel' | 'lich_mage' | 'thorn_mother' | 'toller';
-  banner: 'boss.eye' | 'boss.lich' | 'boss.thorn' | 'boss.toller';
-  /** Sprite origin y (0..1) placed at the sim position (+ dy); the eye hovers (depth over the y-sort). */
-  originY: number;
-  dy: number;
-  /** [x0, y0, x1, y1] around the sim position; base = the y it sorts by (0 = everything over it fades). */
-  box: [number, number, number, number];
-  hovers: boolean;
-}
-
-/** EXHAUSTIVE: a new kind must get its own look here (never another boss's art, banner or box). */
-export function bossLook(kind: BossKind): BossLook {
-  switch (kind) {
-    case 'eye':
-      return { name: 'eye_sentinel', banner: 'boss.eye', originY: 0.5, dy: 0, box: [-22, -20, 22, 22], hovers: true };
-    case 'lich':
-      return { name: 'lich_mage', banner: 'boss.lich', originY: 1, dy: 4, box: [-12, -36, 12, 4], hovers: false };
-    case 'thorn':
-      // her chest (where the shots leave) at the sim position; the root cloak spreads below it
-      return { name: 'thorn_mother', banner: 'boss.thorn', originY: 28 / 48, dy: 0, box: [-20, -28, 20, 20], hovers: false };
-    case 'toller':
-      // the bell's lip (where the rings leave) at the sim position; the robe hangs below it
-      return { name: 'toller', banner: 'boss.toller', originY: 18 / 56, dy: 0, box: [-20, -18, 20, 38], hovers: false };
-    default:
-      return unknownBoss(kind);
-  }
-}
+export { bossLook } from './bossArt';
 
 const COL = { bone: 0xd9d2c0, stone: 0x3a4558, bg0: 0x0b0d12, violet: 0x9b6bff, violetDark: 0x3d2a78, blood: 0xd12b3a, bloodDark: 0x6e1423, teal: 0x4fd1c5, gold: 0xffd86b, ember: 0xff7a2f };
 
@@ -69,6 +39,12 @@ export class BossView {
   private ringPool: Phaser.GameObjects.Sprite[] = [];
   private tolls: number[] = [];
   private zoomed = false;
+  /** What the view remembers of the boss between draws (the Eye's lean, the Toller's teleport); never read by the sim. */
+  private memo = new BossMemo();
+  /** The effect sprites of the boss moves (new art, flagged runs only; pooled, created on first use). */
+  private fxPool: Phaser.GameObjects.Sprite[] = [];
+  private ringDark: number[] = [];
+  private ringCore: number[] = [];
 
   constructor(
     private scene: Phaser.Scene,
@@ -105,7 +81,8 @@ export class BossView {
 
   reset(): void {
     this.tolls = [];
-    for (const sp of [...this.bloomPool, ...this.ringPool]) sp.setVisible(false);
+    this.memo.reset();
+    for (const sp of [...this.bloomPool, ...this.ringPool, ...this.fxPool]) sp.setVisible(false);
     for (const b of this.beams.values()) b.destroy();
     this.beams.clear();
     this.scene.tweens.killTweensOf(this.vignette);
@@ -113,14 +90,15 @@ export class BossView {
   }
 
   /** Box for the translucency rule ([x0, y0, x1, y1, base]); base 0 for the hovering eye: everything over it fades. */
-  box(st: SimState): [number, number, number, number, number] | null {
+  box(st: SimState, p: SimParams): [number, number, number, number, number] | null {
     const b = st.boss;
     if (!b) return null;
-    const L = bossLook(b.kind);
-    return [b.x + L.box[0], b.y + L.box[1], b.x + L.box[2], b.y + L.box[3], L.hovers ? 0 : b.y + L.box[3]];
+    const L = bossLook(b.kind, useNewBossArt(p));
+    return [b.x + L.box[0], b.y + L.box[1], b.x + L.box[2], b.y + L.box[3], L.hovers ? 0 : b.y + (L.base ?? L.box[3])];
   }
 
   onEvent(e: SimEvent, st: SimState): void {
+    this.memo.onEvent(e, st);
     switch (e.type) {
       case 'boss_intro':
         snap(setTextValue(this.banner, t(bossLook(e.kind).banner)).setAlpha(1));
@@ -162,18 +140,27 @@ export class BossView {
     }
   }
 
-  draw(st: SimState, p: SimParams): void {
+  /** `motion`: the render motion of the bodies is on (off with EFFECTS LOW). */
+  draw(st: SimState, p: SimParams, motion = true): void {
     const t = st.tick;
     const b = st.boss;
     this.gfx.clear();
     this.barGfx.clear();
+    this.memo.observe(st);
     this.body.setVisible(!!b);
     this.bar.setVisible(!!b && !this.zoomed);
-    if (b) this.drawBoss(st, p, b);
+    if (b) this.drawBoss(st, p, b, motion);
     else for (const sp of [...this.bloomPool, ...this.ringPool]) sp.setVisible(false);
-    // FEATURES.bossMoves (placeholders until the art pass): the Toller's rings and chain
+    // FEATURES.bossMoves: the Toller's rings (rasterised, pixel-exact) and the chain's spot; the effect sprites
     for (const ring of st.rings ?? []) this.drawRing(ring, p);
-    if (st.chain && b) this.drawChain(st, b, st.chain);
+    if (st.chain && b) this.drawChain(st, st.chain);
+    const fx = bossFx(st, p, this.memo);
+    fx.forEach((e, i) => {
+      const sp = this.fxPool[i] ?? (this.fxPool[i] = this.scene.add.sprite(0, 0, ATLAS, frame(e.key as SpriteName)));
+      sp.setVisible(true).setFrame(frame(e.key as SpriteName, e.frame)).setPosition(e.x, e.y).setAlpha(e.alpha);
+      sp.setDepth(e.base === 'over' ? this.depth.fog - 1 : this.depth.ysort + e.base);
+    });
+    for (let i = fx.length; i < this.fxPool.length; i++) this.fxPool[i]!.setVisible(false);
     // beams: a tiled sprite rotated along the beam direction
     const seen = new Set<number>();
     for (const bm of st.beams) {
@@ -193,54 +180,17 @@ export class BossView {
     this.drawPickups(st, p);
   }
 
-  private drawBoss(st: SimState, p: SimParams, b: Boss): void {
+  private drawBoss(st: SimState, p: SimParams, b: Boss, motion: boolean): void {
     const t = st.tick;
-    const L = bossLook(b.kind);
-    const name = L.name;
-    const eye = b.kind === 'eye';
-    const lich = b.kind === 'lich';
+    const L = bossLook(b.kind, useNewBossArt(p));
     const a = b.attack;
-    const prog = (s0: number, s1: number, n: number) => Math.max(0, Math.min(n - 1, Math.floor(((t - s0) / Math.max(1, s1 - s0)) * n)));
-    let f: [string, number];
-    let alpha = 1;
-    let rise = 0;
-    // the idle frame: the Toller's bell swings on its beat (centre, right, centre, left over two beats), the others loop
-    const beat = b.kind === 'toller' && p.toller ? Math.max(1, Math.round(p.toller.beatTicks)) : 0;
-    const phase = beat ? ((((t - b.introEnd + beat / 4) % (2 * beat)) + 2 * beat) % (2 * beat)) : 0; // an extreme on every beat
-    const idle = (): [string, number] => [`${name}_idle`, beat ? (Math.floor(phase / (beat / 2)) + 1) & 3 : (t >> 3) & 3];
-    if (b.deathTick >= 0) f = [`${name}_death`, prog(b.deathTick, b.deathTick + ticks(p.bosses.deathSeconds), 6)];
-    else if (t < b.introEnd) {
-      // intro: the eye rises from behind the tree line, the lich materialises at the portal, the new bosses rise out
-      // of the ground (dithered in)
-      if (eye) {
-        f = [`${name}_idle`, (t >> 3) & 3];
-        rise = Math.round((1 - (t - b.start) / Math.max(1, b.introEnd - b.start)) * 40);
-        alpha = Math.min(1, (t - b.start) / 40);
-      } else if (lich) f = [`${name}_teleport_in`, prog(b.start, b.introEnd, 4)];
-      else {
-        f = [`${name}_death`, 5 - prog(b.start, b.introEnd, 6)];
-        rise = -Math.round((1 - (t - b.start) / Math.max(1, b.introEnd - b.start)) * 8);
-      }
-    } else if (b.hitTick >= 0 && t - b.hitTick < HIT_TICKS) f = [`${name}_hit`, (t - b.hitTick) < HIT_TICKS / 2 ? 0 : 1];
-    else if (a && b.kind === 'thorn' && a.tpIn > a.tpOut && t < a.windStart) {
-      // FEATURES.bossMotion: roots pull her down [tpOut, tpIn) (gone at tpIn), she rises at the new spot [tpIn, windStart)
-      const sinking = t < a.tpIn;
-      const k = sinking ? (t - a.tpOut) / Math.max(1, a.tpIn - a.tpOut) : 1 - (t - a.tpIn) / Math.max(1, a.windStart - a.tpIn);
-      f = [`${name}_death`, Math.min(5, Math.floor(k * 6))];
-      rise = -Math.round(k * 8);
-      alpha = 1 - k;
-    } else if (a && lich && t < a.tpIn) f = [`${name}_teleport_out`, prog(a.tpOut, a.tpIn, 4)];
-    else if (a && lich && t < a.windStart) f = [`${name}_teleport_in`, prog(a.tpIn, a.windStart, 4)];
-    else if (a && t >= a.windStart) f = [eye ? `${name}_charge` : `${name}_cast`, prog(a.windStart, a.fire, eye ? 3 : 4)];
-    else f = idle();
-    this.body.setFrame(frame(f[0] as SpriteName, f[1])).setAlpha(alpha);
-    // FEATURES.bossMotion: the drifting bodies bob (RENDER ONLY: the sim position carries no bob)
-    const drift = p.motion && (eye || lich) ? (eye ? p.motion.eye : p.motion.lich) : null;
-    if (drift && b.deathTick < 0 && t >= b.introEnd) rise += Math.round(Math.sin((2 * Math.PI * (t - b.introEnd)) / Math.max(1, drift.bobSeconds * TICK_RATE)) * drift.bobPx);
-    if (L.hovers) this.body.setOrigin(0.5, L.originY).setPosition(b.x, b.y - rise).setDepth(this.depth.fog - 2);
+    // the body: family, row, frame, alpha and whole-pixel shifts all come from the sim state (bossArt.ts)
+    const pose = bossPose(st, p, this.memo, motion)!;
+    this.body.setVisible(pose.visible).setFrame(frame(pose.key as SpriteName, pose.frame)).setAlpha(pose.alpha);
+    if (L.hovers) this.body.setOrigin(L.originX, L.originY).setPosition(b.x + pose.dx, b.y - pose.rise + pose.dy).setDepth(this.depth.fog - 2);
     else {
-      const base = b.y + L.box[3];
-      this.body.setOrigin(0.5, L.originY).setPosition(b.x, b.y + L.dy - rise).setDepth(this.depth.ysort + base);
+      const base = b.y + (L.base ?? L.box[3]);
+      this.body.setOrigin(L.originX, L.originY).setPosition(b.x + pose.dx, b.y + L.dy - pose.rise + pose.dy).setDepth(this.depth.ysort + base);
     }
 
     // telegraphs during the wind-up: the beam's / pendulum's / lash's thin start line, the spawn points, the bloom
@@ -274,19 +224,7 @@ export class BossView {
           this.gfx.lineStyle(1, k > 0.6 ? COL.blood : COL.bloodDark, 1);
           this.gfx.strokeCircle(Math.round(b.x), Math.round(b.y), Math.round(22 - k * 10));
           break;
-        case 'grasp':
-          // FEATURES.bossMoves placeholder: bone hands rising where the red blade rings will burst
-          for (const [x, y] of a.points) this.graspAt(x, y, k);
-          break;
-        case 'soulfire': {
-          // FEATURES.bossMoves placeholder: violet sparks gathering around the Lich
-          this.gfx.fillStyle(COL.violet, 1);
-          for (let i = 0; i < 6; i++) {
-            const ang = (2 * Math.PI * i) / 6 + k * 3;
-            this.gfx.fillRect(Math.round(b.x + Math.cos(ang) * (14 - k * 6)) - 1, Math.round(b.y - 16 + Math.sin(ang) * (14 - k * 6)) - 1, 2, 2);
-          }
-          break;
-        }
+        // (the Lich's grasp hands and soulfire embers, FEATURES.bossMoves, are sprites: bossFx)
         case 'peal':
         case 'echo': {
           // FEATURES.bossMoves: the ring forms as ticks around the bell over the wind-up (red: walking will not pass it)
@@ -301,19 +239,18 @@ export class BossView {
           break;
         }
         case 'hedge':
-          // roots stirring at her feet (red): the wall rises at the far edge when the wind-up ends
+          // roots stirring at her feet (red; her hem is 41 px under her chest): the wall rises at the far edge when
+          // the wind-up ends
           this.gfx.lineStyle(1, k > 0.6 ? COL.blood : COL.bloodDark, 1);
-          for (let i = -2; i <= 2; i++) this.gfx.lineBetween(b.x + i * 6, b.y + 18, b.x + i * 9, b.y + 22 + (i & 1) * 2);
+          for (let i = -3; i <= 3; i++) this.gfx.lineBetween(b.x + i * 7, b.y + 40, b.x + i * 9, b.y + 44 + (i & 1) * 2);
           break;
         default:
           break;
       }
     }
-    // blooms launched but not yet burst stay fully lit until they burst (FEATURES.bosses.thorn); so do the Lich's hands
-    for (const e of b.pending ?? []) {
-      if (e.op === 'bloom') bloomAt(e.x, e.y, 3);
-      else if (e.op === 'grasp') this.graspAt(e.x, e.y, 1);
-    }
+    // blooms launched but not yet burst stay fully lit until they burst (FEATURES.bosses.thorn); so do the Lich's
+    // hands (bossFx)
+    for (const e of b.pending ?? []) if (e.op === 'bloom') bloomAt(e.x, e.y, 3);
     for (let i = blooms; i < this.bloomPool.length; i++) this.bloomPool[i]!.setVisible(false);
     // the Toller's toll markers: a bone ring widening from the bell on every toll beat
     this.tolls = this.tolls.filter((s0) => t - s0 < 20);
@@ -341,29 +278,19 @@ export class BossView {
     }
   }
 
-  /** FEATURES.bossMoves placeholder: a bone hand (`k` 0..1 risen) inside a red ring that closes in as it rises. */
-  private graspAt(x: number, y: number, k: number): void {
-    const [cx, cy] = [Math.round(x), Math.round(y)];
-    this.gfx.lineStyle(1, k > 0.6 ? COL.blood : COL.bloodDark, 1).strokeCircle(cx, cy, Math.round(12 - k * 5));
-    const h = Math.round(2 + k * 5); // the fingers rise
-    this.gfx.fillStyle(COL.bone, 1);
-    for (let i = -2; i <= 2; i++) this.gfx.fillRect(cx + i * 2, cy - h + Math.abs(i), 1, h - Math.abs(i));
-  }
-
   /**
-   * FEATURES.bossMoves placeholder: a ring as a red circle with its cut gaps (segments whose middle lies in a gap are
-   * left out); an echo out beyond the arena marks the arena border (bone ticks) so its return is visible.
+   * FEATURES.bossMoves: a ring of the Toller, rasterised pixel-exact (its radius changes every tick): a blood_dark
+   * outer edge, a blood core, a dithered inner edge, torn ends at the cut gaps (bossArt.ts `ringRuns`). An echo out
+   * beyond the arena marks the arena border (bone ticks) so its return is visible.
    */
   private drawRing(ring: Ring, p: SimParams): void {
-    const n = Math.max(24, Math.min(160, Math.round(ring.r / 3)));
-    this.gfx.lineStyle(Math.max(1, Math.round(ring.halfWidth)), COL.blood, 1);
-    for (let i = 0; i < n; i++) {
-      const a0 = (2 * Math.PI * i) / n;
-      const a1 = (2 * Math.PI * (i + 1)) / n;
-      const am = (a0 + a1) / 2;
-      if (inRingGap(ring, Math.cos(am), Math.sin(am), ring.r, 0)) continue;
-      this.gfx.lineBetween(ring.x + Math.cos(a0) * ring.r, ring.y + Math.sin(a0) * ring.r, ring.x + Math.cos(a1) * ring.r, ring.y + Math.sin(a1) * ring.r);
-    }
+    const [dark, core] = [this.ringDark, this.ringCore];
+    dark.length = core.length = 0;
+    ringRuns(ring, [0, 0, 480, 270], (x, y, w, tone) => (tone === 'blood' ? core : dark).push(x, y, w));
+    this.gfx.fillStyle(COL.bloodDark, 1);
+    for (let i = 0; i < dark.length; i += 3) this.gfx.fillRect(dark[i]!, dark[i + 1]!, dark[i + 2]!, 1);
+    this.gfx.fillStyle(COL.blood, 1);
+    for (let i = 0; i < core.length; i += 3) this.gfx.fillRect(core[i]!, core[i + 1]!, core[i + 2]!, 1);
     if (!ringReturning(ring, p)) return;
     this.gfx.fillStyle(COL.bone, 1);
     for (let x = p.x0 + 8; x <= p.x1 - 8; x += 16) {
@@ -377,29 +304,13 @@ export class BossView {
   }
 
   /**
-   * FEATURES.bossMoves placeholder: the chain from the Toller's hand to its spot (iron: stone + bone, ash grey;
-   * parry-break: violet), the spot's circle until the landing, then links around the bound hero.
+   * FEATURES.bossMoves: the chain's spot, a circle until it lands (iron: ash grey; parry-break: violet). The links
+   * from the Toller's hand and the coils round the bound hero are sprites (bossFx).
    */
-  private drawChain(st: SimState, b: Boss, c: Chain): void {
-    const iron = c.kind === 'iron';
-    const col = iron ? COL.stone : COL.violet;
-    const hx = b.x + 10;
-    const hy = b.y + 4; // the raised hand
-    const [tx, ty] = c.bound ? [st.hero.x, st.hero.y] : [c.x, c.y];
-    this.gfx.lineStyle(1, col, 1).lineBetween(hx, hy, tx, ty);
-    this.gfx.fillStyle(iron ? COL.bone : COL.violet, 1);
-    const len = Math.hypot(tx - hx, ty - hy);
-    for (let d = 6; d < len; d += 8) this.gfx.fillRect(Math.round(hx + ((tx - hx) * d) / len) - 1, Math.round(hy + ((ty - hy) * d) / len) - 1, 2, 2);
-    if (!c.bound) {
-      const k = Math.min(1, (st.tick - c.start) / Math.max(1, c.land - c.start));
-      this.gfx.lineStyle(1, col, 0.5 + 0.5 * k).strokeCircle(Math.round(c.x), Math.round(c.y), c.r);
-      return;
-    }
-    this.gfx.lineStyle(1, col, 1).strokeCircle(Math.round(st.hero.x), Math.round(st.hero.y), 6);
-    for (let i = 0; i < 4; i++) {
-      const a = (Math.PI / 2) * i + Math.PI / 4;
-      this.gfx.fillRect(Math.round(st.hero.x + Math.cos(a) * 6) - 1, Math.round(st.hero.y + Math.sin(a) * 6) - 1, 2, 2);
-    }
+  private drawChain(st: SimState, c: Chain): void {
+    if (c.bound) return;
+    const k = Math.min(1, (st.tick - c.start) / Math.max(1, c.land - c.start));
+    this.gfx.lineStyle(1, c.kind === 'iron' ? COL.bone : COL.violet, 0.5 + 0.5 * k).strokeCircle(Math.round(c.x), Math.round(c.y), c.r);
   }
 
   private drawPickups(st: SimState, p: SimParams): void {
