@@ -47,3 +47,10 @@ SHELL = {
     "shell_pause": (19, 11, 1), "shell_plate_end": (4, 9, 2), "shell_plate_mid": (1, 9, 1),
     "shell_cap_l": (11, 12, 2), "shell_cap_s": (9, 10, 2), "shell_lamp": (11, 11, 10), "shell_glyph": (3, 5, 37),
 }
+
+# Boss families (stage ART-B). `validate_palette.py` checks their colour language per row: a boss BODY never uses
+# blood or bright violet; violet / violet_dark only as the glow of a violet attack's cast row, blood only on the row of
+# a red attack's ground cracks. `check_readability.py` reports their body contrast against the floor.
+BOSS_FAMILIES = ("eye_sentinel", "lich_mage", "lich_king", "thorn_mother", "toller")
+# Readability class of the new effect sprites (check_readability.py sweeps them like projectiles).
+READABILITY = {"lich_king_soulfire": "violet", "chain_violet": "violet", "chain_wrap_violet": "violet", "grasp_crack": "blood"}

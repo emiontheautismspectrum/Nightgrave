@@ -59,11 +59,9 @@ Bosses
 - boss_bar 384x10 frame (9-slice style; segments drawn in code, max 15)
 - The new bosses (dark until their rows of FEATURES.bosses are enabled; tools/nglib/bosses2.py; body rule as above:
   dark stone, forest, moss, bone, violet_dark; bright violet only in the cast frames' glow):
-  - thorn_mother 40x48: idle 4f, cast 4f, hit 2f, death 6f. A huge hunched matriarch grown from roots: a crown of
-    thorns, a pale bone mask with hollow eyes, a cloak of twisted roots spreading into the ground; the root-arms rise
-    on the cast frames. Drawn with her chest (where shots leave) at the sim position; she rises out of the ground at
-    the intro (the death frames reversed).
-  - toller 40x56: idle 4f, cast 4f, hit 2f, death 6f. A tall robed figure with a bell for a head and hanging chains;
+  - thorn_mother 48x64 (redrawn in the boss art stage, below): idle 6f, cast 4f, hedge 4f, hit 2f, death 6f, sink 6f,
+    emerge 6f. Her chest core (row 22) is at the sim position; she rises out of the ground at the intro (the emerge row).
+  - toller 40x56: idle 4f, cast 4f, hit 2f, death 6f, and (boss art stage) tp_out 4f, tp_in 4f, throw 4f. A tall robed figure with a bell for a head and hanging chains;
     the idle frames are the bell's swing (centre, right, centre, left), chosen from the fight's 30-tick beat so an
     extreme falls on every beat; the clapper strikes on the cast frames. The bell's lip is at the sim position.
   - root_bloom 16x16 4f (violet): a ground bloom opening over the wind-up (it bursts into violet shards); fully lit
@@ -71,20 +69,55 @@ Bosses
   - bell_ring 32x32 4f (bone): a thin ring widening from the bell on every toll beat (the rhythm, readable muted).
   - Telegraphs drawn in code: the pendulum's and the lash's thin start lines (blood_dark -> blood), the knell's
     shrinking red ring, the hedge's stirring red roots at her feet.
-- U3b placeholders (FEATURES.bossMotion / bossMoves, dark; drawn in code in `src/render/BossView.ts` with palette
-  colours only, to be REPLACED by art in the boss art stage):
-  - the Toller's RING (peal / echo): a red (blood) circle 2 px thick with its cut gaps left out; its wind-up: red ticks
-    forming around the bell (blood_dark -> blood). Art wanted: a bronze-red shock ring with a soft inner edge, the cut
-    gaps shown as torn ends. An echo out beyond the arena: bone ticks along the arena border (keep them: a cue).
-  - the CHAIN: a line from the Toller's raised hand (stone with bone links = IRON, ash grey; violet = PARRY-BREAK), the
-    spot's circle (16 px) during the telegraph, a ring of links around the bound hero. Art wanted: chain link tiles
-    (8 x 8, two variants), a hand-raise frame on the Toller (cast row), wrap-around links on the hero (2 frames).
-  - the Lich's GRASP hands: a red ring closing in around bone fingers rising from the ground. Art wanted: bone_hand
-    16 x 16 4f (rising), a red ground crack ring.
-  - the Lich's SOULFIRE wind-up: violet sparks circling the Lich (art: 6-frame violet ember swirl).
-  - the Thorn Mother's sink / emerge: her death frames (forward, then reversed) with a downward shift and a fade; art
-    wanted: a sink 6f row (roots pulling her down) and an emerge row.
-  - the Eye's and the Lich's bob: a render-only sine shift of the body (2 px).
+- Boss art (stage ART-B; tools/nglib/{layers,thorn_queen,lich_king,toller_fx}.py; DARK: only flagged runs draw it,
+  `useNewBossArt` in src/render/bossArt.ts; a production run draws the Eye and the old `lich_mage_*` exactly as
+  before until the 0.11.0 cut-over). The concepts in docs/art_refs/ are REFERENCE ONLY (proportions, silhouette,
+  costume, mood): no sprite pixel is a resampled or quantized copy; every frame is built from drawn parts in code
+  (`tools/nglib/layers.py`: named layers, per-layer offsets, per-row shifts), and `tools/boss_sheet.py` writes the
+  review sheets (frames at 4x beside the reference, a 1x squint band, GIF strips) to docs/screenshots/boss_art/.
+  - Thorn Mother (keys `thorn_mother_*`, replaced in place), a forest queen. KEPT from the concept: the crown of
+    thorns as a clear silhouette, a pale delicate face (hand-drawn: lashes over gold eyes, dry lips, a tapering chin),
+    long hair, bare slim shoulders and waist, thin arms wound with thorn vines, a glowing chest core, a root-and-leaf
+    gown widening to the ground, roots spreading at the hem. Colours: bark and roots = earth / dry; leaves and hair =
+    forest / moss with a few fern accents; skin and thorn tips = bone (shadow: dry); eyes, chest core and one crown
+    glint = a few gold / amber pixels (<= 2%); cast glow = violet (the core and her hands). DROPPED: the red roses,
+    berries and red leaves (red = unparryable). Rows: idle (hair and the gown's lower rows sway by per-row offsets,
+    she breathes, a gold glint travels over the crown, the core pulses), cast (arms and root-vines rise, the core
+    flares violet), hedge (arms down to the ground, roots at her feet; no violet: the hedge is red, its cue is drawn in
+    code), sink (she is pulled down behind the ground line, root tips rise round her), emerge (the reverse, a burst of
+    root tips), hit, death (the leaves wither from the hem up, she bows and crumbles).
+  - Lich King (NEW keys `lich_king_*`, 40x64: idle 6f, cast 4f, grasp 4f, hit 2f, death 6f, teleport_out 4f,
+    teleport_in 4f), a skeleton king, tall and thin. KEPT: the jagged crown, teal-lit eye sockets, pale hair, the open
+    ribcage, pointed shoulders, the tattered cloak with pale ribbons and a rune tabard, a bone staff with a teal flame
+    in its forked head, a teal flame in the raised free hand, no legs: a trailing tail of teal smoke. Colours: cloak =
+    stone_dark / stone / fog with a few mist pixels in one fold; ribbons, hair and rim light = moon; skeleton, crown
+    and staff = bone (shadow: stone); flames and smoke = teal, dithered (a solid core, a checkered middle, a Bayer
+    edge; no partial alpha). NO violet and NO red on the body: violet sparks only on the cast row, red ground cracks
+    only on the grasp row (he plants the staff). The cloak's hem (row 40) is at the sim position, where the old lich's
+    robe hem is; the smoke tail trails below it. Teal vs the Slow Time pickup: the flames sit on his own silhouette
+    (in the staff's fork, in his claws) and the tail is 3-4x the pickup's size; the pickup is a small bone-framed
+    hourglass with a glow ring.
+  - Overlays and effects: lich_king_soulfire 40x40 6f (violet embers circling in over his chest: the soulfire
+    wind-up), bone_hand 16x16 4f (a skeletal hand rising from the ground), grasp_crack 24x24 4f (the red ground crack
+    ring closing round it: blood_dark, then blood), chain_iron / chain_violet 8x8 2 variants (a link seen flat, a link
+    seen edge-on; laid alternately along the chain, never rotated; IRON = stone with bone glints, PARRY-BREAK =
+    violet), chain_wrap_iron / chain_wrap_violet 16x16 2f (two coils round the bound hero).
+  - The Toller's RING (peal / echo) is rasterised at runtime, pixel-exact, like the shell's stick parts (its radius
+    changes every tick): a 3 px band, blood_dark outer edge, blood core, a checker-dithered blood_dark inner edge; at a
+    cut gap the band breaks into torn ends (an ordered dither thinning over 8 px of arc), the gap itself is empty. Its
+    wind-up stays the red ticks round the bell; an echo beyond the arena keeps the bone ticks on the border.
+  - Still drawn in code (telegraphs): the pendulum's and the lash's start lines, the knell's shrinking ring, the
+    hedge's red roots at her feet, the chain spot's circle, the spawn-point circles.
+  - Render motion (render-only, whole pixels, never a rotation or a scale; off with EFFECTS LOW): the Eye leans 1-2 px
+    against its velocity, the Thorn Mother breathes (in her idle row), the Lich's cloak rows flutter (in his frames),
+    the Toller's bell swings on the beat (unchanged); the 2 px bob of the drifting bodies is unchanged.
+  - Validators: `validate_palette.py` checks the colour language per row (no red on a boss body, bright violet only on
+    cast rows, teal only on the Lich King, gold / amber <= 2% and only on the Thorn Mother, ground-only accents <= 10%
+    on the two redrawn bodies); `check_readability.py` checks the body of every boss against the floor (>= 2.0, the
+    weakest body before this stage) and sweeps the violet / blood effect sprites like projectiles;
+    `check_repro.py` builds everything twice in fresh processes and compares the hashes with the files on disk.
+  - Atlas: 512 x 1024. The frames of the dark boss art are stored trimmed to their opaque box (`ATLAS_TRIM` in
+    tools/gen_assets.py; Phaser restores the full frame); every production sprite, tile and shell part is stored whole.
 
 Pickups
 - pickup_slow_time 12x12 4f (teal hourglass), pickup_double_score 12x12 4f (gold "x2" rune)

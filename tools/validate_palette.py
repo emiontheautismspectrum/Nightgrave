@@ -14,12 +14,14 @@ from PIL import Image
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import gen_arena  # noqa: E402
+import gen_assets  # noqa: E402
 from nglib import spec  # noqa: E402
 from nglib.palette import GROUND_ONLY, NAMES, RESERVED, RGB  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
 PAL = np.array(RGB, dtype=np.int32)
+RGB_SET_ = set(RGB)
 errors = []
 # Previews that intentionally show a render-side alpha blend (not game art): exempt from the palette check.
 # These composites reproduce the game's render-side alphas (fog, mist, vignette steps, translucency, blur), so they
@@ -57,6 +59,17 @@ LANDMARK_BRIGHT_MAX = 0.02
 EXCEPTION_PREFIXES = ("rune_glow_", "shade_", "stalker_")
 EXCEPTION_NAMES = {"altar_flame_tele", "portal_ignite", "forest_eyes", "portal_smoke", "forest_leaf_ash"}
 EXCEPTION_ALLOWED = {"violet", "violet_dark"}
+# Boss art (stage ART-B, docs/ASSETS_SPEC.md "Boss art"). The redrawn bosses may use ground-only greens / blues as
+# small accents (fern leaves on the Thorn Mother, the mist lining of the Lich King's cloak), like props: <= 10%.
+BOSS_ACCENT_PREFIXES = ("thorn_mother_", "lich_king_")
+# Colour language of a boss family, per row (the row = the sprite name after the family):
+#   bright violet only on the rows that announce a violet attack; red only on the row of a red attack's ground cracks;
+#   the NEW bodies (thorn_mother, lich_king) keep violet_dark to the same rows too; teal only on the Lich King;
+#   gold / amber only as a few pixels of the Thorn Mother (eyes, chest core, a crown glint).
+VIOLET_ROWS = ("_cast", "_charge", "_soulfire")
+RED_ROWS = ("lich_king_grasp",)
+NEW_BODIES = ("lich_king_",)
+WARM_MAX = 0.02
 
 
 def err(msg):
@@ -131,8 +144,38 @@ def main():
 
     for n in sorted(spec.SPRITES):  # hero, threats, effects, UI: never ground-only colors
         p = os.path.join(ASSETS, "sprites", f"{n}.png")
-        if p in images and color_share(images[p], GROUND_ONLY) > 0:
+        if p not in images:
+            continue
+        gshare = color_share(images[p], GROUND_ONLY)
+        if n.startswith(BOSS_ACCENT_PREFIXES):
+            if gshare > GROUND_ONLY_PROP_MAX:
+                err(f"sprites/{n}.png has {gshare * 100:.1f}% ground-only colors (max {GROUND_ONLY_PROP_MAX * 100:.0f}% on a boss)")
+        elif gshare > 0:
             err(f"sprites/{n}.png (gameplay) uses ground-only colors")
+    # boss colour language (see the table above)
+    for n in sorted(spec.SPRITES):
+        fam = next((f for f in spec.BOSS_FAMILIES if n.startswith(f + "_")), None)
+        p = os.path.join(ASSETS, "sprites", f"{n}.png")
+        if fam is None or p not in images:
+            continue
+        px = images[p]
+        rgb = px[..., :3][px[..., 3] == 255]
+        used = {NAMES[RGB.index(tuple(c))] for c in np.unique(rgb.reshape(-1, 3), axis=0) if tuple(c) in RGB_SET_}
+        if used & {"blood", "blood_dark"} and n not in RED_ROWS:
+            err(f"sprites/{n}.png (boss body) uses red: red only ever means unparryable")
+        if "violet" in used and not n.endswith(VIOLET_ROWS):
+            err(f"sprites/{n}.png (boss body) uses bright violet outside a violet attack's cast row")
+        if "violet_dark" in used and n.startswith(NEW_BODIES) and not n.endswith(VIOLET_ROWS):
+            err(f"sprites/{n}.png (boss body) uses violet_dark outside a violet attack's cast row")
+        if n in RED_ROWS and used & {"violet", "violet_dark"}:
+            err(f"sprites/{n}.png (a red attack's row) uses violet")
+        if "teal" in used and fam != "lich_king":
+            err(f"sprites/{n}.png uses teal (only the Lich King's flames and smoke; teal = Slow Time)")
+        warm = used & {"gold", "amber", "ember"}
+        if warm and fam != "thorn_mother":
+            err(f"sprites/{n}.png (boss body) uses hero colours {sorted(warm)}")
+        elif "ember" in warm or color_share(px, {"gold", "amber"}) > WARM_MAX:
+            err(f"sprites/{n}.png: gold / amber are a few pixels only (<= {WARM_MAX * 100:.0f}%), never ember")
     # The phone-portrait shell (UI art, docs/ASSETS_SPEC.md "Shell"): ONLY the body colours (bg0, bg1, fog, stone_dark,
     # stone, bone) and, for the lamps, amber / gold / teal (they already mean hero / double score / slow time in the
     # HUD). Never red or violet (unparryable / parryable), ember, decor-only or ground-only colours.
@@ -222,12 +265,24 @@ def main():
                 if fr is None:
                     err(f"atlas missing frame {name}_{i}")
                     continue
-                f = fr["frame"]
-                if (f["w"], f["h"]) != (fw, fh) or f["x"] + fw > atlas.shape[1] or f["y"] + fh > atlas.shape[0]:
-                    err(f"atlas frame {name}_{i} has bad rect {f}")
-                elif sheet is not None and not np.array_equal(
-                        atlas[f["y"]:f["y"] + fh, f["x"]:f["x"] + fw], sheet[:, i * fw:(i + 1) * fw]):
-                    err(f"atlas frame {name}_{i} differs from sprites/{name}.png")
+                f, src, ss = fr["frame"], fr["sourceSize"], fr["spriteSourceSize"]
+                # a frame is stored whole, or (the dark boss art only) trimmed to its opaque box: then the box must
+                # hold every opaque pixel of the source frame and sit inside it
+                trimmed = (f["w"], f["h"]) != (fw, fh)
+                if trimmed != fr["trimmed"] or (trimmed and not name.startswith(gen_assets.ATLAS_TRIM)):
+                    err(f"atlas frame {name}_{i} is trimmed but not on the trim list")
+                if ((src["w"], src["h"]) != (fw, fh) or (ss["w"], ss["h"]) != (f["w"], f["h"]) or ss["x"] < 0 or ss["y"] < 0
+                        or ss["x"] + ss["w"] > fw or ss["y"] + ss["h"] > fh
+                        or f["x"] + f["w"] > atlas.shape[1] or f["y"] + f["h"] > atlas.shape[0]):
+                    err(f"atlas frame {name}_{i} has bad rect {f} / {ss}")
+                elif sheet is not None:
+                    full = np.zeros((fh, fw, 4), dtype=atlas.dtype)
+                    full[ss["y"]:ss["y"] + ss["h"], ss["x"]:ss["x"] + ss["w"]] = atlas[f["y"]:f["y"] + f["h"], f["x"]:f["x"] + f["w"]]
+                    want = sheet[:, i * fw:(i + 1) * fw].copy()
+                    want[want[..., 3] == 0] = 0
+                    full[full[..., 3] == 0] = 0
+                    if not np.array_equal(full, want):
+                        err(f"atlas frame {name}_{i} differs from sprites/{name}.png")
     else:
         err("missing atlas/nightgrave.png or atlas/nightgrave.json")
 
