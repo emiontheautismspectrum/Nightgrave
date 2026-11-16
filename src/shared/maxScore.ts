@@ -44,15 +44,28 @@ export function maxSpawnsPerSecond(features: Features = FEATURES): number {
   const th = features.bosses.thorn;
   const to = features.bosses.toller;
   const thorn = th.enabled === true ? Math.max(th.bloom.maxCount * th.bloom.maxShards, th.lash.maxCount, per(th.spores.count)) / th.cadenceSeconds : 0;
-  const toller = to.enabled === true ? Math.max(to.toll.rings * to.toll.maxCount, to.knell.maxCount) / to.cadenceSeconds : 0;
-  const boss = Math.max(ring / Math.min(B.eye.cadenceSeconds, B.lich.cadenceSeconds), thorn, toller);
+  // FEATURES.bossMoves with the Toller: a ring is one more thing a pulse can score (its first cut), at the hastened cadence
+  const tm = features.bossMoves.enabled === true && to.enabled === true ? features.bossMoves.toller : null;
+  const tollerCad = tm ? hastenedCadence(to.cadenceSeconds, to.beatTicks, tm.peal.hastenBeats) : to.enabled === true ? to.cadenceSeconds : 1;
+  const toller = to.enabled === true ? (Math.max(to.toll.rings * to.toll.maxCount, to.knell.maxCount) + (tm ? 1 : 0)) / tollerCad : 0;
+  // FEATURES.bossMoves: the Lich's soulfire (its orbs) and grasp (its blades) at its cadence
+  const lm = features.bossMoves.enabled === true ? features.bossMoves.lich : null;
+  const lich = lm ? Math.max(lm.soulfire.maxCount, lm.grasp.maxCount * lm.grasp.blades) / B.lich.cadenceSeconds : 0;
+  const boss = Math.max(ring / Math.min(B.eye.cadenceSeconds, B.lich.cadenceSeconds), thorn, toller, lich);
   return stream + sets + casters + boss;
+}
+
+/** The Toller's shortest cadence (s) after a peal (FEATURES.bossMoves): hastenBeats beats sooner, never below 2 beats. */
+function hastenedCadence(cadenceSeconds: number, beatTicks: number, hastenBeats: number): number {
+  const beat = Math.max(1, Math.round(beatTicks));
+  return Math.max(2 * beat, t(cadenceSeconds) - Math.max(0, Math.round(hastenBeats)) * beat) / TICK_RATE;
 }
 
 /**
  * Earliest tick at which the k-th boss (1-based) could be defeated: every fight as fast as the FASTEST boss of the
  * cycle allows (intro + the shortest wind-up + (minSegments - 1) x the shortest cadence), over the old bosses and the
- * ENABLED new ones (a disabled row is not read). With no new boss this is exactly the old bound.
+ * ENABLED new ones (a disabled row is not read). With no new boss this is exactly the old bound. FEATURES.bossOrder
+ * draws among the same kinds, so the fastest fight is the same with or without it.
  */
 export function earliestBossDefeat(k: number, features: Features = FEATURES): number {
   const T = TUNING;
@@ -65,6 +78,8 @@ export function earliestBossDefeat(k: number, features: Features = FEATURES): nu
   const to = features.bosses.toller;
   if (th.enabled === true) (winds.push(th.windupSeconds), cads.push(th.cadenceSeconds));
   if (to.enabled === true) (winds.push(to.windupSeconds, (to.windupBeats * to.beatTicks) / TICK_RATE), cads.push(to.cadenceSeconds));
+  // FEATURES.bossMoves with the Toller: after a peal its cadence is hastened (the bound assumes every attack is)
+  if (to.enabled === true && features.bossMoves.enabled === true) cads.push(hastenedCadence(to.cadenceSeconds, to.beatTicks, features.bossMoves.toller.peal.hastenBeats));
   const fight = t(B.introSeconds) + Math.max(15, t(Math.min(...winds))) + (minSeg - 1) * t(Math.min(...cads));
   const first = t(T.waves.graceSeconds) + (B.everyNthWave - 1) * wave + fight;
   const between = t(B.breakSeconds) + (B.everyNthWave - 1) * wave + fight;
@@ -84,7 +99,11 @@ export function maxPossibleScore(durationTicks: number, features: Features = FEA
   const kills = Math.min(Math.ceil((n / TICK_RATE) * maxSpawnsPerSecond(features) * (1 + T.newThreats.split.children)), pulses * maxKills);
   const firsts = Math.min(pulses, kills);
   const extras = Math.max(0, kills - firsts);
-  const parry = (firsts * T.score.parryBase + extras * T.score.extraKillPoints) * T.multiplier.cap * dbl;
+  // FEATURES.bossMoves with the Toller: the first cut of a ring pays one parryBase on top of a pulse's kills; at most
+  // one ring per Toller attack (the hastened cadence)
+  const to = features.bossMoves.enabled === true && features.bosses.toller.enabled === true ? features.bosses.toller : null;
+  const ringCuts = to ? Math.ceil(n / t(hastenedCadence(to.cadenceSeconds, to.beatTicks, features.bossMoves.toller.peal.hastenBeats))) : 0;
+  const parry = (firsts * T.score.parryBase + extras * T.score.extraKillPoints + ringCuts * T.score.parryBase) * T.multiplier.cap * dbl;
   // pickups: the first, then one per minimum interval
   const first = t(T.pickups.firstSeconds);
   const pickups = n >= first ? (1 + Math.floor((n - first) / t(T.pickups.intervalMinSeconds))) * T.pickups.points : 0;

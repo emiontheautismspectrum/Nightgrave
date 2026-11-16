@@ -11,9 +11,11 @@ import type { TheToller, ThornMother } from '../data/features';
 import { TICK_RATE } from '../data/tuning';
 import { dcos, dsin, PI, rotate } from './dmath';
 import { inGapCorridor, placeWall, planWall } from './hunts';
-import { ticks, type SimParams } from './params';
+import { ticks, tollerMoves, type SimParams } from './params';
+import { beginTollerMove, breakBound, landChain, launchRing, tollerMoveTable } from './tollerMoves';
+import { emitLich, launchLichMove } from './lichMoves';
 import { nextFloat, range } from './rng';
-import type { Spawn } from './boss';
+import { reachableBeamSign, type Spawn } from './boss';
 import type { Beam, Boss, BossAttack, BossEmission, BossPattern, SimState } from './state';
 
 /** The attacks of the new bosses. */
@@ -25,7 +27,7 @@ const BLOOM_CLEAR = 12;
 
 const d2 = (ax: number, ay: number, bx: number, by: number): number => (ax - bx) * (ax - bx) + (ay - by) * (ay - by);
 /** Unit direction from (x, y) to the hero; straight down when the hero stands exactly there. */
-function aimAt(s: SimState, x: number, y: number): [number, number] {
+export function aimAt(s: SimState, x: number, y: number): [number, number] {
   const dx = s.hero.x - x;
   const dy = s.hero.y - y;
   const d = Math.sqrt(dx * dx + dy * dy);
@@ -49,7 +51,7 @@ const scaled = (p: SimParams, base: number, max: number): number => Math.max(1, 
  * distance is moved along its own line to just beyond it (aimed shots back, radial shots forward); one that would then
  * leave the field is dropped. `cued` = a ground cue the player saw at that very spot (a bloom): spawned in place.
  */
-function shot(s: SimState, p: SimParams, spawn: Spawn, serial: number, tele: number, kind: ShotKind, x: number, y: number, vx: number, vy: number, aimed: boolean, cued = false): void {
+export function shot(s: SimState, p: SimParams, spawn: Spawn, serial: number, tele: number, kind: ShotKind, x: number, y: number, vx: number, vy: number, aimed: boolean, cued = false): void {
   const h = s.hero;
   const fair2 = p.fairDistance * p.fairDistance;
   const m = p.despawnMargin - 2;
@@ -86,7 +88,7 @@ export function tollGeometry(p: SimParams): { n: number; gap: number; step: numb
  * `n` unit directions evenly over the circle minus ONE gap of `gap` rad centred on the unit direction (gx, gy); the
  * gap is exact. Vector math only (dmath rotations: no engine-dependent Math functions in the sim).
  */
-function gappedRing(n: number, gx: number, gy: number, gap: number): [number, number][] {
+export function gappedRing(n: number, gx: number, gy: number, gap: number): [number, number][] {
   const out: [number, number][] = [];
   const span = 2 * PI - gap;
   for (let k = 0; k < n; k++) out.push(rotate(gx, gy, gap / 2 + (n === 1 ? span / 2 : (span * k) / (n - 1))));
@@ -135,7 +137,9 @@ export function newPatternTable(s: SimState, p: SimParams, kind: 'thorn' | 'toll
   const ringing = s.projectiles.some((pr) => pr.boss > 0 && pr.kind === 'orb_small') || !!b?.pending?.some((e) => e.op === 'toll');
   if (!swinging && !ringing) out.push(['pendulum', c.pendulum.weight]);
   if (!knellAlive(s)) out.push(['knell', c.knell.weight]); // never two knell rings at once
-  return out;
+  // FEATURES.bossMoves: the peal, the echo and the chains join the table (after the old patterns), and a parry-break
+  // bind narrows it to the allowed patterns
+  return tollerMoves(p) && b ? tollerMoveTable(s, p, b, out) : out;
 }
 
 /** A knell ring is still flying (the Toller's only blades). */
@@ -182,6 +186,7 @@ export function beginNewAttack(s: SimState, p: SimParams, b: Boss, pattern: Boss
   // the Toller: wind-ups are whole beats, so every launch lands on a beat tick
   const c = tollerRow(p);
   const beat = beatTicks(p);
+  if (pattern === 'peal' || pattern === 'echo' || pattern === 'chains') return beginTollerMove(s, p, b, pattern, beat); // FEATURES.bossMoves
   const wind = Math.max(15, Math.round(pattern === 'pendulum' ? c.pendulum.windupBeats : c.windupBeats) * beat);
   const a: BossAttack = { pattern, tpOut: t, tpIn: t, windStart: t, fire: t + wind, dirX: 0, dirY: 0, sign: 1, points: [] };
   if (pattern === 'pendulum') {
@@ -192,9 +197,9 @@ export function beginNewAttack(s: SimState, p: SimParams, b: Boss, pattern: Boss
     const dy = s.hero.y - b.y;
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
     const q = Math.min(0.93, range(s, r.offsetMinPx, r.offsetMaxPx) / dist);
-    const sign = nextFloat(s) < 0.5 ? -1 : 1;
-    const cs = Math.sqrt(1 - q * q);
     const [ux, uy] = [dx / dist, dy / dist];
+    const sign = reachableBeamSign(s, p, b, ux, uy, q, nextFloat(s) < 0.5 ? -1 : 1, r.halfWidth);
+    const cs = Math.sqrt(1 - q * q);
     a.dirX = ux * cs + uy * sign * q;
     a.dirY = -ux * sign * q + uy * cs;
     a.sign = sign;
@@ -209,7 +214,7 @@ export function beginNewAttack(s: SimState, p: SimParams, b: Boss, pattern: Boss
 
 // ------------------------------------------------------------------ the launch
 
-/** Launch an attack of a new boss (boss.ts already removed its one segment and set b.serial). */
+/** Launch an attack of a new boss, or a new move of an old one (boss.ts already removed its one segment, set b.serial). */
 export function launchNew(s: SimState, p: SimParams, b: Boss, a: BossAttack, pattern: NewPattern, spawn: Spawn): void {
   const serial = b.serial;
   const tele = a.fire - a.windStart;
@@ -269,9 +274,12 @@ export function launchNew(s: SimState, p: SimParams, b: Boss, a: BossAttack, pat
       const pend = (b.pending ??= []);
       const rings = Math.max(1, Math.round(c.rings));
       const mid = rings > 1 ? 1 : 0;
+      // FEATURES.bossMoves: under a parry-break bind the rings come boundRingBeats apart (longer than the parry cooldown)
+      const tm = tollerMoves(p);
+      const apart = tm && breakBound(s) ? Math.max(1, Math.round(tm.chains.boundRingBeats)) : 1;
       for (let k = 0; k < rings; k++) {
         const [gx, gy] = rotate(bx, by, (k - mid) * a.sign * step);
-        const e: BossEmission = { op: 'toll', at: s.tick + k * beat, serial, k, gapX: gx, gapY: gy, tele: a.windStart };
+        const e: BossEmission = { op: 'toll', at: s.tick + k * beat * apart, serial, k, gapX: gx, gapY: gy, tele: a.windStart };
         if (k === 0) emit(s, p, b, e, spawn);
         else pend.push(e);
       }
@@ -300,6 +308,20 @@ export function launchNew(s: SimState, p: SimParams, b: Boss, a: BossAttack, pat
       }
       return;
     }
+    case 'peal':
+    case 'echo': {
+      // FEATURES.bossMoves: the ring leaves the bell; with the hero too close to the bell it is a toll instead (the
+      // launch event names the attack that really happened)
+      if (launchRing(s, p, b, pattern === 'echo', serial)) return;
+      for (const e of s.events) if (e.type === 'boss_attack' && e.pattern === pattern) e.pattern = 'toll';
+      return launchNew(s, p, b, a, 'toll', spawn);
+    }
+    case 'chains':
+      landChain(s, p); // FEATURES.bossMoves: the chain lands: the hero on its spot is bound
+      return;
+    case 'soulfire':
+    case 'grasp':
+      return launchLichMove(s, p, b, a, pattern, spawn); // FEATURES.bossMoves: the Lich's new moves
     default:
       return unknownPattern(pattern);
   }
@@ -340,6 +362,9 @@ function emit(s: SimState, p: SimParams, b: Boss, e: BossEmission, spawn: Spawn)
       s.beams.push({ serial: e.serial, x: b.x, y: b.y, dirX: e.dirX, dirY: e.dirY, turnC: dcos(w), turnS: dsin(w), start: s.tick, end: s.tick + e.n, halfWidth: c.halfWidth, length: c.length });
       return;
     }
+    case 'soul':
+    case 'grasp':
+      return emitLich(s, p, b, e, spawn); // FEATURES.bossMoves: the Lich's new moves
     default:
       return unknownEmission(e);
   }

@@ -7,7 +7,7 @@ import { withFeatures, type Features, type NewBossKind, type TheToller, type Tho
 import type { Difficulty } from '../src/data/tuning';
 import type { InputFrame } from '../src/sim/input';
 import { Sim, type SimOptions } from '../src/sim/sim';
-import type { BossPattern, SimState } from '../src/sim/state';
+import type { BossKind, BossPattern, SimState } from '../src/sim/state';
 import type { PackKey } from '../src/data/features';
 import type { Piece, SolveOptions } from './pack_tools';
 
@@ -32,7 +32,7 @@ const IDLE: InputFrame = { cursor: false, mx: 0, my: 0, buttons: 0 };
  * Start a fight with `kind` (forced first boss) on wave 3, the hero standing at (hx, hy), stepped idle up to the tick
  * before the first wind-up. The result is a `Piece` for walkingSolver.
  */
-export function startFight(kind: NewBossKind, seed: number, hx: number, hy: number, features: Features, difficulty: Difficulty = 'hard', options: SimOptions = {}): Piece {
+export function startFight(kind: BossKind, seed: number, hx: number, hy: number, features: Features, difficulty: Difficulty = 'hard', options: SimOptions = {}): Piece {
   const sim = new Sim(seed, difficulty, { hero: 'wisp', ...options, features, startWave: 3, firstBoss: kind });
   const s = sim.state;
   s.streamTimer = 1e9;
@@ -55,4 +55,25 @@ export function attacks(count: number): SolveOptions {
     },
     done: (s: SimState) => (s.boss?.serial ?? 0) >= count && bossClear(s),
   };
+}
+
+/** U3b (FEATURES.bossMoves): the Toller's new moves. */
+export const TOLLER_MOVES = ['peal', 'echo', 'chains'] as const;
+/**
+ * A variant (bosses + bossMoves, plus `extra` blocks) whose Toller picks only `pattern` (an old attack or a new move);
+ * every other attack of its table weighs 0.
+ */
+export function onlyTollerMove(pattern: BossPattern, extra: Features = withFeatures('toller', 'bossMoves')): Features {
+  const base = extra;
+  const row = { ...base.bosses.toller } as Record<string, unknown>;
+  for (const k of TOLLER_PATTERNS) row[k] = { ...(base.bosses.toller as unknown as Record<string, object>)[k], weight: k === pattern ? 1 : 0 };
+  const mv = { ...base.bossMoves.toller } as Record<string, unknown>;
+  for (const k of TOLLER_MOVES) mv[k] = { ...(base.bossMoves.toller as unknown as Record<string, object>)[k], weight: k === pattern ? 1 : 0 };
+  return { ...base, bosses: { ...base.bosses, toller: row as unknown as TheToller }, bossMoves: { ...base.bossMoves, toller: mv as unknown as Features['bossMoves']['toller'] } };
+}
+
+/** A variant (bossMoves, plus `extra` blocks) whose Lich almost always picks `pattern` (its old rows live in TUNING). */
+export function lichMostly(pattern: 'soulfire' | 'grasp', extra: Features = withFeatures('bossMoves')): Features {
+  const l = extra.bossMoves.lich;
+  return { ...extra, bossMoves: { ...extra.bossMoves, lich: { soulfire: { ...l.soulfire, weight: pattern === 'soulfire' ? 1e6 : 0 }, grasp: { ...l.grasp, weight: pattern === 'grasp' ? 1e6 : 0 } } } };
 }

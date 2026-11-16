@@ -5,10 +5,13 @@
  */
 import { HOLLOWS, PORTAL } from '../data/arena';
 import { dcos, dsin, rotate } from './dmath';
-import { ticks, type SimParams } from './params';
+import { ticks, tollerMoves, type SimParams } from './params';
 import { nextFloat, range } from './rng';
 import type { Beam, Boss, BossAttack, BossKind, BossPattern, SimState } from './state';
-import { beginNewAttack, launchNew, newBossClear, newPatternTable, onBeat, runPending } from './newBosses';
+import { beatTicks, beginNewAttack, launchNew, newBossClear, newPatternTable, onBeat, runPending } from './newBosses';
+import { breakBound, earlierHazardsAlive, isTollerMove, mustWait, ringBlocks, startableMove } from './tollerMoves';
+import { lichMoveTable, lichMoveWindup, prepareGrasp } from './lichMoves';
+import { emergeSpot, moveBoss, sinkDue } from './bossMotion';
 
 /** Spawner callback (waves.spawnProjectile), injected to avoid an import cycle. */
 export type Spawn = (
@@ -47,14 +50,35 @@ function mix32(x: number): number {
 export const orderHash = (seed: number, cycle: number, i: number): number =>
   mix32((seed >>> 0) ^ mix32(Math.imul(cycle + 1, 0x9e3779b1) ^ Math.imul(i + 1, 0x85ebca6b)));
 
+/** The `cycle` argument of orderHash reserved for the random order (the cycle permutation uses 0, 1, 2, ...). */
+const RANDOM_ORDER = -1;
+
 /**
- * Boss kind for a boss wave. With only the old bosses the n-th boss wave (0-based) alternates eye, lich, eye, ...
+ * FEATURES.bossOrder: the kind of the n-th boss wave (0-based), drawn among `kinds` by an integer hash of (seed, n),
+ * never the kind of boss wave n - 1. A pure function of (kinds, n, seed): the chain is walked from n = 0 (kind 0 is
+ * uniform; every later kind is uniform among the other kinds). With two kinds it alternates (the first one is drawn).
+ */
+export function randomBossKind(kinds: readonly BossKind[], n: number, seed: number): BossKind {
+  const L = kinds.length;
+  let k = orderHash(seed, RANDOM_ORDER, 0) % L;
+  for (let i = 1; i <= n && L > 1; i++) {
+    let j = orderHash(seed, RANDOM_ORDER, i) % (L - 1);
+    if (j >= k) j++;
+    k = j;
+  }
+  return kinds[k]!;
+}
+
+/**
+ * Boss kind for a boss wave. With FEATURES.bossOrder enabled: `randomBossKind` over every boss of the run. Otherwise,
+ * with only the old bosses the n-th boss wave (0-based) alternates eye, lich, eye, ...
  * exactly as before. With a new boss enabled, every cycle of k = |bossCycle| boss waves holds each enabled boss once,
  * in an order that is a permutation (Fisher-Yates) driven by an INTEGER HASH of (seed, cycle index): no PRNG draw.
  */
 export function bossKindFor(p: SimParams, wave: number, seed: number): BossKind {
   const n = Math.max(0, Math.floor((wave + 1) / p.bosses.everyNthWave) - 1);
   const kinds = bossCycle(p);
+  if (p.order) return randomBossKind(kinds, n, seed);
   if (kinds.length === 2) return n % 2 === 0 ? 'eye' : 'lich';
   const k = kinds.length;
   const cycle = Math.floor(n / k);
@@ -175,8 +199,10 @@ function patternTable(s: SimState, p: SimParams, kind: BossKind): [BossPattern, 
   switch (kind) {
     case 'eye':
       return [['ring', p.bosses.eye.ring.weight], ['beam', p.bosses.eye.beam.weight], ['spawns', p.bosses.eye.spawns.weight]];
-    case 'lich':
-      return [['fan', p.bosses.lich.fan.weight], ['wraiths', p.bosses.lich.wraiths.weight], ['triple', p.bosses.lich.triple.weight]];
+    case 'lich': {
+      const old: [BossPattern, number][] = [['fan', p.bosses.lich.fan.weight], ['wraiths', p.bosses.lich.wraiths.weight], ['triple', p.bosses.lich.triple.weight]];
+      return p.moves ? [...old, ...lichMoveTable(p)] : old; // FEATURES.bossMoves: appended after the old patterns
+    }
     case 'thorn':
     case 'toller':
       return newPatternTable(s, p, kind);
@@ -200,7 +226,15 @@ function pickPattern(s: SimState, p: SimParams, kind: BossKind): BossPattern {
 /** Begin the next attack sequence: pick the pattern; the lich teleports first; then a wind-up of >= 15 ticks. */
 function beginAttack(s: SimState, p: SimParams, b: Boss): void {
   const t = s.tick;
-  const pattern = pickPattern(s, p, b.kind);
+  // FEATURES.bossMoves: a hero bound by a parry-break chain answers one attack at a time: no draw, no start while an
+  // earlier hazard lives (the Toller waits on its beat)
+  if (s.chain && breakBound(s) && earlierHazardsAlive(s, b)) {
+    b.nextAt = onBeat(p, b, t + 1);
+    return;
+  }
+  // FEATURES.bossMoves: a new move the Toller drew earlier and is waiting to start (no new draw)
+  const pattern = b.waitFor ?? pickPattern(s, p, b.kind);
+  if (b.waitFor !== undefined) delete b.waitFor;
   const tpOut = t;
   let tpIn = t;
   let wind: number;
@@ -208,6 +242,7 @@ function beginAttack(s: SimState, p: SimParams, b: Boss): void {
     case 'lich': {
       tpIn = t + ticks(p.bosses.lich.teleportOutSeconds);
       wind = Math.max(15, ticks(p.bosses.lich.windupSeconds));
+      if (pattern === 'soulfire' || pattern === 'grasp') wind = lichMoveWindup(p, pattern, wind); // FEATURES.bossMoves
       const windStart = tpIn + ticks(p.bosses.lich.teleportInSeconds);
       b.attack = { pattern, tpOut, tpIn, windStart, fire: windStart + wind, dirX: 0, dirY: 0, sign: 1, points: [] };
       return;
@@ -220,12 +255,55 @@ function beginAttack(s: SimState, p: SimParams, b: Boss): void {
       return;
     }
     case 'thorn':
-    case 'toller':
+      if (sinkDue(p, b)) {
+        // FEATURES.bossMotion: she sinks [t, tpIn), emerges at a new spot [tpIn, windStart), then winds up there (the
+        // wind-up and its telegraph are prepared at windStart, from the new spot: runBoss)
+        const m = p.motion!.thorn;
+        tpIn = t + ticks(m.sinkSeconds);
+        const windStart = tpIn + ticks(m.emergeSeconds);
+        wind = Math.max(15, ticks(need(p.thorn, b.kind).windupSeconds));
+        b.attack = { pattern, tpOut, tpIn, windStart, fire: windStart + wind, dirX: 0, dirY: 0, sign: 1, points: [] };
+        s.events.push({ type: 'boss_sink', x: b.x, y: b.y });
+        return;
+      }
       b.attack = beginNewAttack(s, p, b, pattern);
+      return;
+    case 'toller':
+      if (isTollerMove(pattern) && mustWait(s, p, b)) {
+        b.waitFor = pattern; // FEATURES.bossMoves: wait (on the beat) until the field is clear
+        b.nextAt = onBeat(p, b, t + 1);
+        return;
+      }
+      b.attack = beginNewAttack(s, p, b, isTollerMove(pattern) ? startableMove(s, p, b, pattern) : pattern);
       return;
     default:
       unknownBoss(b.kind);
   }
+}
+
+/**
+ * A swinging beam's turn (sign) when its start line is offset by `q` x the distance from the hero's direction (unit
+ * ux, uy from the body). Only while FEATURES.bossMotion (or bossMoves) is enabled, where a body can stand anywhere in
+ * its band: if the point the hero must walk to (just behind the start line, the side the beam turns away from) lies
+ * outside the hero's area, the beam turns the other way (the hero's other side), so walking always answers it.
+ * Otherwise `sign` as drawn. No PRNG draw.
+ */
+export function reachableBeamSign(s: SimState, p: SimParams, b: Boss, ux: number, uy: number, q: number, sign: number, halfWidth: number): number {
+  if (!p.motion && !p.moves) return sign;
+  const h = s.hero;
+  const cs = Math.sqrt(1 - q * q);
+  const reachable = (sg: number): boolean => {
+    const dx = ux * cs + uy * sg * q;
+    const dy = -ux * sg * q + uy * cs;
+    const nx = dy * sg; // the side the beam turns away from
+    const ny = -dx * sg;
+    const need = Math.max(0, -((h.x - b.x) * nx + (h.y - b.y) * ny)) + p.heroRadius + halfWidth + 4;
+    const ex = h.x + nx * need;
+    const ey = h.y + ny * need;
+    const i = p.heroInset;
+    return ex >= p.x0 + i && ex <= p.x1 - i && ey >= p.y0 + i && ey <= p.y1 - i;
+  };
+  return reachable(sign) || !reachable(-sign) ? sign : -sign;
 }
 
 /** Fix what the wind-up shows: the beam's start line, or the spawn points. Called when the wind-up starts. */
@@ -239,13 +317,15 @@ function prepareTelegraph(s: SimState, p: SimParams, b: Boss, a: BossAttack): vo
     // start line offset from the hero by a reachable 18-34 px (perpendicular), sweeping towards and past him;
     // everything behind the start line is safe for the whole sweep (it only rotates away from it)
     const q = Math.min(0.93, range(s, c.offsetMinPx, c.offsetMaxPx) / r);
-    const sign = nextFloat(s) < 0.5 ? -1 : 1;
-    const cs = Math.sqrt(1 - q * q);
     const [ux, uy] = [dx / r, dy / r];
+    const sign = reachableBeamSign(s, p, b, ux, uy, q, nextFloat(s) < 0.5 ? -1 : 1, c.halfWidth);
+    const cs = Math.sqrt(1 - q * q);
     // rotate the hero direction by -sign * asin(q)
     a.dirX = ux * cs + uy * sign * q;
     a.dirY = -ux * sign * q + uy * cs;
     a.sign = sign;
+  } else if (a.pattern === 'grasp') {
+    prepareGrasp(s, p, b, a); // FEATURES.bossMoves: the Lich's hands light up where they will burst
   } else if (a.pattern === 'spawns') {
     const c = p.bosses.eye.spawns;
     const n = Math.min(c.maxCount, Math.max(1, Math.round(c.count * p.density)));
@@ -401,11 +481,12 @@ export function rotateBeams(s: SimState): void {
 }
 
 /**
- * The final attack is over when none of its projectiles and no beam of it remain; for a new boss also nothing may
- * still be queued (a multi-beat attack) and no wall of hers may stand (FEATURES.bosses).
+ * The final attack is over when none of its projectiles and no beam of it remain, nothing is still queued (a
+ * multi-beat attack: the new bosses, the Lich's new moves), no wall of a boss stands (FEATURES.bosses) and no ring is
+ * alive (FEATURES.bossMoves). The old bosses without the new blocks have none of these keys.
  */
 function finalAttackGone(s: SimState, b: Boss): boolean {
-  return !s.projectiles.some((pr) => pr.boss === b.serial) && !s.beams.some((bm) => bm.serial === b.serial) && (b.kind === 'eye' || b.kind === 'lich' || newBossClear(s, b));
+  return !s.projectiles.some((pr) => pr.boss === b.serial) && !s.beams.some((bm) => bm.serial === b.serial) && newBossClear(s, b) && !(s.rings && s.rings.length);
 }
 
 /** Remove extra segments for a reflected boss projectile (reflectBonusSegments, default 0 = off). */
@@ -443,20 +524,57 @@ export function runBoss(s: SimState, p: SimParams, spawn: Spawn): void {
     return;
   }
   if (t < b.introEnd) return;
-  if (!b.attack && t >= b.nextAt) beginAttack(s, p, b);
-  const a = b.attack;
+  if (p.motion) moveBoss(s, p, b); // FEATURES.bossMotion: never while an attack, a beam or an emission is in progress
+  if (!b.attack && t >= b.nextAt) {
+    // FEATURES.bossMoves: no attack STARTS either while a ring is about to reach the hero or has just passed him (a
+    // wind-up's telegraph is fixed at its start: it must not be fixed while the hero still has the ring to answer)
+    if (s.rings && s.rings.length && ringBlocks(s, p)) b.nextAt = b.kind === 'toller' ? onBeat(p, b, t + 1) : t + 1;
+    else beginAttack(s, p, b);
+  }
+  let a = b.attack;
   if (!a) return;
   if (b.kind === 'lich' && t === a.tpIn) {
     [b.x, b.y] = pickLichSpot(s, p, b.x, b.y);
     s.events.push({ type: 'boss_teleport', x: b.x, y: b.y });
   }
   if (b.kind === 'lich' && t === a.windStart) prepareTelegraph(s, p, b, a);
+  if (b.kind === 'thorn' && a.tpIn > a.tpOut) {
+    // FEATURES.bossMotion: the Thorn Mother emerges at a seeded spot, then winds up there (from the new spot)
+    if (t === a.tpIn) {
+      [b.x, b.y] = emergeSpot(s, p, b);
+      s.events.push({ type: 'boss_teleport', x: b.x, y: b.y });
+    }
+    if (t === a.windStart) a = b.attack = { ...beginNewAttack(s, p, b, a.pattern), tpOut: a.tpOut, tpIn: a.tpIn };
+  }
+  if (t === a.fire && s.rings && s.rings.length && ringBlocks(s, p)) {
+    // FEATURES.bossMoves: no launch while a ring is about to reach the hero or has just passed him; the launch waits
+    // for the first free tick (the Toller: its next beat). The wind-up's telegraph stays; the cadence is not shortened
+    const wait = b.kind === 'toller' ? beatTicks(p) : 1;
+    a.fire += wait;
+    a.defer = (a.defer ?? 0) + wait;
+    if (s.chain && s.chain.serial === b.serial + 1) s.chain.land = a.fire;
+  }
   if (t === a.fire) {
     launch(s, p, b, a, spawn);
     b.attack = null;
-    const cad = ticks(bossRow(p, b.kind).cadenceSeconds);
-    const pre = a.fire - a.tpOut;
-    b.nextAt = t + Math.max(1, cad - pre);
+    let cad = ticks(bossRow(p, b.kind).cadenceSeconds);
+    let hastened = false;
+    if (b.hasten) {
+      // FEATURES.bossMoves: after a peal, the next hastenCount attacks START hastenBeats beats sooner (start to start;
+      // never below 2 beats; on the beat). The next one may start on this very launch tick (after the peal's 2 beats)
+      const beat = beatTicks(p);
+      cad = Math.max(2 * beat, cad - Math.max(0, Math.round(tollerMoves(p)!.peal.hastenBeats)) * beat);
+      b.hasten--;
+      hastened = true;
+    }
+    // (the Thorn Mother's sink and emerge, FEATURES.bossMotion, come on top of her cadence: it counts from her
+    // wind-up, so a relocation never brings her next attack closer to this one)
+    const pre = (b.kind === 'thorn' ? a.fire - a.windStart : a.fire - a.tpOut) - (a.defer ?? 0);
+    b.nextAt = t + Math.max(hastened ? 0 : 1, cad - pre);
     if (b.kind === 'toller') b.nextAt = onBeat(p, b, b.nextAt); // the Toller starts every attack on its beat
+    if (hastened && b.nextAt <= t && b.remaining > 0) {
+      if (s.rings && s.rings.length && ringBlocks(s, p)) b.nextAt = onBeat(p, b, t + 1);
+      else beginAttack(s, p, b);
+    }
   }
 }

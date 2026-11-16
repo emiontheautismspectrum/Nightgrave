@@ -54,9 +54,10 @@ function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 360
   const pack: Record<string, number> = {};
   const packOf = new Map<number, string>();
   /** The hunts (FEATURES.knot / briar): knots off-view at creation, lines and gaps audited before arrival. */
-  const hunts = { knots: 0, lines: 0, gaps: 0 };
+  const hunts = { knots: 0, lines: 0, gaps: 0, rings: 0 };
   const knotOff = new Map<number, boolean>();
   const lineSeen = new Map<number, { start: number; seen: boolean[]; gap: boolean[]; arrive: number }>();
+  const rings = new Map<number, { seen: boolean[]; out: number; back: number }>();
   while (sim.state.alive && sim.state.tick < maxTicks) {
     const s = sim.state;
     const h = s.hero;
@@ -96,6 +97,17 @@ function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 360
       const gapPx = Math.abs((w.axis === 'x' ? h.x : h.y) - w.pos) - w.halfWidth - sim.params.heroRadius;
       if (tr.arrive < 0 && gapPx <= CONTACT_GAP) tr.arrive = s.tick;
     }
+    // FEATURES.bossMoves: a ring, pass by pass (out, and an echo's way back): its nearest point marked or in view
+    for (const ring of s.rings ?? []) {
+      let tr = rings.get(ring.id);
+      if (!tr) rings.set(ring.id, (tr = { seen: [], out: -1, back: -1 }));
+      const d = Math.hypot(h.x - ring.x, h.y - ring.y);
+      const [ux, uy] = d > 1e-6 ? [(h.x - ring.x) / d, (h.y - ring.y) / d] : [0, 1];
+      tr.seen[s.tick] = inView(v, ring.x + ux * ring.r, ring.y + uy * ring.r) || keys.has(`r${ring.id}`);
+      const gap = Math.abs(d - ring.r) - ring.halfWidth - sim.params.heroRadius;
+      if (gap <= CONTACT_GAP && ring.phase === 'grow' && ring.r < d && tr.out < 0) tr.out = s.tick;
+      if (gap <= CONTACT_GAP && ring.phase === 'back' && ring.r > d && tr.back < 0) tr.back = s.tick;
+    }
     for (const g of s.sigils) {
       let tr = sig.get(g.id);
       if (!tr) sig.set(g.id, (tr = { born: s.tick, offAtBirth: !inView(v, g.x, g.y), seen: [], hitAt: g.fill, sx: g.x, sy: g.y, fill: g.fill }));
@@ -133,6 +145,18 @@ function audit(seed: number, startWave: number, reduced: boolean, maxTicks = 360
     if (run < GAP_TICKS) fails.push(`seed ${seed} wave ${startWave}: briar ${id} gap marked only ${run} ticks before the line arrived`);
     else hunts.gaps++;
   }
+  // a ring: marked or in view >= 15 ticks before its band comes within reach; an echo's return >= 45 ticks before
+  for (const [id, tr] of rings)
+    for (const [at, need] of [[tr.out, FAIR_TICKS], [tr.back, GAP_TICKS]] as const) {
+      if (at < 0) continue;
+      checked++;
+      hunts.rings++;
+      for (let t = at - need; t < at; t++)
+        if (!tr.seen[t]) {
+          fails.push(`seed ${seed} wave ${startWave}: ring ${id} unmarked at ${t} (within reach at ${at})`);
+          break;
+        }
+    }
   for (const [id, tr] of sig) {
     if (!tr.offAtBirth || tr.fill > sim.state.tick) continue; // (a run that ended before the fill never met it)
     checked++;
@@ -374,4 +398,36 @@ describe('phone portrait: the new bosses (FEATURES.bosses)', () => {
       expect(checked).toBeGreaterThan(kind === 'thorn' ? 20 : 4);
       if (kind === 'thorn') expect(lines).toBeGreaterThan(0);
     });
+});
+
+describe("phone portrait: the Toller's rings (FEATURES.bossMoves)", () => {
+  it("every ring is marked (or in view) >= 15 ticks before its band can reach the hero, an echo's return >= 45 ticks", { timeout: 120_000 }, () => {
+    const f = withFeatures('bosses', 'bossMoves');
+    const fails: string[] = [];
+    let rings = 0;
+    [1, 7, 42, 1234, 99991, 31337, 5, 11, 77, 404, 2024, 8080].forEach((seed, i) => {
+      const r = audit(seed, 3, i % 2 === 0, 60 * 40, PHONES[i % PHONES.length]!, f, { firstBoss: 'toller' });
+      fails.push(...r.fails);
+      rings += r.hunts.rings;
+    });
+    expect(fails).toEqual([]);
+    console.log(`edge markers, toller rings: ${rings} passes audited`);
+    expect(rings).toBeGreaterThan(5);
+  });
+});
+
+describe("phone portrait: the Lich's new moves (FEATURES.bossMoves)", () => {
+  it('every off-view grasp hand, blade and soulfire orb is marked >= 15 ticks before it can hit', { timeout: 120_000 }, () => {
+    const f = withFeatures('bossMoves');
+    const fails: string[] = [];
+    let checked = 0;
+    [1, 7, 42, 1234, 99991, 31337, 5, 11, 77, 404, 2024, 8080].forEach((seed, i) => {
+      const r = audit(seed, 3, i % 2 === 0, 60 * 40, PHONES[i % PHONES.length]!, f, { firstBoss: 'lich' });
+      fails.push(...r.fails);
+      checked += r.checked;
+    });
+    expect(fails).toEqual([]);
+    console.log(`edge markers, lich moves: ${checked} off-view threats`);
+    expect(checked).toBeGreaterThan(10);
+  });
 });

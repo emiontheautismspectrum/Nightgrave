@@ -179,6 +179,18 @@ export class SoundDiffer {
         case 'boss_bloom':
           out.push('bloom');
           break;
+        case 'boss_sink':
+          out.push('root_creep'); // FEATURES.bossMotion: roots pull the Thorn Mother down
+          break;
+        case 'boss_ring':
+          out.push('toll'); // FEATURES.bossMoves: the peal / echo rings out from the bell
+          break;
+        case 'boss_grasp':
+          out.push('bloom'); // FEATURES.bossMoves: a Lich hand bursts out of the ground (no new sound)
+          break;
+        case 'chain_bind':
+          out.push('root_creep'); // FEATURES.bossMoves: the chains wrap the hero (a creak; no new sound)
+          break;
         case 'pickup_take':
           out.push(e.kind === 'slow' ? 'pickup_slow' : 'pickup_double');
           break;

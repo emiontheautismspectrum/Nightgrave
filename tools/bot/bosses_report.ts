@@ -27,14 +27,19 @@ function merge(a: unknown, b: unknown): unknown {
   for (const [k, v] of Object.entries(b)) out[k] = merge(out[k], v);
   return out;
 }
-const BASE = withFeatures('bosses');
-const F = (process.env.NG_ROWS ? { ...BASE, bosses: merge(BASE.bosses, JSON.parse(process.env.NG_ROWS)) } : BASE) as typeof BASE;
+/** The flags of the run: NG_FLAGS=bosses,bossOrder,bossMotion,bossMoves (default: bosses). */
+const BASE = withFeatures(...((process.env.NG_FLAGS ?? 'bosses').split(',').filter(Boolean) as Parameters<typeof withFeatures>));
+/** NG_MOVES='{"toller":{"peal":{"weight":1}}}' deep-merges into the FEATURES.bossMoves rows (tuning only). */
+const F0 = (process.env.NG_ROWS ? { ...BASE, bosses: merge(BASE.bosses, JSON.parse(process.env.NG_ROWS)) } : BASE) as typeof BASE;
+const F = (process.env.NG_MOVES ? { ...F0, bossMoves: merge(F0.bossMoves, JSON.parse(process.env.NG_MOVES)) } : F0) as typeof BASE;
 const HEROES: HeroId[] = ['knight', 'wisp'];
 
-interface Fight { deaths: number; secs: number; causes: Record<string, number>; caps: { toll: number; knell: number; blooms: number; walls: number } }
+interface Caps { toll: number; knell: number; blooms: number; walls: number; rings: number; chains: number; soul: number; hands: number; handBlades: number }
+interface Fight { deaths: number; secs: number; causes: Record<string, number>; caps: Caps; picks: Record<string, number>; binds: number; bindDeaths: number }
 
 /** The cause of a death: the boss attack (by its serial) or the threat kind. */
 function cause(by: number, s: SimState, patterns: Map<number, string>): string {
+  if (by === -4) return patterns.get(s.rings?.[0]?.serial ?? -1) ?? 'ring';
   if (by === -3) return 'hedge';
   if (by === -2) return 'sigil';
   if (by === -1) return patterns.get(s.beams[0]?.serial ?? -1) ?? 'beam';
@@ -47,7 +52,9 @@ function immortal(kind: BossKind, hero: HeroId, seed: number): Fight {
   const sim = new Sim(seed * 7919, D, { hero, features: F, startWave: 3, firstBoss: kind });
   const bot = new SkilledBot(seed);
   const s = sim.state;
-  const out: Fight = { deaths: 0, secs: 0, causes: {}, caps: { toll: 0, knell: 0, blooms: 0, walls: 0 } };
+  const out: Fight = { deaths: 0, secs: 0, causes: {}, caps: { toll: 0, knell: 0, blooms: 0, walls: 0, rings: 0, chains: 0, soul: 0, hands: 0, handBlades: 0 }, picks: {}, binds: 0, bindDeaths: 0 };
+  let bound = false;
+  let bindDied = false;
   let start = -1;
   const patterns = new Map<number, string>();
   while (s.bossesDefeated === 0 && s.tick < 60 * 120) {
@@ -61,11 +68,13 @@ function immortal(kind: BossKind, hero: HeroId, seed: number): Fight {
         out.deaths++;
         const c = cause(by, snap, patterns);
         out.causes[c] = (out.causes[c] ?? 0) + 1;
+        if (snap.chain?.bound) bindDied = true;
       }
       const r = structuredClone(snap) as unknown as Record<string, unknown>;
       for (const k of Object.keys(r)) (s as unknown as Record<string, unknown>)[k] = r[k];
       if (by > 0) s.projectiles = s.projectiles.filter((p) => p.id !== by);
       else if (by === -3) s.walls = [];
+      else if (by === -4) s.rings = [];
       else if (by === -1) s.beams = [];
       else if (by === -2) s.sigils = s.sigils.filter((g) => Math.hypot(g.x - s.hero.x, g.y - s.hero.y) > g.r + 12);
       step(s, input, sim.params, sim.options);
@@ -75,7 +84,21 @@ function immortal(kind: BossKind, hero: HeroId, seed: number): Fight {
       }
     }
     if (s.events.some((e) => e.type === 'boss_intro')) start = s.tick - 1;
-    for (const e of s.events) if (e.type === 'boss_attack' && s.boss) patterns.set(s.boss.serial, e.pattern);
+    for (const e of s.events) {
+      if (e.type === 'boss_attack' && s.boss) {
+        patterns.set(s.boss.serial, e.pattern);
+        out.picks[e.pattern] = (out.picks[e.pattern] ?? 0) + 1;
+      }
+      if (e.type === 'chain_bind') {
+        out.binds++;
+        bound = true;
+        bindDied = false;
+      }
+    }
+    if (bound && !s.chain?.bound) {
+      bound = false;
+      if (bindDied) out.bindDeaths++;
+    }
     const b = s.boss;
     if (b) {
       const toll = s.projectiles.filter((p) => p.boss > 0 && p.kind === 'orb_small' && kind === 'toller');
@@ -86,6 +109,18 @@ function immortal(kind: BossKind, hero: HeroId, seed: number): Fight {
       const lit = (b.attack?.pattern === 'bloom' && s.tick >= b.attack.windStart ? b.attack.points.length : 0) + (b.pending ?? []).filter((e) => e.op === 'bloom').length;
       out.caps.blooms = Math.max(out.caps.blooms, lit);
       out.caps.walls = Math.max(out.caps.walls, s.walls?.length ?? 0);
+      out.caps.rings = Math.max(out.caps.rings, s.rings?.length ?? 0);
+      out.caps.chains = Math.max(out.caps.chains, s.chain ? 1 : 0);
+      if (kind === 'lich') {
+        const orbs = new Map<number, number>();
+        for (const pr of s.projectiles) if (pr.boss > 0 && pr.kind === 'orb_small' && patterns.get(pr.boss) === 'soulfire') orbs.set(pr.boss, (orbs.get(pr.boss) ?? 0) + 1);
+        out.caps.soul = Math.max(out.caps.soul, ...orbs.values(), 0);
+        const hands = (b.attack?.pattern === 'grasp' && s.tick >= b.attack.windStart ? b.attack.points.length : 0) + (b.pending ?? []).filter((e) => e.op === 'grasp').length;
+        out.caps.hands = Math.max(out.caps.hands, hands);
+        const blades = new Map<number, number>();
+        for (const pr of s.projectiles) if (pr.boss > 0 && pr.kind === 'blade' && patterns.get(pr.boss) === 'grasp') blades.set(pr.boss, (blades.get(pr.boss) ?? 0) + 1);
+        out.caps.handBlades = Math.max(out.caps.handBlades, ...blades.values(), 0);
+      }
     }
   }
   out.secs = (s.tick - start) / 60;
@@ -107,9 +142,9 @@ const median = (a: number[]): number => {
 };
 const rel = (a: number, b: number): number => Math.abs(a - b) / Math.max(a, b, 1e-9);
 
-console.log(`boss report: ${D}, ${N} seeds per hero, first encounter, FEATURES.bosses enabled`);
+console.log(`boss report: ${D}, ${N} seeds per hero, first encounter, flags ${process.env.NG_FLAGS ?? 'bosses'}`);
 for (const kind of KINDS) {
-  const per: Record<string, { dpf: number; win: number; secs: number[]; causes: Record<string, number>; caps: Fight['caps'] }> = {};
+  const per: Record<string, { dpf: number; win: number; secs: number[]; causes: Record<string, number>; caps: Fight['caps']; picks: Record<string, number>; binds: number; bindDeaths: number }> = {};
   for (const hero of HEROES) {
     const fights: Fight[] = [];
     let win = 0;
@@ -118,12 +153,16 @@ for (const kind of KINDS) {
       if (survives(kind, hero, seed)) win++;
     }
     const causes: Record<string, number> = {};
-    const caps = { toll: 0, knell: 0, blooms: 0, walls: 0 };
+    const picks: Record<string, number> = {};
+    const caps: Caps = { toll: 0, knell: 0, blooms: 0, walls: 0, rings: 0, chains: 0, soul: 0, hands: 0, handBlades: 0 };
     for (const f of fights) {
       for (const [k, v] of Object.entries(f.causes)) causes[k] = (causes[k] ?? 0) + v;
-      for (const k of Object.keys(caps) as (keyof typeof caps)[]) caps[k] = Math.max(caps[k], f.caps[k]);
+      for (const [k, v] of Object.entries(f.picks)) picks[k] = (picks[k] ?? 0) + v;
+      for (const k of Object.keys(caps) as (keyof Caps)[]) caps[k] = Math.max(caps[k], f.caps[k]);
     }
-    per[hero] = { dpf: fights.reduce((a, f) => a + f.deaths, 0) / N, win: win / N, secs: fights.map((f) => f.secs), causes, caps };
+    const binds = fights.reduce((a, f) => a + f.binds, 0);
+    const bindDeaths = fights.reduce((a, f) => a + f.bindDeaths, 0);
+    per[hero] = { dpf: fights.reduce((a, f) => a + f.deaths, 0) / N, win: win / N, secs: fights.map((f) => f.secs), causes, caps, picks, binds, bindDeaths };
   }
   const k = per.knight!;
   const w = per.wisp!;
@@ -132,4 +171,10 @@ for (const kind of KINDS) {
     ` | mortal wins knight ${(k.win * 100).toFixed(0)}% wisp ${(w.win * 100).toFixed(0)}% (${(rel(k.win, w.win) * 100).toFixed(0)}% apart)` +
     ` | fight s median ${median(all).toFixed(1)} min ${Math.min(...all).toFixed(1)} max ${Math.max(...all).toFixed(1)}`);
   console.log(`       causes knight ${JSON.stringify(k.causes)} wisp ${JSON.stringify(w.causes)} | caps ${JSON.stringify(k.caps)} ${JSON.stringify(w.caps)}`);
+  const all2 = { ...k.causes };
+  for (const [c, v] of Object.entries(w.causes)) all2[c] = (all2[c] ?? 0) + v;
+  const total = Object.values(all2).reduce((a, v) => a + v, 0) || 1;
+  const shares = Object.entries(all2).map(([c, v]) => `${c} ${((v / total) * 100).toFixed(0)}%`).join(', ');
+  const binds = k.binds + w.binds;
+  console.log(`       death shares ${shares} | picks ${JSON.stringify(k.picks)} | binds ${binds}, survived ${binds ? (((binds - k.bindDeaths - w.bindDeaths) / binds) * 100).toFixed(0) : '-'}%`);
 }

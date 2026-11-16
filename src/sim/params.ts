@@ -1,6 +1,6 @@
 import { TICK_RATE, TUNING, type Difficulty } from '../data/tuning';
 import { HERO_RULES, heroDef, type AnyHeroId } from '../data/heroes';
-import { FEATURES, type BriarLine, type Features, type HexKnot, type PatternPack, type TheToller, type ThornMother } from '../data/features';
+import { FEATURES, type BossMotion, type BossMoves, type TollerMoves, type BossOrder, type BriarLine, type Features, type HexKnot, type PatternPack, type TheToller, type ThornMother } from '../data/features';
 import { dcos, dsin, PI } from './dmath';
 
 /** Tuning converted to tick units for one run. Derived purely from TUNING + difficulty. */
@@ -114,7 +114,16 @@ export interface SimParams {
   /** The new bosses (FEATURES.bosses rows): the row when it is ENABLED, else null (then that boss never appears). */
   thorn: ThornMother | null;
   toller: TheToller | null;
+  /** FEATURES.bossOrder when it is ENABLED, else null (the fixed cycle of boss.ts). */
+  order: BossOrder | null;
+  /** FEATURES.bossMotion when it is ENABLED, else null (the bodies stand where they appear, as today). */
+  motion: BossMotion | null;
+  /** FEATURES.bossMoves when it is ENABLED, else null. Read a boss's rows only through the helpers below. */
+  moves: BossMoves | null;
 }
+
+/** The Toller's new moves: only while FEATURES.bossMoves AND the Toller itself are enabled (else null: ignored). */
+export const tollerMoves = (p: Pick<SimParams, 'moves' | 'toller'>): TollerMoves | null => (p.moves && p.toller ? p.moves.toller : null);
 
 export const ticks = (seconds: number): number => Math.max(1, Math.round(seconds * TICK_RATE));
 const hundredths = (v: number): number => Math.round(v * 100);
@@ -236,5 +245,8 @@ export function makeParams(difficulty: Difficulty, hero: AnyHeroId = 'classic', 
     briar: features.briar.enabled === true ? features.briar : null,
     thorn: features.bosses.thorn.enabled === true ? features.bosses.thorn : null,
     toller: features.bosses.toller.enabled === true ? features.bosses.toller : null,
+    order: features.bossOrder.enabled === true ? features.bossOrder : null,
+    motion: features.bossMotion.enabled === true ? features.bossMotion : null,
+    moves: features.bossMoves.enabled === true ? features.bossMoves : null,
   };
 }

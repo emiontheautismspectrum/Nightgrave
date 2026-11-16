@@ -71,6 +71,20 @@ Bosses
   - bell_ring 32x32 4f (bone): a thin ring widening from the bell on every toll beat (the rhythm, readable muted).
   - Telegraphs drawn in code: the pendulum's and the lash's thin start lines (blood_dark -> blood), the knell's
     shrinking red ring, the hedge's stirring red roots at her feet.
+- U3b placeholders (FEATURES.bossMotion / bossMoves, dark; drawn in code in `src/render/BossView.ts` with palette
+  colours only, to be REPLACED by art in the boss art stage):
+  - the Toller's RING (peal / echo): a red (blood) circle 2 px thick with its cut gaps left out; its wind-up: red ticks
+    forming around the bell (blood_dark -> blood). Art wanted: a bronze-red shock ring with a soft inner edge, the cut
+    gaps shown as torn ends. An echo out beyond the arena: bone ticks along the arena border (keep them: a cue).
+  - the CHAIN: a line from the Toller's raised hand (stone with bone links = IRON, ash grey; violet = PARRY-BREAK), the
+    spot's circle (16 px) during the telegraph, a ring of links around the bound hero. Art wanted: chain link tiles
+    (8 x 8, two variants), a hand-raise frame on the Toller (cast row), wrap-around links on the hero (2 frames).
+  - the Lich's GRASP hands: a red ring closing in around bone fingers rising from the ground. Art wanted: bone_hand
+    16 x 16 4f (rising), a red ground crack ring.
+  - the Lich's SOULFIRE wind-up: violet sparks circling the Lich (art: 6-frame violet ember swirl).
+  - the Thorn Mother's sink / emerge: her death frames (forward, then reversed) with a downward shift and a fade; art
+    wanted: a sink 6f row (roots pulling her down) and an emerge row.
+  - the Eye's and the Lich's bob: a render-only sine shift of the body (2 px).
 
 Pickups
 - pickup_slow_time 12x12 4f (teal hourglass), pickup_double_score 12x12 4f (gold "x2" rune)

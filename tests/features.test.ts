@@ -59,7 +59,7 @@ export function guarded(features: Features): Features {
 describe('feature flags: the production build is dark', () => {
   it('every block is disabled and the table is frozen', () => {
     expect(KEYS.length).toBeGreaterThan(0);
-    expect(FLAGS).toEqual(['patternPack', 'knot', 'briar', 'thorn', 'toller']);
+    expect(FLAGS).toEqual(['patternPack', 'knot', 'briar', 'thorn', 'toller', 'bossOrder', 'bossMotion', 'bossMoves']);
     for (const k of FLAGS) expect(flagOn(FEATURES, k), k).toBe(false);
     expect(Object.isFrozen(FEATURES)).toBe(true);
     for (const k of KEYS) expect(Object.isFrozen(FEATURES[k])).toBe(true);
@@ -222,8 +222,12 @@ describe('feature flags: an enabled variant', () => {
       expect(() => decodeReplay(r), combo.join('+')).toThrow(/different tuning/);
       expect(() => playReplay(r), combo.join('+')).toThrow(/different tuning/);
       expect(playReplay(r, { features: f }).score).toBe(sim.score);
-      // never under the flags of another combination either
-      for (const other of combos) if (other !== combo) expect(() => decodeReplay(r, withFeatures(...other))).toThrow(/different tuning/);
+      // never under the flags of another combination either (every combination has its own fingerprint, checked
+      // above: the replay is tried under each combination one switch away from its own)
+      for (const k of FLAGS) {
+        const other = combo.includes(k) ? combo.filter((x) => x !== k) : [...combo, k];
+        expect(() => decodeReplay(r, withFeatures(...other)), `${combo.join('+')} vs ${other.join('+')}`).toThrow(/different tuning/);
+      }
     }
   });
 

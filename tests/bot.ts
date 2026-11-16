@@ -5,6 +5,8 @@
 import { BTN_DASH, BTN_PARRY, type InputFrame } from '../src/sim/input';
 import { inParryZone } from '../src/sim/parryZone';
 import { dashCooldownLeft, isFading, parryCooldownLeft, type Sim } from '../src/sim/sim';
+import type { Ring } from '../src/sim/state';
+import { breakBound, inRingGap } from '../src/sim/tollerMoves';
 
 export interface BotOptions {
   /** false = dodge-only bot (never presses parry). Default true. */
@@ -17,6 +19,37 @@ export interface BotOptions {
    * of this runs while no knot exists, so the bot plays exactly as before without the block.
    */
   knots?: boolean;
+  /**
+   * The Toller's rings (FEATURES.bossMoves only): the caller (the skilled bot) parries a ring itself when its parry is
+   * ready in time, so this bot does not dash across that ring. Default false: dash across every ring (and parry it when
+   * the pulse covers it, if `parry`).
+   */
+  ringParry?: boolean;
+}
+
+/**
+ * The Toller's ring coming at the hero (FEATURES.bossMoves only): the most urgent band that is not passing through a
+ * gap at the hero's angle. ticks = until its band touches the hero; (nx, ny) = its point nearest the hero; (ux, uy) =
+ * the way across the band (a dash that way crosses it).
+ */
+export function ringAhead(sim: Sim): { ticks: number; gap: number; nx: number; ny: number; ux: number; uy: number; ring: Ring } | null {
+  const s = sim.state;
+  const p = sim.params;
+  const h = s.hero;
+  let best: { ticks: number; gap: number; nx: number; ny: number; ux: number; uy: number; ring: Ring } | null = null;
+  for (const ring of s.rings ?? []) {
+    const d = Math.hypot(h.x - ring.x, h.y - ring.y) || 1e-6;
+    const ux = (h.x - ring.x) / d;
+    const uy = (h.y - ring.y) / d;
+    const outward = ring.phase === 'grow';
+    if (outward ? ring.r > d + ring.halfWidth + p.heroRadius : ring.r < d - ring.halfWidth - p.heroRadius) continue; // passed
+    if (inRingGap(ring, ux, uy, d, p.heroRadius + 1)) continue; // it passes through a gap here
+    const gap = Math.max(0, Math.abs(d - ring.r) - ring.halfWidth - p.heroRadius);
+    const ticks = ring.phase === 'hold' ? ring.holdUntil - s.tick + gap / ring.back : gap / (outward ? ring.speed : ring.back);
+    const dir = outward ? -1 : 1; // across the band: towards the centre (it grows) or away from it (it returns)
+    if (!best || ticks < best.ticks) best = { ticks, gap, nx: ring.x + ux * ring.r, ny: ring.y + uy * ring.r, ux: ux * dir, uy: uy * dir, ring };
+  }
+  return best;
 }
 
 /** A briar line ahead of the hero (FEATURES.briar): ticks until it touches the hero, and the gap error across it. */
@@ -211,7 +244,13 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
       fy += (dy / d) * w - (p.cy - h.y) * 0.002;
     }
   }
-  if (parryTarget && opts.parry !== false && parryCooldownLeft(s, p) === 0) buttons |= BTN_PARRY;
+  // the Toller's rings and chains (FEATURES.bossMoves only): parry a ring the pulse covers, dash across one about to
+  // touch; a bound bot obeys the bind (parries when parry-bound, dashes out when iron-bound)
+  const bound = s.chain && s.chain.bound ? s.chain : null;
+  const mayParry = opts.parry !== false || (!!s.chain && breakBound(s));
+  const ra = s.rings && s.rings.length ? ringAhead(sim) : null;
+  if (ra && mayParry && inParryZone(h.x, h.y, h.aimX, h.aimY, ra.nx, ra.ny, ra.ring.halfWidth - 1, p) >= 0) parryTarget = true;
+  if (parryTarget && mayParry && parryCooldownLeft(s, p) === 0) buttons |= BTN_PARRY;
   // beam: get behind its start line (opposite to the rotation) and stay there until it is over
   const bt = beamThreat(sim);
   if (bt) {
@@ -236,6 +275,21 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
       fx += (rx / d) * 4;
       fy += (ry / d) * 4;
       if (sim.state.tick >= g.fill - 3 && d < g.r + p.heroRadius + 1) dashAway = [rx / d, ry / d];
+    }
+  }
+  // the Lich's grasp hands (FEATURES.bossMoves only): keep out of a lit hand, it bursts into blades where it stands
+  const gb = s.boss;
+  if (gb && gb.kind === 'lich' && (gb.attack?.pattern === 'grasp' || gb.pending?.some((e) => e.op === 'grasp'))) {
+    const hands: [number, number][] = gb.attack?.pattern === 'grasp' && s.tick >= gb.attack.windStart ? [...gb.attack.points] : [];
+    for (const e of gb.pending ?? []) if (e.op === 'grasp') hands.push([e.x, e.y]);
+    for (const [x, y] of hands) {
+      const rx = h.x - x;
+      const ry = h.y - y;
+      const d = Math.sqrt(rx * rx + ry * ry) || 1;
+      if (d < 30) {
+        fx += (rx / d) * 4;
+        fy += (ry / d) * 4;
+      }
     }
   }
   // converging shots can cancel each other's sidestep: break the tie by stepping across the most urgent one
@@ -301,6 +355,19 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
     if (lane.axis === 'x') ty = Math.max(lane.gap - 12, Math.min(lane.gap + 12, ty));
     else tx = Math.max(lane.gap - 12, Math.min(lane.gap + 12, tx));
   }
+  // an echo out beyond the hero comes back: keep the dash for it unless something hits within a few ticks
+  // (FEATURES.bossMoves only)
+  for (const ring of s.rings ?? []) {
+    if (!ring.echo || ra?.ring === ring) continue;
+    const d = Math.hypot(h.x - ring.x, h.y - ring.y);
+    if (ring.r <= d) continue;
+    const back = ring.phase === 'grow' ? (ring.maxR - ring.r) / ring.speed + 30 + (ring.maxR - d) / ring.back : ring.phase === 'hold' ? ring.holdUntil - s.tick + (ring.r - d) / ring.back : (ring.r - d) / ring.back;
+    if (back < p.dashCooldown + 15 && nearT > 3) dashAway = null;
+  }
+  // (the rings and the binds come last: they override the other dash choices)
+  if (ra && ra.gap < 7 && !(opts.ringParry === true && parryCooldownLeft(s, p) <= ra.ticks)) dashAway = [ra.ux, ra.uy];
+  if (bound?.kind === 'iron' && s.tick - bound.land >= 12) dashAway ??= [(p.cx - h.x) / (Math.hypot(p.cx - h.x, p.cy - h.y) || 1), (p.cy - h.y) / (Math.hypot(p.cx - h.x, p.cy - h.y) || 1)];
+  if (bound?.kind === 'break') dashAway = null; // no dash while parry-bound
   if (dashAway && dashCooldownLeft(s, p) === 0) {
     buttons |= BTN_DASH;
     tx = h.x + dashAway[0] * 40;

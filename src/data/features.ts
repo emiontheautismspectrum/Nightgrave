@@ -196,17 +196,160 @@ export interface NewBosses {
 export const NEW_BOSS_KINDS = ['thorn', 'toller'] as const;
 export type NewBossKind = (typeof NEW_BOSS_KINDS)[number];
 
+/**
+ * BOSS ORDER (package U3b): every boss wave draws its kind among ALL bosses of the run (the Eye, the Lich and every
+ * enabled new boss) instead of the fixed cycle, with no immediate repeat. The draw is an integer hash of (seed, n)
+ * (boss.ts `randomBossKind`): no PRNG draw, so nothing else shifts. With only the two old bosses it is an
+ * alternation whose first boss is drawn.
+ */
+export interface BossOrder {
+  readonly enabled: boolean;
+}
+
+/** A drifting body (BOSS MOTION): its speed (px/s, along a straight line to its target) and its render-only bob. */
+interface DriftRow {
+  readonly speed: number;
+  /** RENDER ONLY (the sim's x, y carry no bob): amplitude (px) and period (s) of the bob drawn on top. */
+  readonly bobPx: number;
+  readonly bobSeconds: number;
+}
+
+/**
+ * BOSS MOTION (package U3b): the bodies move (src/sim/bossMotion.ts). Every body is HELD (does not move) from the
+ * start of an attack (the Lich's teleport-out, every wind-up) to its launch, and while a beam, a deferred emission or
+ * a ring of the boss is alive: telegraphs fixed at the wind-up start always match the attack. Motion begins at the
+ * intro's end. Targets and spots come from an integer hash of (seed, boss start, pick): no PRNG draw.
+ */
+export interface BossMotion {
+  readonly enabled: boolean;
+  /** The drift band: at least `inset` px inside the arena on every side, and no lower than y = `yMax`. */
+  readonly inset: number;
+  readonly yMax: number;
+  /** A drift target is never within this distance of the hero at the moment it is picked. */
+  readonly minHeroDist: number;
+  /** Eye Sentinel: slides between seeded targets in the band. */
+  readonly eye: DriftRow;
+  /** Lich Mage: drifts the same way; its teleports stay as they are, and the drift goes on from the new spot. */
+  readonly lich: DriftRow;
+  /**
+   * Thorn Mother: stands; before every `relocateEvery`-th attack she SINKS (`sinkSeconds`, she cannot launch) and
+   * EMERGES (`emergeSeconds`) at a seeded band spot >= `emergeMinHeroDist` from the hero, then winds up there.
+   */
+  readonly thorn: { readonly relocateEvery: number; readonly sinkSeconds: number; readonly emergeSeconds: number; readonly emergeMinHeroDist: number };
+  /** The Toller does not drift (speed 0): it teleports only with its `peal` (FEATURES.bossMoves). */
+  readonly toller: { readonly speed: number };
+}
+
+/** A lethal ring of the Toller (FEATURES.bossMoves): a full red circle, not a ring of projectiles (state.ts `Ring`). */
+interface RingRow extends AttackRow {
+  /** Wind-up in beats (>= 2): the bell swings, the ring forms as ticks around the body. */
+  readonly windupBeats: number;
+  /** Expansion speed (px/s at difficulty speed 1; x the difficulty speed and the encounter bonus; Slow Time slows it). */
+  readonly speed: number;
+  readonly halfWidth: number;
+  readonly startRadius: number;
+  /** Not picked, and a toll at the launch instead, while the hero is within this distance of the bell. */
+  readonly minHeroDist: number;
+}
+
+/**
+ * THE TOLLER'S NEW MOVES (FEATURES.bossMoves.toller; read only while the Toller itself is enabled). The ring is
+ * answered by the PARRY (a pulse covering the ring's nearest point cuts a gap there) or the DASH (i-frames); walking
+ * cannot pass a full ring. The chains BIND the hero (no damage). See docs/FEATURES.md.
+ */
+export interface TollerMoves {
+  /** The ring rule of every Toller fight with this block: cuts, and the launch deferral around a ring. */
+  readonly ring: {
+    /** A cut opens a gap of this half-angle (rad) at the angle of the cut; at most `maxGaps` per ring. */
+    readonly cutHalfRad: number;
+    readonly maxGaps: number;
+    /** No other attack of the boss launches while a ring will reach the hero's distance within `holdSeconds`, or
+     * passed it less than `passedSeconds` ago (the launch waits for the first free beat). */
+    readonly holdSeconds: number;
+    readonly passedSeconds: number;
+  };
+  /**
+   * PEAL: a ring expands from the bell (at least fast enough to leave the arena in `maxLeaveSeconds`); then the Toller
+   * teleports to a hashed spot of its band (>= `teleportMinHeroDist` from the hero) and its next `hastenCount` attacks
+   * come `hastenBeats` beats sooner (never closer than 2 beats).
+   */
+  readonly peal: RingRow & { readonly maxLeaveSeconds: number; readonly teleportInset: number; readonly teleportYMax: number; readonly teleportMinHeroDist: number; readonly hastenCount: number; readonly hastenBeats: number };
+  /**
+   * ECHO: the ring expands to the farthest arena corner + `edgeMarginPx`, HOLDS there (outside the arena) for
+   * `holdSeconds`, then contracts back to the bell at `returnFactor` x its speed; the whole life <= `maxLifeSeconds`.
+   */
+  readonly echo: RingRow & {
+    readonly edgeMarginPx: number;
+    readonly holdSeconds: number;
+    readonly returnFactor: number;
+    readonly maxLifeSeconds: number;
+    /** No other attack of the boss starts or launches while the echo is out beyond the hero (until it passed him back). */
+    readonly ownsReturn: boolean;
+  };
+  /**
+   * CHAINS: a chain lands on the hero's position fixed at the wind-up start (wind-up >= `telegraphSeconds`, whole
+   * beats); a hero still within `spotRadius` at the landing is BOUND. IRON (weight `ironWeight`): bound `ironSeconds`,
+   * the dash breaks it (cast only while the dash is ready). BREAK (weight `breakWeight`): bound until `breakParries`
+   * pulses were fired or `maxSeconds` passed; no dash meanwhile; the boss launches only the `allow` patterns (a toll's
+   * rings then come `boundRingBeats` beats apart, longer than the parry cooldown).
+   */
+  readonly chains: AttackRow & {
+    readonly windupBeats: number;
+    readonly telegraphSeconds: number;
+    readonly spotRadius: number;
+    readonly ironWeight: number;
+    readonly breakWeight: number;
+    readonly ironSeconds: number;
+    readonly breakParries: number;
+    readonly maxSeconds: number;
+    readonly allow: readonly ('toll')[];
+    readonly boundRingBeats: number;
+  };
+}
+
+/**
+ * BOSS MOVES (package U3b): new attacks of the existing bosses. A row is read only for a boss that exists in the run
+ * (`toller` needs FEATURES.bosses.toller enabled too; else it is ignored).
+ */
+export interface BossMoves {
+  readonly enabled: boolean;
+  readonly toller: TollerMoves;
+  readonly lich: LichMoves;
+}
+
+/**
+ * THE LICH'S NEW MOVES (FEATURES.bossMoves.lich; the old rows of TUNING.bosses.lich are untouched, these weights join
+ * its table after the old patterns). No new projectile kinds.
+ */
+export interface LichMoves {
+  /**
+   * SOULFIRE: a violet orb spiral from the Lich's body (where it stood at the launch) over `durationSeconds`: `count`
+   * (max `maxCount`) small orbs, each turned from the last by `turns` x 2 pi / count, never less than `gapRad` (a walking
+   * hero passes between two shots). Emitted through the deferred queue: one attack, one segment.
+   */
+  readonly soulfire: AttackRow & { readonly count: number; readonly maxCount: number; readonly durationSeconds: number; readonly turns: number; readonly gapRad: number; readonly speedFactor: number };
+  /**
+   * GRASP: `count` (max `maxCount`) bone hands: ground spots >= `minHeroDist` from the hero and `spacingPx` apart light up
+   * for `telegraphSeconds` (the wind-up), then each bursts into a red ring of `blades` blades with ONE gap (>= `gapRad`
+   * and >= 1.6 x the ring spacing) centred within `gapAimRad` of the hero's direction, `staggerSeconds` apart.
+   */
+  readonly grasp: AttackRow & { readonly count: number; readonly maxCount: number; readonly telegraphSeconds: number; readonly staggerSeconds: number; readonly minHeroDist: number; readonly spacingPx: number; readonly edgeInset: number; readonly blades: number; readonly gapRad: number; readonly gapAimRad: number; readonly speedFactor: number };
+}
+
 export interface Features {
   readonly patternPack: PatternPack;
   readonly knot: HexKnot;
   readonly briar: BriarLine;
   /** A GROUP block: it has no flag of its own, each row (`thorn`, `toller`) has one. */
   readonly bosses: NewBosses;
+  readonly bossOrder: BossOrder;
+  readonly bossMotion: BossMotion;
+  readonly bossMoves: BossMoves;
 }
 export type FeatureKey = keyof Features;
 /** Every switch: the plain blocks and the rows of the `bosses` group. */
 export type FeatureFlag = Exclude<FeatureKey, 'bosses'> | NewBossKind;
-export const FEATURE_FLAGS: readonly FeatureFlag[] = ['patternPack', 'knot', 'briar', ...NEW_BOSS_KINDS];
+export const FEATURE_FLAGS: readonly FeatureFlag[] = ['patternPack', 'knot', 'briar', ...NEW_BOSS_KINDS, 'bossOrder', 'bossMotion', 'bossMoves'];
 /** Is this switch on (exactly true)? */
 export function flagOn(features: Features, flag: FeatureFlag): boolean {
   return flag === 'thorn' || flag === 'toller' ? features.bosses[flag].enabled === true : features[flag].enabled === true;
@@ -263,6 +406,30 @@ export const FEATURES: Features = deepFreeze({
       toll: { weight: 3, rings: 3, count: 9, maxCount: 10, gapRad: 1.0, gapStepRad: 1.7, gapAimRad: 0.4, speed: 80 },
       pendulum: { weight: 4, windupBeats: 2, degPerSecond: 55, sweepDeg: 50, halfWidth: 2, length: 440, offsetMinPx: 18, offsetMaxPx: 34 },
       knell: { weight: 3.5, count: 15, maxCount: 18, gapRad: 0.6, gapAimRad: 0.6, speedFactor: 1.35 },
+    },
+  },
+  bossOrder: { enabled: false },
+  bossMotion: {
+    enabled: false,
+    inset: 30,
+    yMax: 120,
+    minHeroDist: 80,
+    eye: { speed: 14, bobPx: 2, bobSeconds: 2.4 },
+    lich: { speed: 12, bobPx: 2, bobSeconds: 1.6 },
+    thorn: { relocateEvery: 3, sinkSeconds: 0.6, emergeSeconds: 0.6, emergeMinHeroDist: 90 },
+    toller: { speed: 0 },
+  },
+  bossMoves: {
+    enabled: false,
+    toller: {
+      ring: { cutHalfRad: 0.45, maxGaps: 4, holdSeconds: 1.5, passedSeconds: 0.5 },
+      peal: { weight: 0.55, windupBeats: 2, speed: 90, halfWidth: 2, startRadius: 8, minHeroDist: 70, maxLeaveSeconds: 4.5, teleportInset: 30, teleportYMax: 120, teleportMinHeroDist: 90, hastenCount: 1, hastenBeats: 1 },
+      echo: { weight: 0.5, windupBeats: 2, speed: 100, halfWidth: 2, startRadius: 8, minHeroDist: 70, edgeMarginPx: 20, holdSeconds: 0.5, returnFactor: 0.7, maxLifeSeconds: 8, ownsReturn: true },
+      chains: { weight: 0.6, windupBeats: 2, telegraphSeconds: 0.75, spotRadius: 16, ironWeight: 1, breakWeight: 1, ironSeconds: 2.0, breakParries: 3, maxSeconds: 5.0, allow: ['toll'], boundRingBeats: 2 },
+    },
+    lich: {
+      soulfire: { weight: 1.4, count: 10, maxCount: 12, durationSeconds: 1.0, turns: 1, gapRad: 0.5, speedFactor: 0.95 },
+      grasp: { weight: 1.5, count: 3, maxCount: 3, telegraphSeconds: 0.75, staggerSeconds: 0.3, minHeroDist: 90, spacingPx: 60, edgeInset: 30, blades: 6, gapRad: 0.5, gapAimRad: 1.0, speedFactor: 1.2 },
     },
   },
 });
