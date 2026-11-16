@@ -274,6 +274,19 @@ export class BossView {
           this.gfx.lineStyle(1, k > 0.6 ? COL.blood : COL.bloodDark, 1);
           this.gfx.strokeCircle(Math.round(b.x), Math.round(b.y), Math.round(22 - k * 10));
           break;
+        case 'grasp':
+          // FEATURES.bossMoves placeholder: bone hands rising where the red blade rings will burst
+          for (const [x, y] of a.points) this.graspAt(x, y, k);
+          break;
+        case 'soulfire': {
+          // FEATURES.bossMoves placeholder: violet sparks gathering around the Lich
+          this.gfx.fillStyle(COL.violet, 1);
+          for (let i = 0; i < 6; i++) {
+            const ang = (2 * Math.PI * i) / 6 + k * 3;
+            this.gfx.fillRect(Math.round(b.x + Math.cos(ang) * (14 - k * 6)) - 1, Math.round(b.y - 16 + Math.sin(ang) * (14 - k * 6)) - 1, 2, 2);
+          }
+          break;
+        }
         case 'peal':
         case 'echo': {
           // FEATURES.bossMoves: the ring forms as ticks around the bell over the wind-up (red: walking will not pass it)
@@ -296,8 +309,11 @@ export class BossView {
           break;
       }
     }
-    // blooms launched but not yet burst stay fully lit until they burst (FEATURES.bosses.thorn)
-    for (const e of b.pending ?? []) if (e.op === 'bloom') bloomAt(e.x, e.y, 3);
+    // blooms launched but not yet burst stay fully lit until they burst (FEATURES.bosses.thorn); so do the Lich's hands
+    for (const e of b.pending ?? []) {
+      if (e.op === 'bloom') bloomAt(e.x, e.y, 3);
+      else if (e.op === 'grasp') this.graspAt(e.x, e.y, 1);
+    }
     for (let i = blooms; i < this.bloomPool.length; i++) this.bloomPool[i]!.setVisible(false);
     // the Toller's toll markers: a bone ring widening from the bell on every toll beat
     this.tolls = this.tolls.filter((s0) => t - s0 < 20);
@@ -323,6 +339,15 @@ export class BossView {
       this.barGfx.fillStyle(flash ? COL.violet : on ? COL.bone : COL.violetDark, flash || on ? 1 : 0.6);
       this.barGfx.fillRect(x0, B.y + 2, x1 - x0, BAR_H - 4);
     }
+  }
+
+  /** FEATURES.bossMoves placeholder: a bone hand (`k` 0..1 risen) inside a red ring that closes in as it rises. */
+  private graspAt(x: number, y: number, k: number): void {
+    const [cx, cy] = [Math.round(x), Math.round(y)];
+    this.gfx.lineStyle(1, k > 0.6 ? COL.blood : COL.bloodDark, 1).strokeCircle(cx, cy, Math.round(12 - k * 5));
+    const h = Math.round(2 + k * 5); // the fingers rise
+    this.gfx.fillStyle(COL.bone, 1);
+    for (let i = -2; i <= 2; i++) this.gfx.fillRect(cx + i * 2, cy - h + Math.abs(i), 1, h - Math.abs(i));
   }
 
   /**

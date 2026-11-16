@@ -34,7 +34,7 @@ export interface EdgeMarker {
 export const MARKER_INSET = 6;
 
 /** Wind-ups of red (unparryable) boss attacks: the boss marker turns red while one winds up. */
-const RED_WINDUPS: ReadonlySet<BossPattern> = new Set<BossPattern>(['beam', 'pendulum', 'knell', 'lash', 'hedge', 'peal', 'echo']);
+const RED_WINDUPS: ReadonlySet<BossPattern> = new Set<BossPattern>(['beam', 'pendulum', 'knell', 'lash', 'hedge', 'peal', 'echo', 'grasp']);
 
 /** The distance from a ring's centre to the farthest arena corner. */
 const farCorner = (p: SimParams, x: number, y: number): number =>
@@ -99,9 +99,12 @@ export function edgeMarkers(s: SimState, p: SimParams, v: ViewRect, horizonTicks
     // FEATURES.bossMotion: a sinking Thorn Mother is no threat (she reappears, marked again, from the tick she emerges)
     const sinking = !!a && b.kind === 'thorn' && a.tpIn > a.tpOut && t >= a.tpOut && t < a.tpIn;
     if (!sinking) add('b', b.x, b.y, winding && a && RED_WINDUPS.has(a.pattern) ? 'red' : 'violet', winding ? 3 : near(b.x, b.y));
-    if (a && winding) a.points.forEach(([x, y], i) => add(`bp${i}`, x, y, 'violet', near(x, y)));
-    // a new boss's blooms still to burst (FEATURES.bosses.thorn): lit until they burst
-    for (const e of b.pending ?? []) if (e.op === 'bloom') add(`bq${e.serial}:${Math.round(e.x)},${Math.round(e.y)}`, e.x, e.y, 'violet', near(e.x, e.y));
+    // (the Lich's grasp hands, FEATURES.bossMoves, burst into red blades)
+    if (a && winding) a.points.forEach(([x, y], i) => add(`bp${i}`, x, y, a.pattern === 'grasp' ? 'red' : 'violet', near(x, y)));
+    // a new boss's blooms still to burst (FEATURES.bosses.thorn) and the Lich's hands (FEATURES.bossMoves): lit until
+    // they burst
+    for (const e of b.pending ?? [])
+      if (e.op === 'bloom' || e.op === 'grasp') add(`bq${e.serial}:${Math.round(e.x)},${Math.round(e.y)}`, e.x, e.y, e.op === 'grasp' ? 'red' : 'violet', near(e.x, e.y));
   }
   for (const bm of s.beams) if (t >= bm.start && t < bm.end) add(`m${bm.serial}`, bm.x, bm.y, 'red', 3);
   // FEATURES.bossMoves: a ring at its point nearest the hero: red while its band comes at the hero within the horizon,

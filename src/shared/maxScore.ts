@@ -48,7 +48,10 @@ export function maxSpawnsPerSecond(features: Features = FEATURES): number {
   const tm = features.bossMoves.enabled === true && to.enabled === true ? features.bossMoves.toller : null;
   const tollerCad = tm ? hastenedCadence(to.cadenceSeconds, to.beatTicks, tm.peal.hastenBeats) : to.enabled === true ? to.cadenceSeconds : 1;
   const toller = to.enabled === true ? (Math.max(to.toll.rings * to.toll.maxCount, to.knell.maxCount) + (tm ? 1 : 0)) / tollerCad : 0;
-  const boss = Math.max(ring / Math.min(B.eye.cadenceSeconds, B.lich.cadenceSeconds), thorn, toller);
+  // FEATURES.bossMoves: the Lich's soulfire (its orbs) and grasp (its blades) at its cadence
+  const lm = features.bossMoves.enabled === true ? features.bossMoves.lich : null;
+  const lich = lm ? Math.max(lm.soulfire.maxCount, lm.grasp.maxCount * lm.grasp.blades) / B.lich.cadenceSeconds : 0;
+  const boss = Math.max(ring / Math.min(B.eye.cadenceSeconds, B.lich.cadenceSeconds), thorn, toller, lich);
   return stream + sets + casters + boss;
 }
 

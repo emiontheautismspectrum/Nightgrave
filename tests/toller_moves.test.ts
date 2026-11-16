@@ -42,7 +42,7 @@ function run(sim: Sim, input: (sim: Sim) => InputFrame, stop: (sim: Sim) => bool
 const launched = (s: SimState, k?: BossPattern): boolean => s.events.some((e) => e.type === 'boss_attack' && (k === undefined || e.pattern === k));
 
 describe('bossMoves: dark and gated', () => {
-  it('the Toller rows are ignored (never read) without the Toller; nothing changes', () => {
+  it('the Toller rows are ignored (never read) without the Toller: no ring, no chain, the same run', () => {
     for (const extra of [[], ['thorn']] as const) {
       const on = withFeatures('bossMoves', ...extra);
       const sealedToller = new Proxy(on.bossMoves.toller, {
@@ -55,7 +55,8 @@ describe('bossMoves: dark and gated', () => {
       expect(tollerMoves(makeParams('hard', 'knight', G))).toBeNull();
       const frames = mulberryInputs(17, 60 * 80);
       const a = new Sim(4243, 'hard', { hero: 'knight', features: G, startWave: 3 });
-      const b = new Sim(4243, 'hard', { hero: 'knight', features: withFeatures(...extra), startWave: 3 });
+      // the same block with readable Toller rows: the sealed rows change nothing (they are never read)
+      const b = new Sim(4243, 'hard', { hero: 'knight', features: on, startWave: 3 });
       for (const fr of frames) {
         a.state.alive = b.state.alive = true;
         a.step(fr);

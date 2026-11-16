@@ -71,3 +71,9 @@ export function onlyTollerMove(pattern: BossPattern, extra: Features = withFeatu
   for (const k of TOLLER_MOVES) mv[k] = { ...(base.bossMoves.toller as unknown as Record<string, object>)[k], weight: k === pattern ? 1 : 0 };
   return { ...base, bosses: { ...base.bosses, toller: row as unknown as TheToller }, bossMoves: { ...base.bossMoves, toller: mv as unknown as Features['bossMoves']['toller'] } };
 }
+
+/** A variant (bossMoves, plus `extra` blocks) whose Lich almost always picks `pattern` (its old rows live in TUNING). */
+export function lichMostly(pattern: 'soulfire' | 'grasp', extra: Features = withFeatures('bossMoves')): Features {
+  const l = extra.bossMoves.lich;
+  return { ...extra, bossMoves: { ...extra.bossMoves, lich: { soulfire: { ...l.soulfire, weight: pattern === 'soulfire' ? 1e6 : 0 }, grasp: { ...l.grasp, weight: pattern === 'grasp' ? 1e6 : 0 } } } };
+}

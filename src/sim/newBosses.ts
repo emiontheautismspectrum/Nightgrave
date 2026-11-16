@@ -13,6 +13,7 @@ import { dcos, dsin, PI, rotate } from './dmath';
 import { inGapCorridor, placeWall, planWall } from './hunts';
 import { ticks, tollerMoves, type SimParams } from './params';
 import { beginTollerMove, breakBound, landChain, launchRing, tollerMoveTable } from './tollerMoves';
+import { emitLich, launchLichMove } from './lichMoves';
 import { nextFloat, range } from './rng';
 import { reachableBeamSign, type Spawn } from './boss';
 import type { Beam, Boss, BossAttack, BossEmission, BossPattern, SimState } from './state';
@@ -26,7 +27,7 @@ const BLOOM_CLEAR = 12;
 
 const d2 = (ax: number, ay: number, bx: number, by: number): number => (ax - bx) * (ax - bx) + (ay - by) * (ay - by);
 /** Unit direction from (x, y) to the hero; straight down when the hero stands exactly there. */
-function aimAt(s: SimState, x: number, y: number): [number, number] {
+export function aimAt(s: SimState, x: number, y: number): [number, number] {
   const dx = s.hero.x - x;
   const dy = s.hero.y - y;
   const d = Math.sqrt(dx * dx + dy * dy);
@@ -50,7 +51,7 @@ const scaled = (p: SimParams, base: number, max: number): number => Math.max(1, 
  * distance is moved along its own line to just beyond it (aimed shots back, radial shots forward); one that would then
  * leave the field is dropped. `cued` = a ground cue the player saw at that very spot (a bloom): spawned in place.
  */
-function shot(s: SimState, p: SimParams, spawn: Spawn, serial: number, tele: number, kind: ShotKind, x: number, y: number, vx: number, vy: number, aimed: boolean, cued = false): void {
+export function shot(s: SimState, p: SimParams, spawn: Spawn, serial: number, tele: number, kind: ShotKind, x: number, y: number, vx: number, vy: number, aimed: boolean, cued = false): void {
   const h = s.hero;
   const fair2 = p.fairDistance * p.fairDistance;
   const m = p.despawnMargin - 2;
@@ -87,7 +88,7 @@ export function tollGeometry(p: SimParams): { n: number; gap: number; step: numb
  * `n` unit directions evenly over the circle minus ONE gap of `gap` rad centred on the unit direction (gx, gy); the
  * gap is exact. Vector math only (dmath rotations: no engine-dependent Math functions in the sim).
  */
-function gappedRing(n: number, gx: number, gy: number, gap: number): [number, number][] {
+export function gappedRing(n: number, gx: number, gy: number, gap: number): [number, number][] {
   const out: [number, number][] = [];
   const span = 2 * PI - gap;
   for (let k = 0; k < n; k++) out.push(rotate(gx, gy, gap / 2 + (n === 1 ? span / 2 : (span * k) / (n - 1))));
@@ -213,7 +214,7 @@ export function beginNewAttack(s: SimState, p: SimParams, b: Boss, pattern: Boss
 
 // ------------------------------------------------------------------ the launch
 
-/** Launch an attack of a new boss (boss.ts already removed its one segment and set b.serial). */
+/** Launch an attack of a new boss, or a new move of an old one (boss.ts already removed its one segment, set b.serial). */
 export function launchNew(s: SimState, p: SimParams, b: Boss, a: BossAttack, pattern: NewPattern, spawn: Spawn): void {
   const serial = b.serial;
   const tele = a.fire - a.windStart;
@@ -318,6 +319,9 @@ export function launchNew(s: SimState, p: SimParams, b: Boss, a: BossAttack, pat
     case 'chains':
       landChain(s, p); // FEATURES.bossMoves: the chain lands: the hero on its spot is bound
       return;
+    case 'soulfire':
+    case 'grasp':
+      return launchLichMove(s, p, b, a, pattern, spawn); // FEATURES.bossMoves: the Lich's new moves
     default:
       return unknownPattern(pattern);
   }
@@ -358,6 +362,9 @@ function emit(s: SimState, p: SimParams, b: Boss, e: BossEmission, spawn: Spawn)
       s.beams.push({ serial: e.serial, x: b.x, y: b.y, dirX: e.dirX, dirY: e.dirY, turnC: dcos(w), turnS: dsin(w), start: s.tick, end: s.tick + e.n, halfWidth: c.halfWidth, length: c.length });
       return;
     }
+    case 'soul':
+    case 'grasp':
+      return emitLich(s, p, b, e, spawn); // FEATURES.bossMoves: the Lich's new moves
     default:
       return unknownEmission(e);
   }

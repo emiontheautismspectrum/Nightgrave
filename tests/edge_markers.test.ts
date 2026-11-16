@@ -415,3 +415,19 @@ describe("phone portrait: the Toller's rings (FEATURES.bossMoves)", () => {
     expect(rings).toBeGreaterThan(5);
   });
 });
+
+describe("phone portrait: the Lich's new moves (FEATURES.bossMoves)", () => {
+  it('every off-view grasp hand, blade and soulfire orb is marked >= 15 ticks before it can hit', { timeout: 120_000 }, () => {
+    const f = withFeatures('bossMoves');
+    const fails: string[] = [];
+    let checked = 0;
+    [1, 7, 42, 1234, 99991, 31337, 5, 11, 77, 404, 2024, 8080].forEach((seed, i) => {
+      const r = audit(seed, 3, i % 2 === 0, 60 * 40, PHONES[i % PHONES.length]!, f, { firstBoss: 'lich' });
+      fails.push(...r.fails);
+      checked += r.checked;
+    });
+    expect(fails).toEqual([]);
+    console.log(`edge markers, lich moves: ${checked} off-view threats`);
+    expect(checked).toBeGreaterThan(10);
+  });
+});

@@ -61,7 +61,8 @@ export type BossPattern =
   | 'fan' | 'wraiths' | 'triple' // lich
   | 'hedge' | 'bloom' | 'lash' | 'spores' // thorn mother
   | 'toll' | 'pendulum' | 'knell' // the toller
-  | 'peal' | 'echo' | 'chains'; // the toller's new moves (FEATURES.bossMoves only)
+  | 'peal' | 'echo' | 'chains' // the toller's new moves (FEATURES.bossMoves only)
+  | 'soulfire' | 'grasp'; // the lich's new moves (FEATURES.bossMoves only)
 
 /** A boss attack in progress: [windStart, fire) wind-up (telegraph), launched at `fire`. */
 export interface BossAttack {
@@ -92,7 +93,11 @@ export type BossEmission =
   /** The Toller: ring `k` of a toll (its gap centred on the unit direction gapX, gapY). */
   | { op: 'toll'; at: number; serial: number; k: number; gapX: number; gapY: number; tele: number }
   /** The Toller: the pendulum's second pass, from (dirX, dirY) rotating by -sign back to the start line for `n` ticks. */
-  | { op: 'swing'; at: number; serial: number; dirX: number; dirY: number; sign: number; n: number };
+  | { op: 'swing'; at: number; serial: number; dirX: number; dirY: number; sign: number; n: number }
+  /** The Lich's soulfire (FEATURES.bossMoves): one orb from (x, y), where the Lich stood at the launch, along (dirX, dirY). */
+  | { op: 'soul'; at: number; serial: number; x: number; y: number; dirX: number; dirY: number; tele: number }
+  /** The Lich's grasp (FEATURES.bossMoves): a lit hand at (x, y) bursts into its blade ring (gap: the hero's direction + off). */
+  | { op: 'grasp'; at: number; serial: number; x: number; y: number; off: number; tele: number };
 
 /** The rotating eye beam (unparryable). Active (lethal) for ticks [start, end). */
 export interface Beam {
@@ -133,7 +138,10 @@ export interface Boss {
   deathTick: number;
   /** Speed multiplier for this encounter (difficulty speed is already in the params). */
   speed: number;
-  /** New bosses only (the key exists only there): deferred emissions of launched attacks, in `at` order. */
+  /**
+   * New bosses, and the Lich's new moves (FEATURES.bossMoves; the key exists only there): deferred emissions of
+   * launched attacks, in `at` order.
+   */
   pending?: BossEmission[];
   /**
    * FEATURES.bossMotion only (the key exists only there, from the first moving tick): the drift target and the number
@@ -413,6 +421,8 @@ export type SimEvent =
   | { type: 'chain_bind'; kind: 'iron' | 'break' }
   | { type: 'chain_miss' }
   | { type: 'chain_free'; how: 'dash' | 'parries' | 'time' | 'boss' }
+  /** A Lich grasp hand burst (FEATURES.bossMoves only). */
+  | { type: 'boss_grasp'; x: number; y: number }
   /** The Thorn Mother sinks into the ground to relocate (FEATURES.bossMotion only). */
   | { type: 'boss_sink'; x: number; y: number }
   /** A Thorn Mother bloom burst (FEATURES.bosses.thorn only). */

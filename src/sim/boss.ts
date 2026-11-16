@@ -10,6 +10,7 @@ import { nextFloat, range } from './rng';
 import type { Beam, Boss, BossAttack, BossKind, BossPattern, SimState } from './state';
 import { beatTicks, beginNewAttack, launchNew, newBossClear, newPatternTable, onBeat, runPending } from './newBosses';
 import { breakBound, earlierHazardsAlive, isTollerMove, mustWait, ringBlocks } from './tollerMoves';
+import { lichMoveTable, lichMoveWindup, prepareGrasp } from './lichMoves';
 import { emergeSpot, moveBoss, sinkDue } from './bossMotion';
 
 /** Spawner callback (waves.spawnProjectile), injected to avoid an import cycle. */
@@ -198,8 +199,10 @@ function patternTable(s: SimState, p: SimParams, kind: BossKind): [BossPattern, 
   switch (kind) {
     case 'eye':
       return [['ring', p.bosses.eye.ring.weight], ['beam', p.bosses.eye.beam.weight], ['spawns', p.bosses.eye.spawns.weight]];
-    case 'lich':
-      return [['fan', p.bosses.lich.fan.weight], ['wraiths', p.bosses.lich.wraiths.weight], ['triple', p.bosses.lich.triple.weight]];
+    case 'lich': {
+      const old: [BossPattern, number][] = [['fan', p.bosses.lich.fan.weight], ['wraiths', p.bosses.lich.wraiths.weight], ['triple', p.bosses.lich.triple.weight]];
+      return p.moves ? [...old, ...lichMoveTable(p)] : old; // FEATURES.bossMoves: appended after the old patterns
+    }
     case 'thorn':
     case 'toller':
       return newPatternTable(s, p, kind);
@@ -239,6 +242,7 @@ function beginAttack(s: SimState, p: SimParams, b: Boss): void {
     case 'lich': {
       tpIn = t + ticks(p.bosses.lich.teleportOutSeconds);
       wind = Math.max(15, ticks(p.bosses.lich.windupSeconds));
+      if (pattern === 'soulfire' || pattern === 'grasp') wind = lichMoveWindup(p, pattern, wind); // FEATURES.bossMoves
       const windStart = tpIn + ticks(p.bosses.lich.teleportInSeconds);
       b.attack = { pattern, tpOut, tpIn, windStart, fire: windStart + wind, dirX: 0, dirY: 0, sign: 1, points: [] };
       return;
@@ -320,6 +324,8 @@ function prepareTelegraph(s: SimState, p: SimParams, b: Boss, a: BossAttack): vo
     a.dirX = ux * cs + uy * sign * q;
     a.dirY = -ux * sign * q + uy * cs;
     a.sign = sign;
+  } else if (a.pattern === 'grasp') {
+    prepareGrasp(s, p, b, a); // FEATURES.bossMoves: the Lich's hands light up where they will burst
   } else if (a.pattern === 'spawns') {
     const c = p.bosses.eye.spawns;
     const n = Math.min(c.maxCount, Math.max(1, Math.round(c.count * p.density)));
@@ -405,6 +411,8 @@ function launch(s: SimState, p: SimParams, b: Boss, a: BossAttack, spawn: Spawn)
       length: c.length,
     };
     s.beams.push(beam);
+  } else if (a.pattern === 'grasp') {
+    prepareGrasp(s, p, b, a); // FEATURES.bossMoves: the Lich's hands light up where they will burst
   } else if (a.pattern === 'spawns') {
     const c = p.bosses.eye.spawns;
     const v = p.smallSpeed * b.speed;

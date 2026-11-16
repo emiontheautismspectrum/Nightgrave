@@ -307,6 +307,26 @@ export interface TollerMoves {
 export interface BossMoves {
   readonly enabled: boolean;
   readonly toller: TollerMoves;
+  readonly lich: LichMoves;
+}
+
+/**
+ * THE LICH'S NEW MOVES (FEATURES.bossMoves.lich; the old rows of TUNING.bosses.lich are untouched, these weights join
+ * its table after the old patterns). No new projectile kinds.
+ */
+export interface LichMoves {
+  /**
+   * SOULFIRE: a violet orb spiral from the Lich's body (where it stood at the launch) over `durationSeconds`: `count`
+   * (max `maxCount`) small orbs, each turned from the last by `turns` x 2 pi / count, never less than `gapRad` (a walking
+   * hero passes between two shots). Emitted through the deferred queue: one attack, one segment.
+   */
+  readonly soulfire: AttackRow & { readonly count: number; readonly maxCount: number; readonly durationSeconds: number; readonly turns: number; readonly gapRad: number; readonly speedFactor: number };
+  /**
+   * GRASP: `count` (max `maxCount`) bone hands: ground spots >= `minHeroDist` from the hero and `spacingPx` apart light up
+   * for `telegraphSeconds` (the wind-up), then each bursts into a red ring of `blades` blades with ONE gap (>= `gapRad`
+   * and >= 1.6 x the ring spacing) centred within `gapAimRad` of the hero's direction, `staggerSeconds` apart.
+   */
+  readonly grasp: AttackRow & { readonly count: number; readonly maxCount: number; readonly telegraphSeconds: number; readonly staggerSeconds: number; readonly minHeroDist: number; readonly spacingPx: number; readonly edgeInset: number; readonly blades: number; readonly gapRad: number; readonly gapAimRad: number; readonly speedFactor: number };
 }
 
 export interface Features {
@@ -399,6 +419,10 @@ export const FEATURES: Features = deepFreeze({
       peal: { weight: 2, windupBeats: 2, speed: 90, halfWidth: 2, startRadius: 8, minHeroDist: 70, maxLeaveSeconds: 4.5, teleportInset: 30, teleportYMax: 120, teleportMinHeroDist: 90, hastenCount: 2, hastenBeats: 1 },
       echo: { weight: 1.5, windupBeats: 2, speed: 100, halfWidth: 2, startRadius: 8, minHeroDist: 70, edgeMarginPx: 20, holdSeconds: 0.5, returnFactor: 0.7, maxLifeSeconds: 8 },
       chains: { weight: 1.5, windupBeats: 2, telegraphSeconds: 0.75, spotRadius: 16, ironWeight: 1, breakWeight: 1, ironSeconds: 2.0, breakParries: 3, maxSeconds: 5.0, allow: ['toll'], boundRingBeats: 2 },
+    },
+    lich: {
+      soulfire: { weight: 1.5, count: 10, maxCount: 12, durationSeconds: 1.0, turns: 1, gapRad: 0.5, speedFactor: 1 },
+      grasp: { weight: 1.5, count: 2, maxCount: 3, telegraphSeconds: 0.75, staggerSeconds: 0.3, minHeroDist: 90, spacingPx: 60, edgeInset: 30, blades: 6, gapRad: 0.5, gapAimRad: 0.4, speedFactor: 1 },
     },
   },
 });
