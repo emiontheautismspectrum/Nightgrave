@@ -73,9 +73,9 @@ TORSO_AT = (18, 18)
 def _hair(r):
     """Long hair: a cap under the crown and two wavy locks falling behind the shoulders to the hips."""
     a = r.layer("hair")
-    for y in range(7, 40):
+    for y in range(7, 34):
         wave = int(round(math.sin((y - 7) / 3.4) * 1.2))
-        taper = max(0, (y - 27) // 2)
+        taper = max(0, (y - 22) * 2 // 3)  # the locks thin out below the shoulders: her waist stays visible
         # left lock (lit): moss with forest strands
         x0, x1 = 17 - (1 if 13 <= y <= 30 else 0) + wave + taper, 20 + (1 if y > 18 else 0)
         for x in range(x0, x1 + 1):

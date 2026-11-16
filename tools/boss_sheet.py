@@ -6,7 +6,8 @@ Per boss:
   (docs/art_refs/, scaled to the same height: REFERENCE ONLY, it is never an input of a sprite), plus a squint-test
   band: the key frames at 1x on the four floor tones a boss can stand on.
 - anim_<boss>.gif: the rows played in sequence at 3x (idle, cast, ..., death).
-And sheet_effects.png: the effect sprites of the boss moves at 4x.
+And sheet_effects.png (the effect sprites of the boss moves at 4x) and sheet_silhouettes.png (the squint test of the
+whole cast: flat silhouettes at 2x and 1x, then the idle sprites at 1x on the four floor tones).
 
 Usage: python3 tools/boss_sheet.py            (writes the files)
        python3 tools/boss_sheet.py --digest   (prints {file: sha256} of what it WOULD write; tools/check_repro.py)
@@ -175,7 +176,34 @@ def build():
         out[f"sheet_{boss}.png"] = png_bytes(sheet(boss, cfg))
         out[f"anim_{boss}.gif"] = anim(boss, cfg)
     out["sheet_effects.png"] = png_bytes(up(rgb(page([n for n in EFFECTS if n in BUILD])), SCALE))
+    out["sheet_silhouettes.png"] = png_bytes(silhouettes())
     return out
+
+
+def silhouettes():
+    """The squint test of the whole cast: every boss as a flat silhouette at 1x and 2x (can each be named from its
+    outline alone?), then the idle sprites at 1x on the four floor tones."""
+    names = [n for n in ("eye_sentinel_idle", "lich_mage_idle", "lich_king_idle", "thorn_mother_idle", "toller_idle") if n in BUILD]
+    frames = [BUILD[n]()[0] for n in names]
+    h = max(f.shape[0] for f in frames)
+    w = sum(f.shape[1] + 6 for f in frames) + 6
+
+    def band(tone, flat, k):
+        a = np.full((h + 6, w), C.ci(tone), dtype=np.int16)
+        x = 6
+        for f in frames:
+            fh, fw = f.shape
+            m = f != C.T
+            a[3 + h - fh:3 + h, x:x + fw][m] = C.ci("bone") if flat else f[m]
+            x += fw + 6
+        return up(rgb(a), k)
+
+    top = band("bg0", True, 2)
+    rows = [band("bg0", True, 1)] + [band(t, False, 1) for t in SQUINT_TONES]
+    small = np.concatenate(rows, 0)
+    pad = np.zeros((small.shape[0], top.shape[1] - small.shape[1], 3), dtype=np.uint8)
+    pad[:] = PAL[C.ci("bg0")]
+    return np.concatenate([top, np.concatenate([small, pad], 1)], 0)
 
 
 def files_on_disk():
