@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Difficulty } from '../src/data/tuning';
 import { encodeReplay, playReplay } from '../src/sim/replay';
 import { Sim } from '../src/sim/sim';
+import { withFeatures } from '../src/data/features';
 import { botInput } from './bot';
 
 const SEEDS = Array.from({ length: 10 }, (_, i) => i + 1);
@@ -28,6 +29,28 @@ describe('boss bots (simple, deterministic)', () => {
         });
   it('report', () => {
     console.log(`boss bot results (fights won / seeds):\n${results.join('\n')}`);
+  });
+});
+
+// the new bosses (FEATURES.bosses, an enabled variant; the first boss forced): the same simple bots, the same bar
+const NEW_RESULTS: string[] = [];
+describe('boss bots vs the new bosses (simple, deterministic; FEATURES.bosses enabled)', () => {
+  const f = withFeatures('bosses');
+  const wins = (seed: number, d: Difficulty, kind: 'thorn' | 'toller', parry: boolean): boolean => {
+    const sim = new Sim(seed, d, { startWave: 3, features: f, firstBoss: kind });
+    while (sim.state.alive && sim.state.bossesDefeated === 0 && sim.state.tick < BUDGET) sim.step(botInput(sim, { parry }));
+    return sim.state.bossesDefeated === 1;
+  };
+  for (const d of ['easy', 'medium', 'hard'] as Difficulty[])
+    for (const parry of [false, true])
+      for (const kind of ['thorn', 'toller'] as const)
+        it(`${d} ${parry ? 'parry' : 'dodge-only'} bot vs ${kind}`, () => {
+          const won = SEEDS.filter((s) => wins(s, d, kind, parry)).length;
+          NEW_RESULTS.push(`${d.padEnd(6)} ${parry ? 'parry ' : 'dodge '} ${kind.padEnd(6)} ${won}/${SEEDS.length}`);
+          if (d === 'easy') expect(won).toBeGreaterThanOrEqual(8);
+        });
+  it('report', () => {
+    console.log(`new boss bot results (fights won / seeds):\n${NEW_RESULTS.join('\n')}`);
   });
 });
 

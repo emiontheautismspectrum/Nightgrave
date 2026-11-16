@@ -24,6 +24,8 @@ export const ru: Catalog = {
   'hero.wisp.short': 'ОГОНЁК',
   'boss.eye': 'СТРАЖ-ОКО',
   'boss.lich': 'ЛИЧ-МАГ',
+  'boss.thorn': 'МАТЬ ТЕРНИЙ',
+  'boss.toller': 'ЗВОНАРЬ',
   'unit.seconds': '{n}С',
 
   // ---- title screen
@@ -148,6 +150,7 @@ export const ru: Catalog = {
   'hud.wave': 'ВОЛНА {n}',
   'hud.daily': 'ДЕНЬ {date}',
   'run.dailyLabel': 'СЛОЖНАЯ - ЗАБЕГ ДНЯ {date}',
+  'run.preview': 'ПРОБА',
   'hud.mult': 'X{m}',
   'hud.x2': 'X2',
   'pause.title': 'ПАУЗА',

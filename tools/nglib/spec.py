@@ -24,6 +24,11 @@ SPRITES = {
     "eye_sentinel_death": (48, 48, 6), "eye_beam": (16, 4, 2),
     "lich_mage_idle": (32, 40, 4), "lich_mage_cast": (32, 40, 4), "lich_mage_teleport_out": (32, 40, 4),
     "lich_mage_teleport_in": (32, 40, 4), "lich_mage_hit": (32, 40, 2), "lich_mage_death": (32, 40, 6),
+    # the new bosses (FEATURES.bosses; dark until enabled)
+    "thorn_mother_idle": (40, 48, 4), "thorn_mother_cast": (40, 48, 4), "thorn_mother_hit": (40, 48, 2),
+    "thorn_mother_death": (40, 48, 6),
+    "toller_idle": (40, 56, 4), "toller_cast": (40, 56, 4), "toller_hit": (40, 56, 2), "toller_death": (40, 56, 6),
+    "root_bloom": (16, 16, 4), "bell_ring": (32, 32, 4),
     # pickups
     "pickup_slow_time": (12, 12, 4), "pickup_double_score": (12, 12, 4), "pickup_glow": (16, 16, 4),
 }

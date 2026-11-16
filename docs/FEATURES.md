@@ -26,7 +26,8 @@ had: `f0214eba`, with `CLIENT_VERSION` 0.10.0. Both are pinned in `tests/feature
 
 ## Variants (bots and tests)
 
-`withFeatures('patternPack')` returns a copy of the flags with that block enabled. Pass it to the sim:
+`withFeatures('patternPack')` returns a copy of the flags with that block enabled (`'thorn'` / `'toller'` one new boss,
+`'bosses'` both). Pass it to the sim:
 `new Sim(seed, 'hard', { hero, features })` or `makeParams(difficulty, hero, features)`. Never edit the production
 flags to try something.
 
@@ -167,3 +168,85 @@ ignores knots showed +8%, so the cost was the hunt itself right before the first
 did not move it; `unlockWave` 4 (after the first boss, with the briar line) did. At 4 every Hard target passes: knots
 parried 89-100%, hazard of waves 0-2 unchanged and of waves 4-6 -10% to +6%, heroes within 3-9%, median survival
 97-100% of the same flags without the hunts, knots 0% and briar lines 1% of deaths.
+
+### `bosses` (dark): the Thorn Mother and the Toller
+
+A GROUP block: `FEATURES.bosses` has no flag of its own; each row (`thorn`, `toller`) is its own switch, so each boss can
+be enabled alone (`withFeatures('thorn')`, `withFeatures('toller')`, both: `withFeatures('bosses')`). The sim reads a
+row only through `params.thorn` / `params.toller` (null while off); a disabled row is not in the fingerprint (the
+fingerprint appends `["bosses", {<enabled rows>}]` only when a row is on). Code: `src/sim/newBosses.ts`, the order and
+the kind switches in `src/sim/boss.ts`.
+
+**The boss order.** The cycle is the Eye, the Lich and every ENABLED new boss. With no new boss it is exactly the old
+alternation (eye, lich, eye, ...). With one, every cycle of k boss waves holds each boss once, in a Fisher-Yates
+permutation driven by an integer hash of (seed, cycle index): no PRNG draw, so spawn schedules do not shift; a new boss
+can be the first boss of the night. `bossMet` gets a key for a new kind only while it is enabled; the encounter speed
+bonus counts per kind. The score bound (`earliestBossDefeat`) uses the fastest fight over the enabled bosses.
+
+**One attack = one segment**, also for attacks that emit over time (blooms, the three toll rings, the pendulum's two
+passes): the segment goes at the launch; the later emissions wait in `boss.pending` (a key only new bosses have) with
+the same serial; the next attack's cadence is unchanged; the defeat waits for the queue, her walls and the final
+attack's projectiles and beams. Bodies never collide or kill; kill = 1000 + an ember charge, as for the old bosses.
+
+| Thorn Mother (`thorn`) | Value | |
+|---|---|---|
+| segments, cadence, wind-up | 12, 2.0 s, 0.5 s | top-centre (240, 60) |
+| `hedge` (weight 2) | the briar `Wall`, owned by the attack serial: red root line with ONE 44 px gap, 0.75 s telegraph at its edge, 50 px/s (x difficulty speed x encounter bonus), gap within 80% of the walking reach, never through her (24 px) nor into a sigil (else a spore fan) | never with another wall or a curtain alive |
+| `bloom` (2) | up to 3 lit ground spots >= 90 px from the hero (60 px apart) during the wind-up; each bursts into 9 (max 10) violet rune shards with ONE gap (>= 0.6 rad and >= 1.6 x the ring spacing, within 0.8 rad of the hero's direction), 0.3 s apart; never in a live wall's gap corridor | blooms <= 3 |
+| `lash` (2) | 3 (max 4) red blades over 0.5 rad along the wind-up's line | |
+| `spores` (3) | a violet fan of 5 small orbs over 1.2 rad at the hero | |
+
+No knots in her fight; the hunts never start in a boss fight (only her walls exist there). Her walls are drawn by the
+briar sprites, restyled into roots (`docs/ASSETS_SPEC.md`), and marked like briar lines (edge gap markers, phone edge
+markers).
+
+| The Toller (`toller`) | Value | |
+|---|---|---|
+| segments, cadence, beat | 14, 1.5 s, 30 ticks | every wind-up and launch on a beat tick; wind-ups in beats (1, the pendulum 2) |
+| `toll` (weight 3) | three violet orb rings on three consecutive beats, 9 (max 10) orbs each (<= 30 per toll), 80 px/s; ring 2's gap (>= 1.0 rad, >= 1.6 x the spacing) opens within 0.4 rad of the hero; rings 1 and 3 are turned by 1.7 rad steps (consecutive gaps never overlap): parry 1, walk through 2, parry 3 | |
+| `pendulum` (4) | the Eye's beam entity swung out 50 degrees at 55 deg/s (<= 60) from a start line fixed at the wind-up (18-34 px beside the hero) and back to it: two passes of one attack; behind the start line is safe for both | never with a beam alive, never over a toll still ringing (any toll's orbs in flight or rings to come) |
+| `knell` (3.5) | a ring of 15 (max 18) red blades at 1.35 x the blade speed with TWO gaps (>= 0.6 rad, >= 1.6 x the spacing) | knell rings alive <= 1 |
+
+The fight reads muted: the bell swings on the beat (an extreme on every beat) and a bone ring widens from it on every
+toll; the rings themselves are spaced one beat apart.
+
+**Fairness** (`tests/new_bosses_fair.test.ts`, `tests/new_bosses.test.ts`, `tests/edge_markers.test.ts`): every wind-up
+>= 15 ticks; no boss shot appears within 60 px of the hero except a bloom's (a lit ground cue of >= 30 ticks); nothing
+in the intro; a WALKING hero (no parry, no dash) gets through every attack alone on 200 seeds from the centre, corners
+and edges, and through random sequences of four attacks across attack boundaries (200 seeds per boss); every off-view
+bloom, ring, blade, root wall and gap is marked on the phone's window edge >= 15 ticks before it can hit.
+
+**Balance** (`npx vite-node tools/bot/bosses_report.ts 100 hard`; first encounter, the immortal skilled bot, both
+heroes; a row override for tuning: `NG_ROWS='{"toller":{"knell":{"weight":2}}}'`): targets 0.3-0.7 deaths per fight
+(today's bosses 0.2-0.6), heroes within +-15% of each other in fights survived, fights of 22-32 s; both simple bots beat
+each new boss on Easy in >= 8 of 10 (`tests/bossbots.test.ts`). The bots learn the new attacks in `tests/` only, and
+only while such a boss is on the field (the pendulum's start line, the space between two ring shots, a dash through a
+ring toward the bell).
+
+| Hard, 100 seeds per hero | deaths per fight (knight / wisp) | fights survived (knight / wisp) | fight length |
+|---|---|---|---|
+| Eye (today) | 0.46 (0.61 / 0.32) | 54% / 71% (24% apart) | 26-29 s |
+| Lich (today) | 0.16 (0.22 / 0.10) | 80% / 92% (13% apart) | 26-33 s |
+| Thorn Mother | 0.57 (0.62 / 0.52) | 60% / 68% (12% apart) | median 27.6 s (26-33) |
+| The Toller | 0.33 (0.48 / 0.17) | 74% / 83% (11% apart) | median 25.7 s (23-26) |
+
+Heroes are compared by fights survived: deaths per fight split by hero are noisy and hero-biased by colour (the
+Knight's guard is stronger against violet, the Wisp's longer dash against red; today's Eye is 48% apart the same way).
+Rows tuned during the balance pass: bloom shards 10 -> 9 (max 12 -> 10); toll gap 0.6 -> 1.0 rad aimed within 0.4 rad
+(the gap of ring 2, as the design asks); knell 12 -> 15 blades (max 18) at 1.35 x speed, weight 3.5; pendulum weight 4.
+Rules added: no pendulum over a toll still ringing (any toll); the hedge's gap never through her body; no bloom in a
+live wall's gap corridor.
+
+### Dev preview (`npm run dev` only)
+
+Play dark blocks without editing a file. The parameters are read only when `import.meta.env.DEV` is true: in a
+production build the code is dead (`tests/prodbundle.test.ts`).
+
+- `?flags=bosses,knot,briar,patternPack`: any subset by block name (`thorn`, `toller` for one new boss);
+- `?boss=thorn|toller|eye|lich`: the FIRST boss of the run (an unrecorded option, like `?wave=`; ignored for a disabled
+  boss);
+- with `?wave=3` the first boss comes at once, `&play=1` skips the title.
+
+Examples: `http://localhost:5173/?flags=bosses&boss=thorn&wave=3`, `http://localhost:5173/?flags=toller&boss=toller&wave=3&play=1`,
+`http://localhost:5173/?flags=bosses,knot,briar&wave=3`. A preview run is never saved, never submitted, never counts as a
+best, has no replay, and shows a PREVIEW tag in the HUD.

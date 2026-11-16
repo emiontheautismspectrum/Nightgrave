@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { ARENA_LAYOUT } from '../src/data/arena';
-import { enabledFeaturesText, FEATURES, withFeatures, type FeatureKey, type Features } from '../src/data/features';
+import { enabledFeaturesText, FEATURE_FLAGS, FEATURES, flagOn, NEW_BOSS_KINDS, withFeatures, type FeatureFlag, type FeatureKey, type Features } from '../src/data/features';
 import { HERO_RULES, HEROES, TEST_HEROES } from '../src/data/heroes';
 import { TUNING } from '../src/data/tuning';
 import { CLIENT_VERSION, tuningFingerprint } from '../src/shared/version';
@@ -14,6 +14,8 @@ import { Sim } from '../src/sim/sim';
 import { mulberryInputs } from './scripted';
 
 const KEYS = Object.keys(FEATURES) as FeatureKey[];
+/** Every switch: the plain blocks and the rows of the `bosses` group. */
+const FLAGS = FEATURE_FLAGS;
 const VARIANT = withFeatures('patternPack');
 
 /** The fingerprint exactly as it was computed before the flags existed (src/sim/replay.ts at d9831fd). */
@@ -25,22 +27,31 @@ function legacyHash(): string {
   return h.toString(16).padStart(8, '0');
 }
 
-/** `features` whose DISABLED blocks throw on any read except `enabled`. */
-function guarded(features: Features): Features {
+/** A proxy of a disabled block (or row) that throws on any read except `enabled`. */
+function sealed<T extends object>(block: T, name: string): T {
+  return new Proxy(block, {
+    get(_t, prop) {
+      if (prop === 'enabled') return false;
+      throw new Error(`disabled block ${name} was read (${String(prop)})`);
+    },
+    ownKeys() {
+      throw new Error(`disabled block ${name} was enumerated`);
+    },
+  });
+}
+
+/** `features` whose DISABLED blocks (and disabled rows of the `bosses` group) throw on any read except `enabled`. */
+export function guarded(features: Features): Features {
   const out: Record<string, unknown> = {};
   for (const k of Object.keys(features) as FeatureKey[]) {
+    if (k === 'bosses') {
+      const rows: Record<string, unknown> = {};
+      for (const b of NEW_BOSS_KINDS) rows[b] = features.bosses[b].enabled ? features.bosses[b] : sealed(features.bosses[b], `bosses.${b}`);
+      out[k] = rows;
+      continue;
+    }
     const block = features[k];
-    out[k] = block.enabled
-      ? block
-      : new Proxy(block, {
-          get(t, prop) {
-            if (prop === 'enabled') return false;
-            throw new Error(`disabled block ${k} was read (${String(prop)})`);
-          },
-          ownKeys() {
-            throw new Error(`disabled block ${k} was enumerated`);
-          },
-        });
+    out[k] = block.enabled ? block : sealed(block, k);
   }
   return out as unknown as Features;
 }
@@ -48,9 +59,12 @@ function guarded(features: Features): Features {
 describe('feature flags: the production build is dark', () => {
   it('every block is disabled and the table is frozen', () => {
     expect(KEYS.length).toBeGreaterThan(0);
-    for (const k of KEYS) expect(FEATURES[k].enabled, k).toBe(false);
+    expect(FLAGS).toEqual(['patternPack', 'knot', 'briar', 'thorn', 'toller']);
+    for (const k of FLAGS) expect(flagOn(FEATURES, k), k).toBe(false);
     expect(Object.isFrozen(FEATURES)).toBe(true);
     for (const k of KEYS) expect(Object.isFrozen(FEATURES[k])).toBe(true);
+    expect(Object.isFrozen(FEATURES.bosses)).toBe(true);
+    for (const b of NEW_BOSS_KINDS) expect(Object.isFrozen(FEATURES.bosses[b]), b).toBe(true);
     expect(() => ((FEATURES.patternPack as { enabled: boolean }).enabled = true)).toThrow(); // modules are strict
   });
 
@@ -85,6 +99,51 @@ describe('feature flags: the production build is dark', () => {
     expect(JSON.stringify(a.state)).toBe(JSON.stringify(b.state));
     const r = encodeReplay(4242, 'hard', 'wisp', mulberryInputs(11, 600), undefined, G);
     expect(playReplay(r, { features: G }).score).toBe(playReplay(r).score);
+  });
+});
+
+describe('feature flags: the bosses group (one switch per new boss)', () => {
+  it('withFeatures: "bosses" enables both rows, "thorn" / "toller" one; the group never has a flag of its own', () => {
+    expect('enabled' in FEATURES.bosses).toBe(false);
+    const both = withFeatures('bosses');
+    expect([both.bosses.thorn.enabled, both.bosses.toller.enabled]).toEqual([true, true]);
+    expect(withFeatures('thorn', 'toller')).toEqual(both);
+    expect([withFeatures('thorn').bosses.thorn.enabled, withFeatures('thorn').bosses.toller.enabled]).toEqual([true, false]);
+    expect([withFeatures('toller').bosses.thorn.enabled, withFeatures('toller').bosses.toller.enabled]).toEqual([false, true]);
+    expect(withFeatures('knot').bosses).toBe(FEATURES.bosses); // untouched rows are the production objects
+    expect(FEATURES.bosses.thorn.enabled || FEATURES.bosses.toller.enabled).toBe(false);
+    expect(Object.isFrozen(both.bosses) && Object.isFrozen(both.bosses.toller.toll)).toBe(true);
+  });
+
+  it('a disabled row is not in the fingerprint and never read; an enabled row is, by its values', () => {
+    const edited: Features = { ...FEATURES, bosses: { ...FEATURES.bosses, thorn: { ...FEATURES.bosses.thorn, segments: 99 } } };
+    expect(tuningHash(edited)).toBe('f0214eba');
+    const th = withFeatures('thorn');
+    expect(enabledFeaturesText(th)).toContain('"bosses"');
+    expect(enabledFeaturesText(th)).not.toContain('"toller"');
+    const thEdited: Features = { ...th, bosses: { ...th.bosses, thorn: { ...th.bosses.thorn, segments: 13 } } };
+    expect(tuningHash(thEdited)).not.toBe(tuningHash(th));
+    // editing the DISABLED toller row of the thorn variant changes nothing
+    const thOther: Features = { ...th, bosses: { ...th.bosses, toller: { ...th.bosses.toller, segments: 10 } } };
+    expect(tuningHash(thOther)).toBe(tuningHash(th));
+    expect(makeParams('hard', 'knight', guarded(FEATURES)).thorn).toBeNull();
+    expect(makeParams('hard', 'knight', guarded(FEATURES)).toller).toBeNull();
+    expect(makeParams('hard', 'knight', th).thorn).toBe(th.bosses.thorn);
+  });
+
+  it('a dark build through two boss fights: guarded rows are never read and the state is identical', () => {
+    const G = guarded(FEATURES);
+    const frames = mulberryInputs(13, 60 * 70);
+    const a = new Sim(4243, 'hard', { hero: 'knight', features: G, startWave: 3 });
+    const b = new Sim(4243, 'hard', { hero: 'knight', startWave: 3 });
+    for (const f of frames) {
+      a.state.alive = b.state.alive = true; // immortal: walk through the whole fight
+      a.step(f);
+      b.step(f);
+    }
+    expect(a.state.bossWave).toBeGreaterThanOrEqual(3);
+    expect(JSON.stringify(a.state)).toBe(JSON.stringify(b.state));
+    expect(Object.keys(b.state.bossMet)).toEqual(['eye', 'lich']);
   });
 });
 
@@ -146,13 +205,13 @@ describe('feature flags: an enabled variant', () => {
   });
 
   it('every combination of blocks: its own fingerprint, its replay refused by production, played back under its flags', () => {
-    const combos: FeatureKey[][] = [];
-    for (let m = 1; m < 1 << KEYS.length; m++) combos.push(KEYS.filter((_k, i) => m & (1 << i)));
-    expect(combos.length).toBe((1 << KEYS.length) - 1);
+    const combos: FeatureFlag[][] = [];
+    for (let m = 1; m < 1 << FLAGS.length; m++) combos.push(FLAGS.filter((_k, i) => m & (1 << i)));
+    expect(combos.length).toBe((1 << FLAGS.length) - 1);
     const hashes = new Set<string>(['f0214eba']);
     for (const combo of combos) {
       const f = withFeatures(...combo);
-      for (const k of KEYS) expect(f[k].enabled, `${combo} ${k}`).toBe(combo.includes(k));
+      for (const k of FLAGS) expect(flagOn(f, k), `${combo} ${k}`).toBe(combo.includes(k));
       const h = tuningHash(f);
       expect(hashes.has(h), combo.join('+')).toBe(false);
       hashes.add(h);

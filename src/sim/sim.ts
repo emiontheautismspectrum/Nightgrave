@@ -82,7 +82,7 @@ export function createState(seed: number, difficulty: Difficulty, hero: AnyHeroI
     waveClock: 0,
     boss: null,
     beams: [],
-    bossMet: { eye: 0, lich: 0 },
+    bossMet: { eye: 0, lich: 0, ...(p.thorn ? { thorn: 0 } : {}), ...(p.toller ? { toller: 0 } : {}) },
     bossesDefeated: 0,
     bossWave: -1,
     breakUntil: -1,

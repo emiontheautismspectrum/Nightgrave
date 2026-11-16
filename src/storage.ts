@@ -258,8 +258,8 @@ export function persist(): void {
 }
 
 /** Only runs that ended by death are saved; restart/quit from pause and dev `?wave=N` runs never are. */
-export function shouldSaveRun(endedBy: 'death' | 'restart' | 'quit', devWave: number | undefined): boolean {
-  return endedBy === 'death' && !devWave;
+export function shouldSaveRun(endedBy: 'death' | 'restart' | 'quit', devWave: number | undefined, preview = false): boolean {
+  return endedBy === 'death' && !devWave && !preview; // a dev preview run (?flags=, ?boss=) is never saved
 }
 
 /**

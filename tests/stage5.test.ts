@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  ALL_SFX, SYNTH_ONLY_SFX, buildManifest, MUSIC, pickMusic, pitchFor, SFX_FILE, SoundDiffer, VoiceLimiter, type MusicTrack,
+  ALL_SFX, SYNTH_ONLY_SFX, bossIntroSfx, buildManifest, MUSIC, pickMusic, pitchFor, SFX_FILE, SoundDiffer, VoiceLimiter, type MusicTrack,
 } from '../src/render/audioLogic';
 import { canRestart, isPortraitView, RESTART_GUARD_MS, RunDriver, STEP_MS } from '../src/render/runDriver';
 import { TAP_MS, TouchModel, touchButtons } from '../src/render/touch';
@@ -133,6 +133,7 @@ describe('storage', () => {
     expect(shouldSaveRun('restart', undefined)).toBe(false);
     expect(shouldSaveRun('quit', undefined)).toBe(false);
     expect(shouldSaveRun('death', 3)).toBe(false);
+    expect(shouldSaveRun('death', undefined, true)).toBe(false); // a dev preview run (?flags=, ?boss=)
   });
 });
 
@@ -314,7 +315,7 @@ describe('audio logic (no real audio)', () => {
     expect(buildManifest({}).size).toBe(0);
     const list = readFileSync('docs/AUDIO_LIST.md', 'utf8');
     for (const e of ALL_SFX) if (!SYNTH_ONLY_SFX.includes(e)) expect(list).toContain(`${SFX_FILE[e]}.mp3`);
-    expect(ALL_SFX.length).toBe(25);
+    expect(ALL_SFX.length).toBe(30);
     expect(SYNTH_ONLY_SFX).toHaveLength(4);
   });
 
@@ -361,6 +362,19 @@ describe('audio logic (no real audio)', () => {
     const burn = (id: number): SimEvent => ({ type: 'trail_kill', id, x: 0, y: 0, points: 0.1 });
     expect(d.tick(m, [{ type: 'trail_start' }, burn(1), burn(2)], 20)).toEqual(['trail']);
     for (const e of SYNTH_ONLY_SFX) expect(SYNTH[e].dur).toBeGreaterThan(0);
+  });
+
+  it('the new bosses (FEATURES.bosses): own intros, the toll, the bloom and the root creep; synthesized fallbacks', () => {
+    const d = new SoundDiffer();
+    const m = { multiplier: 100, projectiles: [] };
+    expect(d.tick(m, [{ type: 'boss_intro', kind: 'thorn' }], 0)).toEqual(['boss_intro_thorn']);
+    expect(d.tick(m, [{ type: 'boss_intro', kind: 'toller' }], 10)).toEqual(['boss_intro_toller']);
+    expect(d.tick(m, [{ type: 'boss_toll', ring: 0 }], 20)).toEqual(['toll']);
+    expect(d.tick(m, [{ type: 'boss_bloom', x: 1, y: 2 }], 30)).toEqual(['bloom']);
+    expect(d.tick(m, [{ type: 'briar', id: 1, axis: 'x', dir: 1, gap: 100, boss: 3 }], 40)).toEqual(['root_creep']);
+    expect(d.tick(m, [{ type: 'briar', id: 2, axis: 'x', dir: 1, gap: 100 }], 50)).toEqual(['briar_creep']);
+    for (const k of ['eye', 'lich', 'thorn', 'toller'] as const) expect(SFX_FILE[bossIntroSfx(k)]).toBe(`sfx_boss_${k}_intro`);
+    for (const e of ['boss_intro_thorn', 'boss_intro_toller', 'toll', 'bloom', 'root_creep'] as const) expect(SYNTH[e].dur).toBeGreaterThan(0);
   });
 
   it('a whole bot run produces sound events without touching the sim', () => {

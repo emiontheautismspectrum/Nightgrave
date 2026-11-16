@@ -106,6 +106,62 @@ export function wallArrival(w: Wall, x: number, y: number, heroRadius: number): 
   return w.move + Math.max(0, dist) / w.speed;
 }
 
+/** What a gapped wall needs from its row (the briar line's, or the Thorn Mother's hedge). */
+export interface WallRow {
+  readonly telegraphSeconds: number;
+  readonly halfWidth: number;
+  readonly gapPx: number;
+  readonly reachFraction: number;
+}
+
+/**
+ * Plan a wall (ONE draw: the axis). It enters from the edge farther from the hero, waits `telegraphSeconds` there and
+ * creeps at `speed` px/tick. Returns the wall (gap and id not set yet) and its unslowed life in ticks.
+ */
+export function planWall(s: SimState, p: SimParams, c: WallRow, speed: number): { w: Wall; life: number } {
+  const h = s.hero;
+  const o = p.spawnOffset;
+  const tele = Math.max(p.fairTelegraph, ticks(c.telegraphSeconds));
+  const axis: Wall['axis'] = nextFloat(s) < 0.5 ? 'x' : 'y';
+  const lo = axis === 'x' ? p.x0 : p.y0;
+  const hi = axis === 'x' ? p.x1 : p.y1;
+  const dir: Wall['dir'] = (axis === 'x' ? h.x > p.cx : h.y > p.cy) ? 1 : -1; // it enters from the farther edge
+  const startPos = dir > 0 ? lo - o : hi + o;
+  const endPos = dir > 0 ? hi + o : lo - o;
+  const life = tele + Math.ceil(Math.abs(endPos - startPos) / speed);
+  const w: Wall = { id: 0, axis, dir, pos: startPos, startPos, endPos, start: s.tick, move: s.tick + tele, speed, gap: 0, gapHalf: c.gapPx / 2, halfWidth: c.halfWidth };
+  return { w, life };
+}
+
+/**
+ * Place the gap of a planned wall (ONE draw) and put it on the field. The gap centre lies within reachFraction of the
+ * distance the hero can WALK before the line arrives; never into a blood sigil, nor (`avoid`, a boss wall) through
+ * the boss's body (three choices, else false: nothing is placed). `boss` = the attack serial of a boss-owned wall
+ * (the key exists only then).
+ */
+export function placeWall(s: SimState, p: SimParams, w: Wall, c: WallRow, boss?: number, avoid?: { x: number; y: number; r: number }): boolean {
+  const h = s.hero;
+  const half = w.gapHalf;
+  const axis = w.axis;
+  const reach = c.reachFraction * p.heroSpeed * (wallArrival(w, h.x, h.y, p.heroRadius) - s.tick);
+  const clo = axis === 'x' ? p.y0 : p.x0;
+  const chi = axis === 'x' ? p.y1 : p.x1;
+  const across = acrossOf(w, h.x, h.y);
+  const clamp = (g: number): number => Math.min(chi - half, Math.max(clo + half, g));
+  const off = range(s, -1, 1) * reach;
+  for (const g of [clamp(across + off), clamp(across - off), clamp(across)]) {
+    w.gap = g;
+    if (s.sigils.some((sg) => inGapCorridor(w, sg.x, sg.y, sg.r))) continue; // never a gap into a blood sigil
+    if (avoid && inGapCorridor(w, avoid.x, avoid.y, avoid.r)) continue; // a boss wall: never a gap through the boss
+    w.id = s.nextId++;
+    if (boss !== undefined) w.boss = boss;
+    (s.walls ??= []).push(w);
+    s.events.push({ type: 'briar', id: w.id, axis, dir: w.dir, gap: g, ...(boss !== undefined ? { boss } : {}) });
+    return true;
+  }
+  return false;
+}
+
 /**
  * Start a briar line now (the director picked the row). False: it could not (the cap, a curtain on the field, the
  * boss lead, or every gap choice crosses a blood sigil); nothing was changed except, at most, PRNG draws.
@@ -117,36 +173,10 @@ export function startBriar(s: SimState, p: SimParams, sp: number): boolean {
   if (walls.length >= c.maxActive) return false;
   // never two gapped walls at once: no line while a pattern-pack curtain is alive (and no curtain while a line is)
   if (s.projectiles.some((pr) => pr.pack === 'curtain')) return false;
-  const h = s.hero;
-  const o = p.spawnOffset;
   const speed = (c.speed * p.diffSpeed * sp) / TICK_RATE; // px per tick, like a projectile
-  const tele = Math.max(p.fairTelegraph, ticks(c.telegraphSeconds));
-  const axis: Wall['axis'] = nextFloat(s) < 0.5 ? 'x' : 'y';
-  const lo = axis === 'x' ? p.x0 : p.y0;
-  const hi = axis === 'x' ? p.x1 : p.y1;
-  const dir: Wall['dir'] = (axis === 'x' ? h.x > p.cx : h.y > p.cy) ? 1 : -1; // it enters from the farther edge
-  const startPos = dir > 0 ? lo - o : hi + o;
-  const endPos = dir > 0 ? hi + o : lo - o;
-  const life = tele + Math.ceil(Math.abs(endPos - startPos) / speed);
+  const { w, life } = planWall(s, p, c, speed);
   if (reachesBoss(s, p, life, ticks(c.bossLeadSeconds))) return false;
-  const half = c.gapPx / 2;
-  const w: Wall = { id: 0, axis, dir, pos: startPos, startPos, endPos, start: s.tick, move: s.tick + tele, speed, gap: 0, gapHalf: half, halfWidth: c.halfWidth };
-  // the gap centre lies within reachFraction of the distance the hero can WALK before the line arrives
-  const reach = c.reachFraction * p.heroSpeed * (wallArrival(w, h.x, h.y, p.heroRadius) - s.tick);
-  const clo = axis === 'x' ? p.y0 : p.x0;
-  const chi = axis === 'x' ? p.y1 : p.x1;
-  const across = acrossOf(w, h.x, h.y);
-  const clamp = (g: number): number => Math.min(chi - half, Math.max(clo + half, g));
-  const off = range(s, -1, 1) * reach;
-  for (const g of [clamp(across + off), clamp(across - off), clamp(across)]) {
-    w.gap = g;
-    if (s.sigils.some((sg) => inGapCorridor(w, sg.x, sg.y, sg.r))) continue; // never a gap into a blood sigil
-    w.id = s.nextId++;
-    walls.push(w);
-    s.events.push({ type: 'briar', id: w.id, axis, dir, gap: g });
-    return true;
-  }
-  return false;
+  return placeWall(s, p, w, c);
 }
 
 /** Move the lines (after the projectiles, by the same Slow Time factor `f`) and remove the ones that crossed. */

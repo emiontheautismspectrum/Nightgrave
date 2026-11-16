@@ -192,34 +192,42 @@ def hex_knot():
 
 
 def briar_tile():
-    """Briar line band tile (8x8, 2 frames, tiled along the band): a 6 px thick band of blood-red thorny stems with
-    bone thorn tips, dark outline; frame 1 is shifted by 2 px (the line creeps)."""
+    """Root wall band tile (8x8, 2 frames, tiled along the band): the clearing's sinuous ground roots erupting as a
+    threat, recoloured to blood (unparryable): a 6 px twisting root, blood_dark bark around a blood core, rootlets
+    ending in glowing blood tips. Seamless along x (period 8); frame 1 shifts the twist by 2 px (the roots creep).
+    The keys stay briar_* (the hunts view and tests name them)."""
     frames = []
     for i in range(2):
         a = C.new(8, 8)
         for x in range(8):
-            y0 = 2 + ((x + 2 * i) // 2) % 2  # a twisting stem
-            a[y0:y0 + 3, x] = C.ci("blood")
-            a[y0 + 2, x] = C.ci("blood_dark")
-        for x in ((1 + 2 * i) % 8, (5 + 2 * i) % 8):  # thorns up and down
-            C.put(a, x, 1, "blood")
-            C.put(a, x, 0, "bone")
-            C.put(a, (x + 2) % 8, 6, "blood")
-            C.put(a, (x + 2) % 8, 7, "blood_dark")
+            yc = 3.5 + math.sin((x + 2 * i) * 2 * math.pi / 8) * 0.9  # one sinuous root
+            y0 = int(round(yc - 2))
+            a[max(0, y0):min(8, y0 + 4), x] = C.ci("blood_dark")
+            a[max(0, y0 + 1):min(8, y0 + 3), x] = C.ci("blood")
+        # two rootlets per tile, out of the band on alternate sides, each with a glowing blood tip
+        for k, (x, up) in enumerate((((1 + 2 * i) % 8, True), ((5 + 2 * i) % 8, False))):
+            if up:
+                C.put(a, x, 1, "blood_dark")
+                C.put(a, (x + 1) % 8, 0, "blood")
+            else:
+                C.put(a, x, 6, "blood_dark")
+                C.put(a, (x + 1) % 8, 7, "blood")
         frames.append(a)
     return frames
 
 
 def briar_post():
-    """Briar gap post (8x12): a thick thorn stake standing at each side of the gap, bone tip on top, blood body."""
+    """Root gap post (8x12): a thick root curling up out of the ground at each side of the gap, blood_dark bark with a
+    blood core and a glowing blood tip with a bone glint."""
     a = C.new(8, 12)
-    a[2:12, 3:5] = C.ci("blood")
-    a[4:12, 4] = C.ci("blood_dark")
-    for y, x in ((3, 2), (6, 5), (8, 2), (10, 5)):
-        C.put(a, x, y, "blood")
-    C.put(a, 3, 1, "bone")
-    C.put(a, 4, 1, "bone")
-    C.put(a, 3, 0, "bone")
+    for y in range(3, 12):
+        x = 3.5 + math.sin(y * 0.7) * 0.8
+        w = 1.0 + (y - 3) * 0.12
+        C.disc(a, x, y + 0.5, w + 0.6, "blood_dark")
+        C.disc(a, x, y + 0.5, max(0.5, w - 0.4), "blood")
+    C.put(a, 4, 2, "blood")
+    C.put(a, 5, 1, "blood")
+    C.put(a, 5, 0, "bone")
     return [C.outline(a)]
 
 

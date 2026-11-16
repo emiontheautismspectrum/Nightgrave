@@ -342,6 +342,12 @@
    "h": 8,
    "w": 6
   },
+  "bell_ring": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 32,
+   "w": 32
+  },
   "blade": {
    "frames": 4,
    "group": "gameplay",
@@ -984,6 +990,12 @@
    "h": 8,
    "w": 16
   },
+  "root_bloom": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
   "rune_glow_0": {
    "frames": 4,
    "group": "telegraph",
@@ -1223,6 +1235,54 @@
    "group": "arena",
    "h": 3,
    "w": 4
+  },
+  "thorn_mother_cast": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 48,
+   "w": 40
+  },
+  "thorn_mother_death": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 48,
+   "w": 40
+  },
+  "thorn_mother_hit": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 48,
+   "w": 40
+  },
+  "thorn_mother_idle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 48,
+   "w": 40
+  },
+  "toller_cast": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 56,
+   "w": 40
+  },
+  "toller_death": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 56,
+   "w": 40
+  },
+  "toller_hit": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 56,
+   "w": 40
+  },
+  "toller_idle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 56,
+   "w": 40
   },
   "tree_0": {
    "frames": 2,

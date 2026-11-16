@@ -67,9 +67,66 @@ function beamThreat(sim: Sim): { x: number; y: number; dx: number; dy: number; s
   const b = s.boss;
   if (b?.attack?.pattern === 'beam' && s.tick >= b.attack.windStart)
     return { x: b.x, y: b.y, dx: b.attack.dirX, dy: b.attack.dirY, sign: b.attack.sign };
+  // the Toller's pendulum (FEATURES.bosses.toller only): its two passes sweep the same wedge out and back, so the
+  // safe side is behind the START line for the whole attack (never behind the moving line)
+  if (b?.kind === 'toller') {
+    if (b.attack?.pattern === 'pendulum' && s.tick >= b.attack.windStart) return { x: b.x, y: b.y, dx: b.attack.dirX, dy: b.attack.dirY, sign: b.attack.sign };
+    const bm = s.beams[0];
+    if (bm) {
+      const w = Math.atan2(bm.turnS, bm.turnC);
+      const back = b.pending?.some((e) => e.op === 'swing' && e.serial === bm.serial);
+      // pass 1: turn back by the rotations so far; pass 2: forward by the rotations still to come
+      const k = back ? -Math.max(0, s.tick - 1 - bm.start) : Math.max(0, bm.end - s.tick);
+      const c = Math.cos(k * w);
+      const sn = Math.sin(k * w);
+      const sign = back ? (w >= 0 ? 1 : -1) : w >= 0 ? -1 : 1;
+      return { x: bm.x, y: bm.y, dx: bm.dirX * c - bm.dirY * sn, dy: bm.dirX * sn + bm.dirY * c, sign };
+    }
+  }
   const bm = s.beams[0];
   if (bm) return { x: bm.x, y: bm.y, dx: bm.dirX, dy: bm.dirY, sign: bm.turnS >= 0 ? 1 : -1 };
   return null;
+}
+
+/**
+ * The Toller's rings (FEATURES.bosses.toller only): every toll ring and knell ring flies radially from the bell, so
+ * sidesteps from single shots cancel out. Against the most imminent ring that the hero will not parry (a knell
+ * always; a toll ring when the parry will not be ready), the bot slides along its circle around the bell to the
+ * middle between the two shots that bracket it (a gap of the ring, or simply the space between two shots).
+ * Returns that point, or null. Nothing of this runs without a Toller.
+ */
+export function ringSlot(sim: Sim, parry: boolean): { x: number; y: number; t: number; ids: Set<number> } | null {
+  const s = sim.state;
+  const p = sim.params;
+  const b = s.boss;
+  if (!b || b.kind !== 'toller') return null;
+  const h = s.hero;
+  const dh = Math.hypot(h.x - b.x, h.y - b.y) || 1;
+  const ha = Math.atan2(h.y - b.y, h.x - b.x);
+  // every ring shot still on its way to the hero's circle around the bell (each by its own radius: the 60 px rule may
+  // have moved some forward), arriving within a human reaction; a violet one only if the parry will not be ready
+  const shots: { a: number; t: number; id: number }[] = [];
+  for (const pr of s.projectiles) {
+    if (pr.boss <= 0) continue;
+    const r = Math.hypot(pr.x - b.x, pr.y - b.y);
+    if (r > dh + 4) continue; // passed
+    const t = (dh - r) / (Math.hypot(pr.vx, pr.vy) || 1);
+    if (t > 30) continue; // a human-like reaction: only the shots about to arrive
+    if (pr.parryable && parry && parryCooldownLeft(s, p) < t - 2) continue; // it will be parried
+    shots.push({ a: ((Math.atan2(pr.y - b.y, pr.x - b.x) - ha + 3 * Math.PI) % (2 * Math.PI)) - Math.PI, t, id: pr.id });
+  }
+  if (shots.length < 2) return null;
+  // the shots just below and above the hero's angle (wrapping around): the space between them
+  let lo = -Infinity;
+  let hi = Infinity;
+  for (const x of shots) {
+    if (x.a <= 0 && x.a > lo) lo = x.a;
+    if (x.a > 0 && x.a < hi) hi = x.a;
+  }
+  if (lo === -Infinity) lo = Math.max(...shots.map((x) => x.a)) - 2 * Math.PI;
+  if (hi === Infinity) hi = Math.min(...shots.map((x) => x.a)) + 2 * Math.PI;
+  const mid = ha + (lo + hi) / 2;
+  return { x: b.x + Math.cos(mid) * dh, y: b.y + Math.sin(mid) * dh, t: Math.min(...shots.map((x) => x.t)), ids: new Set(shots.map((x) => x.id)) };
 }
 
 export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
@@ -83,8 +140,15 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
   let nearT = Infinity;
   let nearPerp: [number, number] = [0, 0];
   let parryTarget = false;
+  // the Toller's rings (FEATURES.bosses.toller only): the ring the bot slides into is handled by the slide alone (the
+  // single-shot sidesteps of its radial shots flip sign every tick and cancel out)
+  const slot0 = s.boss?.kind === 'toller' ? ringSlot(sim, opts.parry !== false) : null;
   for (const pr of s.projectiles) {
     if (isFading(s, pr)) continue;
+    if (slot0?.ids.has(pr.id)) {
+      if (pr.parryable && inParryZone(h.x, h.y, h.aimX, h.aimY, pr.x, pr.y, pr.radius - 3, p) >= 0) parryTarget = true;
+      continue;
+    }
     const rx = pr.x - h.x;
     const ry = pr.y - h.y;
     const d = Math.sqrt(rx * rx + ry * ry);
@@ -159,7 +223,7 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
       fy += ny * 3;
     }
     // the sweep is about to reach us from the front: dash across it to the safe side (dash i-frames)
-    const active = sim.state.beams.length > 0 || (sim.state.boss?.attack?.pattern === 'beam' && sim.state.boss.attack.fire - sim.state.tick <= 4);
+    const active = sim.state.beams.length > 0 || ((sim.state.boss?.attack?.pattern === 'beam' || sim.state.boss?.attack?.pattern === 'pendulum') && sim.state.boss.attack.fire - sim.state.tick <= 4);
     if (opts.beamDash && active && c < 0 && c > -18) dashAway = [nx, ny];
   }
   // blood sigils: keep out of the circle while it is telegraphed or lethal; dash out if caught inside a lethal one
@@ -179,6 +243,32 @@ export function botInput(sim: Sim, opts: BotOptions = {}): InputFrame {
     const l = Math.sqrt(nearPerp[0] * nearPerp[0] + nearPerp[1] * nearPerp[1]) || 1;
     fx += (nearPerp[0] / l) * 0.2;
     fy += (nearPerp[1] / l) * 0.2;
+  }
+  // the Toller's rings (FEATURES.bosses.toller only): slide around the bell into the space between two shots
+  // (a swinging beam with the hero not yet behind its start line comes first; during the pendulum's wind-up a ring
+  // that arrives within 12 ticks comes first, the walk behind the line right after it)
+  const beamSafe = !bt || (h.x - bt.x) * bt.dy * bt.sign + (h.y - bt.y) * -bt.dx * bt.sign >= 14;
+  const slot = slot0 && (beamSafe || (s.beams.length === 0 && slot0.t < 12)) ? slot0 : null;
+  if (slot) {
+    const dx = slot.x - h.x;
+    const dy = slot.y - h.y;
+    const d = Math.hypot(dx, dy);
+    const w = (slot.t < 20 ? 3 : 1) * Math.min(1, d / 4); // a firm pull that settles in the middle of the space
+    if (d > 1e-6) {
+      fx += (dx / d) * w;
+      fy += (dy / d) * w;
+    }
+    // walking into the space between two shots of the ring is the answer: no dash across the ring; if the space
+    // cannot be reached in time, dash THROUGH the ring toward the bell (the radial ring has already passed there)
+    if (d <= p.heroSpeed * Math.max(1, slot.t - 1)) dashAway = null;
+    else if (slot.t < 8 && s.boss) {
+      // (with a beam swinging or winding up, toward the bell is not safe: dash toward the space instead)
+      const quiet = s.beams.length === 0 && s.boss.attack?.pattern !== 'pendulum';
+      const bx = quiet ? s.boss.x - h.x : dx;
+      const by = quiet ? s.boss.y - h.y : dy;
+      const bd = Math.hypot(bx, by) || 1;
+      dashAway = [bx / bd, by / bd];
+    }
   }
   // gentle pull towards the centre so the bot does not hug the rim
   fx += (p.cx - h.x) * 0.002;
