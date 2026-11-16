@@ -1,7 +1,8 @@
 /**
  * DEV PREVIEW of dark feature blocks (docs/FEATURES.md "Dev preview"): `npm run dev` ONLY. main.ts calls this inside
  * `if (import.meta.env.DEV)`, so in a production build the call and this module are dead code (tests/prodbundle.test.ts
- * checks it). `?flags=bosses,knot,briar,patternPack` (any subset by name; `thorn` / `toller` one boss each) builds the
+ * checks it). `?flags=bosses,knot,briar,patternPack,bossOrder,bossMotion,bossMoves` (any subset by name; `thorn` /
+ * `toller` one boss each) builds the
  * run's Sim with `withFeatures(...)`, `?boss=thorn|toller|eye|lich` forces the first boss (an unrecorded option, like
  * `?wave=`). A preview run is never saved, never submitted, never counts as a best and shows a PREVIEW tag.
  */

@@ -411,8 +411,6 @@ function launch(s: SimState, p: SimParams, b: Boss, a: BossAttack, spawn: Spawn)
       length: c.length,
     };
     s.beams.push(beam);
-  } else if (a.pattern === 'grasp') {
-    prepareGrasp(s, p, b, a); // FEATURES.bossMoves: the Lich's hands light up where they will burst
   } else if (a.pattern === 'spawns') {
     const c = p.bosses.eye.spawns;
     const v = p.smallSpeed * b.speed;
@@ -527,7 +525,12 @@ export function runBoss(s: SimState, p: SimParams, spawn: Spawn): void {
   }
   if (t < b.introEnd) return;
   if (p.motion) moveBoss(s, p, b); // FEATURES.bossMotion: never while an attack, a beam or an emission is in progress
-  if (!b.attack && t >= b.nextAt) beginAttack(s, p, b);
+  if (!b.attack && t >= b.nextAt) {
+    // FEATURES.bossMoves: no attack STARTS either while a ring is about to reach the hero or has just passed him (a
+    // wind-up's telegraph is fixed at its start: it must not be fixed while the hero still has the ring to answer)
+    if (s.rings && s.rings.length && ringBlocks(s, p)) b.nextAt = b.kind === 'toller' ? onBeat(p, b, t + 1) : t + 1;
+    else beginAttack(s, p, b);
+  }
   let a = b.attack;
   if (!a) return;
   if (b.kind === 'lich' && t === a.tpIn) {
@@ -564,9 +567,14 @@ export function runBoss(s: SimState, p: SimParams, spawn: Spawn): void {
       b.hasten--;
       hastened = true;
     }
-    const pre = a.fire - a.tpOut - (a.defer ?? 0);
+    // (the Thorn Mother's sink and emerge, FEATURES.bossMotion, come on top of her cadence: it counts from her
+    // wind-up, so a relocation never brings her next attack closer to this one)
+    const pre = (b.kind === 'thorn' ? a.fire - a.windStart : a.fire - a.tpOut) - (a.defer ?? 0);
     b.nextAt = t + Math.max(hastened ? 0 : 1, cad - pre);
     if (b.kind === 'toller') b.nextAt = onBeat(p, b, b.nextAt); // the Toller starts every attack on its beat
-    if (hastened && b.nextAt <= t && b.remaining > 0) beginAttack(s, p, b);
+    if (hastened && b.nextAt <= t && b.remaining > 0) {
+      if (s.rings && s.rings.length && ringBlocks(s, p)) b.nextAt = onBeat(p, b, t + 1);
+      else beginAttack(s, p, b);
+    }
   }
 }

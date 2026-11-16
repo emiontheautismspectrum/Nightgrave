@@ -11,7 +11,7 @@ import type { Difficulty } from '../src/data/tuning';
 import { Sim } from '../src/sim/sim';
 import type { BossKind } from '../src/sim/state';
 import { botInput } from './bot';
-import { attacks, startFight } from './boss_tools';
+import { attacks, lichMostly, startFight } from './boss_tools';
 import { SPOTS, walkingSolver } from './pack_tools';
 
 const MOTION: Features = withFeatures('bossMotion', 'bosses');
@@ -75,6 +75,52 @@ describe('bossMotion: a walking hero gets through random attack sequences, the b
         if (!r.ok) stuck.push(`seed ${seed * 13 + 1} ${spot} body ${b.x.toFixed(0)},${b.y.toFixed(0)}`);
       }
       console.log(`walking solver with motion, ${kind} sequences of 4: ${JSON.stringify(how)}`);
+      expect(stuck).toEqual([]);
+    });
+});
+
+// ------------------------------------------------------------------ all blocks (block 5: the fairness proofs)
+
+const ALL: Features = withFeatures('bosses', 'bossOrder', 'bossMotion', 'bossMoves');
+/** ALL, with the Toller's new moves weighed 0 (they are answered by the parry or the dash, never by walking alone). */
+const ALL_WALKABLE: Features = {
+  ...ALL,
+  bossMoves: { ...ALL.bossMoves, toller: { ...ALL.bossMoves.toller, peal: { ...ALL.bossMoves.toller.peal, weight: 0 }, echo: { ...ALL.bossMoves.toller.echo, weight: 0 }, chains: { ...ALL.bossMoves.toller.chains, weight: 0 } } },
+};
+
+describe('all blocks: a walking hero gets through the walkable attacks (200 seeds; random body spots)', () => {
+  for (const pattern of ['soulfire', 'grasp'] as const)
+    it(`lich ${pattern} alone: every hero spot, a random body spot`, { timeout: 900_000 }, () => {
+      const f = lichMostly(pattern, ALL);
+      const how: Record<string, number> = {};
+      const stuck: string[] = [];
+      for (let seed = 1; seed <= SEEDS; seed++) {
+        const [spot, hx, hy] = SPOTS[seed % SPOTS.length]!;
+        const piece = startFight('lich', seed * 7, hx, hy, f);
+        const r = walkingSolver(piece, 15, attacks(1));
+        const k = r.how.startsWith('walk') ? 'walk' : r.how;
+        how[k] = (how[k] ?? 0) + 1;
+        if (!r.ok) stuck.push(`seed ${seed * 7} ${spot}`);
+      }
+      console.log(`walking solver, lich ${pattern}: ${JSON.stringify(how)}`);
+      expect(stuck).toEqual([]);
+    });
+
+  for (const kind of KINDS)
+    it(`${kind}: four attacks in a row with every block on (the Toller's ring and chains aside), a random body spot`, { timeout: 900_000 }, () => {
+      const how: Record<string, number> = {};
+      const stuck: string[] = [];
+      for (let seed = 1; seed <= SEEDS; seed++) {
+        const [spot, hx, hy] = SPOTS[seed % SPOTS.length]!;
+        const piece = startFight(kind, seed * 17 + 3, hx, hy, ALL_WALKABLE);
+        const b = piece.sim.state.boss!;
+        if (kind !== 'toller') [b.x, b.y] = bandSpot(seed + 1000); // the Toller only moves with its peal
+        const r = walkingSolver(piece, 22, attacks(4));
+        const k = r.how.startsWith('walk') ? 'walk' : r.how;
+        how[k] = (how[k] ?? 0) + 1;
+        if (!r.ok) stuck.push(`seed ${seed * 17 + 3} ${spot}`);
+      }
+      console.log(`walking solver, all blocks, ${kind} sequences of 4: ${JSON.stringify(how)}`);
       expect(stuck).toEqual([]);
     });
 });

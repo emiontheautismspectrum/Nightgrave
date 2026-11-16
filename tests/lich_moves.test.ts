@@ -78,6 +78,7 @@ describe('soulfire', () => {
 describe('grasp', () => {
   it('hands >= 90 px from the hero and 60 px apart, lit >= 0.75 s; each bursts into 6 red blades with one gap >= 0.5 rad near the hero, 0.3 s apart', () => {
     let hands = 0;
+    let burstsAll = 0;
     for (let seed = 1; seed <= 16; seed++) {
       let pts: [number, number][] = [];
       let wind = 0;
@@ -102,7 +103,8 @@ describe('grasp', () => {
         for (const e of s.events) {
           if (e.type !== 'boss_grasp') continue;
           bursts.push({ t: s.tick - 1, x: e.x, y: e.y });
-          const blades = s.projectiles.filter((pr) => pr.kind === 'blade' && pr.born === s.tick - 1 && Math.hypot(pr.x - e.x, pr.y - e.y) < 6);
+          burstsAll++;
+          const blades = s.projectiles.filter((pr) => pr.kind === 'blade' && pr.born === s.tick - 1 && Math.hypot(pr.x - e.x, pr.y - e.y) < 12);
           expect(blades.length).toBe(L.grasp.blades);
           for (const bl of blades) expect(bl.parryable).toBe(false);
           // one gap: the largest angle between neighbours, wider than the others, centred within gapAimRad of the hero
@@ -117,10 +119,12 @@ describe('grasp', () => {
           expect(Math.abs(((mid - hero + 3 * Math.PI) % (2 * Math.PI)) - Math.PI)).toBeLessThanOrEqual(L.grasp.gapAimRad + 1e-6);
         }
       });
+      expect(bursts.length, `seed ${seed}`).toBeGreaterThanOrEqual(pts.length); // the hands really burst
       for (let i = 1; i < bursts.length; i++)
         if (bursts[i]!.t - bursts[i - 1]!.t < 60) expect(bursts[i]!.t - bursts[i - 1]!.t).toBe(Math.round(L.grasp.staggerSeconds * 60));
     }
     expect(hands).toBeGreaterThan(30);
+    expect(burstsAll).toBeGreaterThan(30);
   });
 });
 

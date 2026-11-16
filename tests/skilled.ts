@@ -12,7 +12,7 @@
 import { BTN_DASH, BTN_PARRY, type InputFrame } from '../src/sim/input';
 import { dashCooldownLeft, isFading, parryCooldownLeft, type Sim } from '../src/sim/sim';
 import { inParryZone } from '../src/sim/parryZone';
-import { botInput, wallSoon } from './bot';
+import { botInput, ringAhead, wallSoon } from './bot';
 
 export const REACTION_TICKS = 12;
 /** Ticks before a planned parry press at which an arc hero starts turning to the threat. */
@@ -24,6 +24,8 @@ export class SkilledBot {
   /** The violet threat the planned parry is for (arc heroes turn to it). */
   private target = -1;
   private turnUntil = -1;
+  /** The timing error of the current ring parry plan (FEATURES.bossMoves only). */
+  private ringJitter = 0;
   private jitter = { x: 0, y: 0, until: 0 };
   /** parry = false: the same human-like player that never parries (the dodge-only comparison). */
   constructor(seed: number, private parry = true) {
@@ -50,7 +52,7 @@ export class SkilledBot {
     if (walls) s.walls = walls.filter((w) => t - w.start >= REACTION_TICKS);
     let f: InputFrame;
     try {
-      f = botInput(sim, { parry: false, beamDash: true });
+      f = botInput(sim, { parry: false, beamDash: true, ringParry: this.parry });
     } finally {
       s.projectiles = all;
       if (knots) s.knots = knots;
@@ -67,7 +69,11 @@ export class SkilledBot {
 
     // parry: find the first perceived violet threat that will actually reach the hero and when it gets "close"
     let buttons = f.buttons & ~BTN_PARRY;
-    if (this.parry && this.parryAt < 0 && parryCooldownLeft(s, p) === 0) {
+    // the Toller's ring (FEATURES.bossMoves only): keep the parry for a ring that arrives within a parry cooldown
+    // (the shots are dodged meanwhile), as a careful player would
+    const ring0 = s.rings && s.rings.length ? ringAhead(sim) : null;
+    const reserve = !!ring0 && ring0.ticks < p.parryCooldown + 12;
+    if (this.parry && this.parryAt < 0 && parryCooldownLeft(s, p) === 0 && !reserve) {
       let best = Infinity;
       for (const pr of seen) {
         if (!pr.parryable) continue;
@@ -119,6 +125,19 @@ export class SkilledBot {
             break;
           }
     }
+    // the Toller's ring (FEATURES.bossMoves only): parry it when its band is half way into the pulse (+-2 ticks)
+    // (re-planned every tick while the ring is the target: the hero's own steps change when the band arrives)
+    const ra = s.rings && s.rings.length ? ringAhead(sim) : null;
+    if (this.parry && ra && (this.parryAt < 0 || this.target === ra.ring.id) && parryCooldownLeft(s, p) <= ra.ticks) {
+      const v = ra.ring.phase === 'grow' ? ra.ring.speed : ra.ring.back;
+      const want = ra.ring.phase === 'hold' ? Infinity : Math.max(0, ra.gap - p.parryRadius * 0.5) / v;
+      if (want < 40) {
+        if (this.target !== ra.ring.id || this.parryAt < 0) this.ringJitter = Math.round((this.rnd() - 0.5) * 4.999);
+        const at = t + Math.max(parryCooldownLeft(s, p), Math.round(want) + this.ringJitter);
+        this.parryAt = this.parryAt >= 0 && this.target === ra.ring.id ? Math.min(this.parryAt, at) : at;
+        this.target = ra.ring.id;
+      }
+    }
     if (this.parryAt >= 0 && t >= this.parryAt) {
       buttons |= BTN_PARRY;
       this.parryAt = -1;
@@ -126,7 +145,8 @@ export class SkilledBot {
     }
     // an arc hero faces the threat from TURN_LEAD ticks before the press until the end of the pulse (or the threat's end)
     const turning = (this.parryAt >= 0 && this.parryAt - t <= TURN_LEAD) || t < this.turnUntil;
-    const tgt = turning && !p.parryFull ? (s.projectiles.find((pr) => pr.id === this.target) ?? s.knots?.find((k) => k.id === this.target)) : undefined;
+    const ringTgt = ra && ra.ring.id === this.target ? { x: ra.nx, y: ra.ny } : undefined;
+    const tgt = turning && !p.parryFull ? (s.projectiles.find((pr) => pr.id === this.target) ?? s.knots?.find((k) => k.id === this.target) ?? ringTgt) : undefined;
     if (tgt && !(buttons & BTN_DASH) && !wallSoon(sim, 40)) {
       const rx = tgt.x - h.x;
       const ry = tgt.y - h.y;

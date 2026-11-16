@@ -278,7 +278,14 @@ export interface TollerMoves {
    * ECHO: the ring expands to the farthest arena corner + `edgeMarginPx`, HOLDS there (outside the arena) for
    * `holdSeconds`, then contracts back to the bell at `returnFactor` x its speed; the whole life <= `maxLifeSeconds`.
    */
-  readonly echo: RingRow & { readonly edgeMarginPx: number; readonly holdSeconds: number; readonly returnFactor: number; readonly maxLifeSeconds: number };
+  readonly echo: RingRow & {
+    readonly edgeMarginPx: number;
+    readonly holdSeconds: number;
+    readonly returnFactor: number;
+    readonly maxLifeSeconds: number;
+    /** No other attack of the boss starts or launches while the echo is out beyond the hero (until it passed him back). */
+    readonly ownsReturn: boolean;
+  };
   /**
    * CHAINS: a chain lands on the hero's position fixed at the wind-up start (wind-up >= `telegraphSeconds`, whole
    * beats); a hero still within `spotRadius` at the landing is BOUND. IRON (weight `ironWeight`): bound `ironSeconds`,
@@ -416,13 +423,13 @@ export const FEATURES: Features = deepFreeze({
     enabled: false,
     toller: {
       ring: { cutHalfRad: 0.45, maxGaps: 4, holdSeconds: 1.5, passedSeconds: 0.5 },
-      peal: { weight: 2, windupBeats: 2, speed: 90, halfWidth: 2, startRadius: 8, minHeroDist: 70, maxLeaveSeconds: 4.5, teleportInset: 30, teleportYMax: 120, teleportMinHeroDist: 90, hastenCount: 2, hastenBeats: 1 },
-      echo: { weight: 1.5, windupBeats: 2, speed: 100, halfWidth: 2, startRadius: 8, minHeroDist: 70, edgeMarginPx: 20, holdSeconds: 0.5, returnFactor: 0.7, maxLifeSeconds: 8 },
-      chains: { weight: 1.5, windupBeats: 2, telegraphSeconds: 0.75, spotRadius: 16, ironWeight: 1, breakWeight: 1, ironSeconds: 2.0, breakParries: 3, maxSeconds: 5.0, allow: ['toll'], boundRingBeats: 2 },
+      peal: { weight: 0.55, windupBeats: 2, speed: 90, halfWidth: 2, startRadius: 8, minHeroDist: 70, maxLeaveSeconds: 4.5, teleportInset: 30, teleportYMax: 120, teleportMinHeroDist: 90, hastenCount: 1, hastenBeats: 1 },
+      echo: { weight: 0.5, windupBeats: 2, speed: 100, halfWidth: 2, startRadius: 8, minHeroDist: 70, edgeMarginPx: 20, holdSeconds: 0.5, returnFactor: 0.7, maxLifeSeconds: 8, ownsReturn: true },
+      chains: { weight: 0.6, windupBeats: 2, telegraphSeconds: 0.75, spotRadius: 16, ironWeight: 1, breakWeight: 1, ironSeconds: 2.0, breakParries: 3, maxSeconds: 5.0, allow: ['toll'], boundRingBeats: 2 },
     },
     lich: {
-      soulfire: { weight: 1.5, count: 10, maxCount: 12, durationSeconds: 1.0, turns: 1, gapRad: 0.5, speedFactor: 1 },
-      grasp: { weight: 1.5, count: 2, maxCount: 3, telegraphSeconds: 0.75, staggerSeconds: 0.3, minHeroDist: 90, spacingPx: 60, edgeInset: 30, blades: 6, gapRad: 0.5, gapAimRad: 0.4, speedFactor: 1 },
+      soulfire: { weight: 1.4, count: 10, maxCount: 12, durationSeconds: 1.0, turns: 1, gapRad: 0.5, speedFactor: 0.95 },
+      grasp: { weight: 1.5, count: 3, maxCount: 3, telegraphSeconds: 0.75, staggerSeconds: 0.3, minHeroDist: 90, spacingPx: 60, edgeInset: 30, blades: 6, gapRad: 0.5, gapAimRad: 1.0, speedFactor: 1.2 },
     },
   },
 });

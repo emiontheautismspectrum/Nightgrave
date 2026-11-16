@@ -27,7 +27,7 @@ had: `f0214eba`, with `CLIENT_VERSION` 0.10.0. Both are pinned in `tests/feature
 ## Variants (bots and tests)
 
 `withFeatures('patternPack')` returns a copy of the flags with that block enabled (`'thorn'` / `'toller'` one new boss,
-`'bosses'` both). Pass it to the sim:
+`'bosses'` both; `'bossOrder'`, `'bossMotion'`, `'bossMoves'` the U3b blocks). Pass it to the sim:
 `new Sim(seed, 'hard', { hero, features })` or `makeParams(difficulty, hero, features)`. Never edit the production
 flags to try something.
 
@@ -237,16 +237,134 @@ Rows tuned during the balance pass: bloom shards 10 -> 9 (max 12 -> 10); toll ga
 Rules added: no pendulum over a toll still ringing (any toll); the hedge's gap never through her body; no bloom in a
 live wall's gap corridor.
 
+### U3b (dark): `bossOrder`, `bossMotion`, `bossMoves`
+
+Three plain blocks (each its own flag, any combination; `withFeatures('bossOrder')`, `'bossMotion'`, `'bossMoves'`).
+Code: `src/sim/boss.ts` (order, the hold and the deferral in `runBoss`), `src/sim/bossMotion.ts`,
+`src/sim/tollerMoves.ts`, `src/sim/lichMoves.ts`. Nothing about the bosses' NEW placement or choices draws from the
+PRNG: every such choice is an integer hash of (seed, boss start, serial or pick) (`orderHash`, `hashUnit`), so the
+spawn schedule of everything else never shifts. The only PRNG use is the existing one: one draw per pattern pick
+(the new weights are appended after the old patterns), and the old patterns' own draws.
+
+**`bossOrder`.** Every boss wave draws its kind among all the bosses of the run (the Eye, the Lich, each enabled new
+boss): kind(0) = hash(seed, 0) mod k, kind(n) = uniform among the k - 1 OTHER kinds by hash(seed, n), walked from
+n = 0 (a pure function of the seed and n). Never the same boss twice in a row; with only the Eye and the Lich it is an
+alternation whose first boss is drawn. Shares within 20% of uniform (tested over 2000 seeds x 12 waves). The forced
+first boss of the dev preview still works. The score bound is unchanged (same kinds).
+
+**`bossMotion`.** The band: >= 30 px inside the arena, y <= 120 (the upper 43%). Every body is HELD (does not move)
+from the start of an attack (the Lich's teleport-out, every wind-up) to its launch, and while a beam or a deferred
+emission of the boss lives, so a telegraph fixed at the wind-up start (a start line, a lash's line, spawn points)
+always matches its attack. Motion begins at the intro's end.
+
+| Boss | Motion |
+|---|---|
+| Eye Sentinel | slides at 14 px/s between hashed band targets, each >= 80 px from the hero when picked; bob (2 px, 2.4 s) RENDER ONLY |
+| Lich Mage | drifts the same way at 12 px/s (bob render only); its teleports stay as they are (PRNG spots); from a spot outside the band it drifts back in, never a jump |
+| Thorn Mother | stands; before every 3rd attack she SINKS (0.6 s, roots pull her down; no marker, no threat) and EMERGES (0.6 s) at a hashed band spot >= 90 px from the hero, then winds up there. The sink comes on top of her cadence |
+| The Toller | does not drift; it teleports only with its `peal` |
+
+With the block on, a swinging beam (the Eye's beam, the pendulum) whose safe side (behind its start line) would lie
+outside the arena turns the other way (no draw: the drawn sign is flipped). Without that, a body high in the band
+with the hero on the top edge left the walking hero no answer; production has the same case once in 200 seeds (Eye,
+seed 729, top-right corner), which stays as it is while the block is off.
+
+**`bossMoves`.** New attacks of existing bosses; a row is read only for a boss that exists in the run (the `toller`
+rows need `bosses.toller` enabled too, else they are ignored: tested with a sealed row). The old rows are untouched.
+
+| The Toller (`bossMoves.toller`) | Value |
+|---|---|
+| `peal` (weight 0.55) | 2-beat wind-up (the ring forms as red ticks around the bell); a RING (radius 8) expands from the bell at 90 px/s x difficulty speed x encounter bonus, never slower than leaving the arena in 4.5 s; then the Toller teleports to a hashed band spot (>= 30 px inside, y <= 120) >= 90 px from the hero and its next attack starts 1 beat sooner (`hastenCount` 1, `hastenBeats` 1: 2 beats = 1.0 s instead of 3 beats = 1.5 s; never below 2 beats, always on the beat) |
+| `echo` (0.5) | like the peal (no teleport, no hasten), 100 px/s with a floor that keeps its whole life <= 8 s; holds 0.5 s at the farthest arena corner + 20 px (outside the arena), then contracts back to the bell at 70% of its speed; gaps cut persist, a cut on the way back pays nothing. While it is out beyond the hero (until it passed him back) no other attack starts or launches (`ownsReturn`) |
+| `chains` (0.6) | the chain lands on the hero's position fixed at the wind-up start, after >= 0.75 s (2 beats); a highlighted circle of 16 px marks it. A hero inside at the landing (the launch: the segment goes there) is BOUND, no damage; a hero who walked out, or is dashing, is not. Variant by hash of the serial (weights 1 : 1): IRON (ash grey): bound 2.0 s, cannot move (the aim still follows the input), the parry works, the dash breaks it at once; cast only while the dash is ready, and an iron chain landing on a hero whose dash is on cooldown misses. PARRY-BREAK (violet): bound until 3 parry pulses were fired (every pulse counts, a whiff too) or 5.0 s; the DASH IS DISABLED while bound; the boss then launches only the allowed patterns (`allow`: the toll), one at a time (no start while an earlier hazard lives), its rings 2 beats apart (longer than the 0.9 s parry cooldown) |
+
+**The ring** (`Ring`, `s.rings`, one at a time): a FULL red circle, 2 px half-width, not a ring of orbs. The hero dies
+where his circle overlaps the band outside every gap: O(1) (distance to the centre within the band, and the unit
+vector centre -> hero outside every gap by a dot product with each gap's direction and its cos / sin; no atan2).
+Unparryable to touch; the dash i-frames pass. **Walking cannot pass a full ring: the answers are the parry and the
+dash.** The PARRY CUTS it: a pulse whose zone (`inParryZone`, the band's half-width as the radius) covers the ring's
+point nearest the hero opens a gap of 0.45 rad there (max 4 per ring, for the ring's life). The first cut of a ring
+pays one parry (parryBase x the multiplier, doubled under Double Score; it steps the multiplier when it is the
+pulse's first scoring kill and refreshes the chain; never PERFECT, no guard charge); later cuts pay nothing. Slow
+Time slows rings like projectiles (never a bind or the chain's timers). Not picked while the hero is within 70 px of
+the bell, and a toll at the launch if he is (the ring would reach him with no time to answer).
+
+**One thing at a time.** The peal, the echo and the chains never take the last segment (the defeat never waits for
+a long ring or a bind). A drawn new move never STARTS while an earlier hazard (`earlierHazardsAlive`: a projectile,
+wall, beam, ring or pending emission) is alive: the Toller keeps the drawn move (no new draw) and starts it on the
+first beat the field is clear (a literal filter of the table made them practically never appear: the bell always has
+something in flight). While a ring will reach the hero's current distance within 1.5 s (`ring.holdSeconds`), or
+passed him less than 0.5 s ago, NO other attack of the boss launches or starts its wind-up (the launch waits for the
+Toller's next beat; the cadence is not shortened); this covers the echo's way back.
+
+**The bind** (`Chain`, `s.chain`): derived only from the inputs and the state (replays need nothing more). `sim.ts`
+reads it only where the key exists (the block and the Toller enabled): a bound hero's step is 0, the dash is refused
+under a parry-break chain, a dash frees an iron one, every pulse counts. The bind ends at once when the boss is
+defeated (or its bar is empty), with the run, or at its time (real ticks).
+
+| The Lich (`bossMoves.lich`) | Value |
+|---|---|
+| `soulfire` (weight 1.4) | a violet orb spiral from where the Lich stood at the launch, over 1.0 s: 10 (max 12) small orbs at 0.95 x the orb speed, each turned >= 0.5 rad (turns x 2 pi / count) from the last, through the deferred queue (one attack, one segment; the defeat waits for the queue) |
+| `grasp` (1.5) | 3 (max 3) bone hands at hashed spots >= 90 px from the hero, 60 px apart, 30 px inside the arena, lit for >= 0.75 s (its wind-up); each bursts into a red ring of 6 blades (1.2 x the blade speed) with ONE gap (>= 0.5 rad and >= 1.6 x the ring spacing) centred within 1.0 rad of the hero's direction, 0.3 s apart. Dash or walk through the gap |
+
+The Thorn Mother's new move is her sink and emerge (`bossMotion`).
+
+**Fairness** (`tests/boss_moves_fair.test.ts`, `tests/toller_moves.test.ts`, `tests/lich_moves.test.ts`,
+`tests/edge_markers.test.ts`): every wind-up >= 15 ticks; no boss shot within 60 px of the hero uncued (bloom and
+grasp blades start on their lit ground cue); with the bodies moving, a beam leaves from the body of its wind-up.
+Walking-only solver (200 seeds, centre, corners, edges): every boss's random sequences of four attacks with the body
+at random band spots (motion on), and with every block on (the Toller's ring and chains weighed 0); soulfire and grasp
+alone. The ring: on 200 seeds (every spot, both heroes, every difficulty) the parry on time and the dash both survive,
+and standing still and six walking policies all die to it (unless the walk takes the hero under the bell before the
+launch: then it is a toll). The chains: walking out of the spot is never bound; bound, the dash (iron) or the parry
+(break) always gets through; bound and idle can die; under a parry-break bind only parryable shots fly, no beam, no
+ring, the rings >= 2 beats apart; an iron bind starts with the dash ready. Off-view rings are marked >= 15 ticks before
+they can reach the hero (red), an echo's return >= 45 ticks (bone while it is out; the full view marks the arena border
+with bone ticks); grasp hands red, soulfire orbs violet.
+
+**Entity caps:** rings <= 1, chains <= 1, soulfire <= 12 orbs per attack, grasp <= 3 hands x 6 blades; the existing
+ones unchanged (toll <= 30 orbs, knell rings <= 1, blooms <= 3, walls <= 1).
+
+**Balance** (`NG_FLAGS=bosses,bossOrder,bossMotion,bossMoves npx vite-node tools/bot/bosses_report.ts 50 hard`; row
+overrides `NG_ROWS` for the bosses, `NG_MOVES` for bossMoves; first encounter, the immortal skilled bot):
+
+| Hard, 50 seeds per hero | deaths / fight off -> on (knight / wisp on) | fights survived on (knight / wisp) | fight length on (median, range) | new attacks' share of deaths |
+|---|---|---|---|---|
+| Eye | 0.46 -> 0.25 (0.28 / 0.22) | 78% / 78% | 28.1 s (26-30) | - |
+| Lich | 0.15 -> 0.33 (0.48 / 0.18) | 66% / 84% | 28.8 s (27-33) | soulfire 21%, grasp 21% |
+| Thorn Mother | 0.44 -> 0.59 (0.66 / 0.52) | 52% / 66% | 32.3 s (30-37) | (her sink is no attack) |
+| The Toller | 0.39 -> 0.67 (0.92 / 0.42) | 52% / 68% | 36.3 s (23-51) | echo 4%, peal 1%, chains 0% (binds survived 100%) |
+
+Simple bots (`tests/bossbots.test.ts`, every block on): Easy 8-10 of 10 for both bots and every boss; Medium 8-10 of
+10, except the parry bot against the Toller (5 of 10; 4 of 10 without the U3b blocks: its old toll handling). Rows
+tuned in the balance pass: new-move weights (peal 2 -> 0.55, echo 1.5 -> 0.5, chains 1.5 -> 0.6), `hastenCount`
+2 -> 1, the ring's `minHeroDist` 90 -> 70 (at 90 the hero in the centre, 77 px from the bell, never saw a ring),
+`echo.ownsReturn`, soulfire 0.95 x speed (weight 1.4), grasp 3 hands at 1.2 x speed aimed within 1.0 rad. Targets
+missed (the rows were tuned, not the targets): the Eye dies 0.25 per fight (< 0.3: the reachable beam side makes its
+beam fairer); heroes are 21-24% apart in fights survived for the Lich, the Thorn Mother and the Toller (the old
+bosses already split 15-24% without the blocks); the Toller's fights are 36 s at the median (the clear-field waits).
+The bots learn the new things in `tests/` only, and only while such a thing exists (a ring, a bind, a grasp hand):
+the skilled bot cuts a ring in front of it (keeping its parry for it) or dashes, the heuristic bot dashes across it;
+a bound bot parries when parry-bound and dashes when iron-bound.
+
+**Enabling.** `bossOrder`, `bossMotion` and `bossMoves` are separate rules changes; each needs the cut-over of
+"Enabling a block". `bossMoves` without the Toller enabled adds only the Lich's moves. Render placeholders (palette
+colours only; `docs/ASSETS_SPEC.md`): the ring, the chain and its spot, the grasp hands, the soulfire sparks, the
+echo's border ticks.
+
 ### Dev preview (`npm run dev` only)
 
 Play dark blocks without editing a file. The parameters are read only when `import.meta.env.DEV` is true: in a
 production build the code is dead (`tests/prodbundle.test.ts`).
 
-- `?flags=bosses,knot,briar,patternPack`: any subset by block name (`thorn`, `toller` for one new boss);
+- `?flags=bosses,knot,briar,patternPack,bossOrder,bossMotion,bossMoves`: any subset by block name (`thorn`, `toller`
+  for one new boss);
 - `?boss=thorn|toller|eye|lich`: the FIRST boss of the run (an unrecorded option, like `?wave=`; ignored for a disabled
   boss);
 - with `?wave=3` the first boss comes at once, `&play=1` skips the title.
 
 Examples: `http://localhost:5173/?flags=bosses&boss=thorn&wave=3`, `http://localhost:5173/?flags=toller&boss=toller&wave=3&play=1`,
-`http://localhost:5173/?flags=bosses,knot,briar&wave=3`. A preview run is never saved, never submitted, never counts as a
+`http://localhost:5173/?flags=bosses,knot,briar&wave=3`, the whole of U3b:
+`http://localhost:5173/?flags=bosses,bossOrder,bossMotion,bossMoves&play=1` (with `&boss=toller&wave=3` for the
+Toller at once). A preview run is never saved, never submitted, never counts as a
 best, has no replay, and shows a PREVIEW tag in the HUD.

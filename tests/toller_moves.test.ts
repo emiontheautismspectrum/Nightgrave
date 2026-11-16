@@ -13,6 +13,7 @@ import { earlierHazardsAlive, inRingGap, ringBlocks, ringGap, ringHits } from '.
 import { ringReturning } from '../src/render/edgeMarkers';
 import { onlyTollerMove } from './boss_tools';
 import { mulberryInputs } from './scripted';
+import { botInput } from './bot';
 
 const MOVES = withFeatures('toller', 'bossMoves');
 const M = MOVES.bossMoves.toller;
@@ -163,7 +164,7 @@ describe('the peal', () => {
       }
   });
 
-  it('its next two attacks start 2 beats apart (hastened, on the beat), then the 3-beat cadence returns', () => {
+  it('its next hastenCount attacks start hastenBeats sooner (on the beat, never below 2 beats), then the 3-beat cadence returns', () => {
     const f = onlyTollerMove('peal');
     // the peal plus tolls: the attacks after a peal are tolls (the next peal waits for the clear field)
     const mix = { ...f, bosses: { ...f.bosses, toller: { ...f.bosses.toller, toll: { ...f.bosses.toller.toll, weight: 1 } } } } as Features;
@@ -187,13 +188,18 @@ describe('the peal', () => {
           waited = false;
         }
       }
-      for (let i = 0; i + 3 < starts.length; i++) {
-        if (starts[i]!.k !== 'peal' || starts[i + 1]!.waited || starts[i + 2]!.waited || starts[i + 3]!.waited) continue;
-        // start to start: the cadence (a deferred launch delays the next start by its deferral, never shortens it)
-        expect(starts[i + 1]!.t - starts[i]!.t).toBe(2 * BEAT + starts[i]!.defer);
-        expect(starts[i + 2]!.t - starts[i + 1]!.t).toBe(2 * BEAT + starts[i + 1]!.defer);
-        expect(starts[i + 3]!.t - starts[i + 2]!.t).toBe(3 * BEAT + starts[i + 2]!.defer);
-        checked++;
+      const hc = M.peal.hastenCount;
+      for (let i = 0; i + hc + 1 < starts.length; i++) {
+        if (starts[i]!.k !== 'peal' || starts.slice(i + 1, i + hc + 2).some((x) => x.waited)) continue;
+        // start to start: the cadence (a deferred launch delays the next start by its deferral, never shortens it);
+        // a start held back by the ring rule shows as a later start (a wait): those runs are left out
+        let held = false;
+        for (let j = 1; j <= hc + 1; j++) {
+          const want = (j <= hc ? 3 - M.peal.hastenBeats : 3) * BEAT + starts[i + j - 1]!.defer;
+          if (starts[i + j]!.t - starts[i + j - 1]!.t > want) held = true;
+          else expect(starts[i + j]!.t - starts[i + j - 1]!.t).toBe(want);
+        }
+        if (!held) checked++;
       }
     }
     expect(checked).toBeGreaterThan(3);
@@ -450,5 +456,195 @@ describe('the chains', () => {
     sim.step(IDLE);
     expect(sim.state.chain).toBeNull();
     expect(sim.state.events).toContainEqual({ type: 'chain_free', how: 'boss' });
+  });
+});
+
+// ------------------------------------------------------------------ block 5: the proofs (200 seeds)
+
+const SEEDS = Number(process.env.NG_SEEDS ?? 200);
+const SPOTS: [string, number, number][] = [['centre', 240, 135], ['bottom-left', 52, 239], ['bottom-right', 428, 239], ['bottom', 240, 239], ['left', 52, 135], ['right', 428, 135], ['top-left', 52, 31], ['top-right', 428, 31], ['low-centre', 240, 200]];
+
+/** The dash answer: dash across the band just before it touches; between the passes of an echo, walk in to the bell. */
+function dashRing(sim: Sim): InputFrame {
+  const s = sim.state;
+  const h = s.hero;
+  const ring = s.rings?.[0];
+  if (!ring) return IDLE;
+  const d = Math.hypot(h.x - ring.x, h.y - ring.y) || 1;
+  const gap = Math.abs(d - ring.r) - ring.halfWidth - sim.params.heroRadius;
+  const coming = ring.phase === 'grow' ? ring.r < d : ring.r > d;
+  const inward = ring.phase === 'grow' ? -1 : 1;
+  const ready = s.tick - h.dashStart >= sim.params.dashCooldown;
+  if (coming && gap > 0 && gap < 5 && ready) {
+    // across the band: outwards needs room before the arena edge; else through the bell to the ring's far side
+    const ux = ((h.x - ring.x) / d) * inward;
+    const uy = ((h.y - ring.y) / d) * inward;
+    const room = (k: number): boolean => {
+      const ex = h.x + ux * k * 30;
+      const ey = h.y + uy * k * 30;
+      return ex > 52 && ex < 428 && ey > 31 && ey < 239;
+    };
+    const k = room(1) ? 1 : -1;
+    return { cursor: true, mx: Math.round(h.x + ux * 40 * k), my: Math.round(h.y + uy * 40 * k), buttons: BTN_DASH };
+  }
+  // an echo out beyond the hero: walk in to the bell (its return then comes later than the dash's cooldown)
+  if (ring.echo && ring.r > d && d > 24) return { cursor: true, mx: Math.round(ring.x + ((h.x - ring.x) / d) * 20), my: Math.round(ring.y + ((h.y - ring.y) / d) * 20), buttons: 0 };
+  return IDLE;
+}
+
+describe('the ring proof: a hero who parries on time, or dashes, survives; one who only walks dies (200 seeds)', () => {
+  for (const kind of ['peal', 'echo'] as const)
+    it(`${kind}: every hero spot, both heroes, every difficulty`, { timeout: 600_000 }, () => {
+      const F = onlyTollerMove(kind, withFeatures('toller', 'bossMoves', 'bossMotion', 'bossOrder'));
+      const fails: string[] = [];
+      let rings = 0;
+      for (let seed = 1; seed <= SEEDS; seed++) {
+        const [spot, hx, hy] = SPOTS[seed % SPOTS.length]!;
+        const d = (['easy', 'medium', 'hard'] as const)[seed % 3]!;
+        const hero = seed % 2 ? 'knight' : 'wisp';
+        const live = (input: (sim: Sim) => InputFrame): { ring: boolean; alive: boolean; by: number } => {
+          const sim = tollerFight(F, seed, hx, hy, d, hero);
+          let ring = false;
+          let ended = false;
+          while (!ended && sim.state.alive && sim.state.tick < 60 * 30) {
+            sim.step(input(sim));
+            for (const e of sim.state.events) {
+              if (e.type === 'boss_ring') ring = true;
+              if (e.type === 'ring_end') ended = true;
+              if (e.type === 'boss_attack' && !ring && e.pattern === 'toll') ended = true; // too close to the bell: a toll
+            }
+          }
+          const death = sim.state.events.find((e) => e.type === 'death');
+          return { ring, alive: sim.state.alive, by: death && death.type === 'death' ? death.by : 0 };
+        };
+        const walks: ((sim: Sim) => InputFrame)[] = [() => IDLE, (sim) => ({ ...botInput(sim, { parry: false }), buttons: 0 })];
+        for (const [tx, ty] of [[60, 35], [420, 35], [60, 235], [420, 235], [240, 235], [240, 35]]) walks.push(() => ({ cursor: true, mx: tx!, my: ty!, buttons: 0 }));
+        const parry = live(parryRing);
+        if (!parry.ring) continue; // the hero stood within minHeroDist of the bell: the attack was a toll
+        rings++;
+        if (!parry.alive) fails.push(`seed ${seed} ${spot} ${d} ${hero}: the parry did not answer it`);
+        if (!live(dashRing).alive) fails.push(`seed ${seed} ${spot} ${d} ${hero}: the dash did not answer it`);
+        for (const [i, w] of walks.entries()) {
+          const r = live(w);
+          // (walking under the bell before the launch turns the ring into a toll: the rule of minHeroDist, not a pass)
+          if (r.ring && (r.alive || r.by !== -4)) fails.push(`seed ${seed} ${spot} ${d} ${hero}: walk ${i} was not killed by the ring (${r.alive ? 'alive' : r.by})`);
+        }
+      }
+      expect(fails).toEqual([]);
+      expect(rings).toBeGreaterThan(SEEDS * 0.5);
+    });
+});
+
+describe('the chains proof (200 seeds)', () => {
+  const base = withFeatures('toller', 'bossMoves', 'bossMotion', 'bossOrder');
+  // the chains first (weight 100), then the Toller's whole table at its usual weights
+  const F = { ...base, bossMoves: { ...base.bossMoves, toller: { ...base.bossMoves.toller, chains: { ...base.bossMoves.toller.chains, weight: 100 } } } } as Features;
+  /** Stay on the spot; when bound: IRON dashes out after a human reaction, BREAK parries every violet shot in reach. */
+  function boundAnswer(sim: Sim): InputFrame {
+    const s = sim.state;
+    const c = s.chain;
+    if (c?.bound && c.kind === 'iron' && s.tick - c.land >= 12) return { cursor: true, mx: 240, my: 200, buttons: BTN_DASH };
+    if (c?.bound && c.kind === 'break') return { ...botInput(sim, { parry: true }), buttons: botInput(sim, { parry: true }).buttons & BTN_PARRY };
+    return IDLE;
+  }
+  it('walking out of the spot is never bound; bound, the dash (iron) or the parry (break) always gets the hero through the bind; bound and idle, it can kill', { timeout: 600_000 }, () => {
+    const fails: string[] = [];
+    let iron = 0;
+    let brk = 0;
+    let idleDeaths = 0;
+    for (let seed = 1; seed <= SEEDS; seed++) {
+      const [spot, hx, hy] = SPOTS[seed % SPOTS.length]!;
+      const d = (['easy', 'medium', 'hard'] as const)[seed % 3]!;
+      const hero = seed % 2 ? 'knight' : 'wisp';
+      const play = (input: (sim: Sim) => InputFrame): { kind: string; bound: boolean; alive: boolean } => {
+        const sim = tollerFight(F, seed, hx, hy, d, hero);
+        let kind = '';
+        let bound = false;
+        let free = -1;
+        while (sim.state.alive && sim.state.tick < 60 * 40 && (free < 0 || sim.state.tick < free + 30)) {
+          sim.step(input(sim));
+          for (const e of sim.state.events) {
+            if (e.type === 'boss_chain' && !kind) kind = e.kind;
+            if (e.type === 'chain_bind') bound = true;
+            if ((e.type === 'chain_free' || e.type === 'chain_miss') && free < 0) free = sim.state.tick;
+          }
+        }
+        return { kind, bound, alive: sim.state.alive };
+      };
+      // walking out of the spot during the telegraph: never bound
+      const out = play((sim) => (sim.state.chain && !sim.state.chain.bound ? { cursor: true, mx: Math.round(sim.state.chain.x + (sim.state.chain.x < 240 ? 40 : -40)), my: Math.round(sim.state.chain.y), buttons: 0 } : IDLE));
+      if (out.bound) fails.push(`seed ${seed} ${spot}: bound after walking out`);
+      const ans = play(boundAnswer);
+      if (!ans.bound) continue;
+      if (ans.kind === 'iron') iron++;
+      else brk++;
+      if (!ans.alive) fails.push(`seed ${seed} ${spot} ${d} ${hero} ${ans.kind}: the answer did not get through the bind`);
+      if (ans.kind === 'break' && !play(() => IDLE).alive) idleDeaths++;
+    }
+    expect(fails).toEqual([]);
+    expect(iron).toBeGreaterThan(SEEDS * 0.2);
+    expect(brk).toBeGreaterThan(SEEDS * 0.2);
+    console.log(`chains proof: ${iron} iron and ${brk} parry-break binds answered; ${idleDeaths} of ${brk} idle parry-break binds died`);
+    // bound, walking is no answer (the hero cannot move: the IRON / PARRY-BREAK tests above) and standing is not one
+    // either: a parry-break bind left alone is lethal in a share of the casts (the toll rings are not closed walls)
+    expect(idleDeaths).toBeGreaterThan(0);
+  });
+
+  it('no hazard can reach a bound hero without an answer: under BREAK only parryable shots, rings one at a time; under IRON the dash is ready', () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const sim = new Sim(seed, (['easy', 'medium', 'hard'] as const)[seed % 3]!, { hero: seed % 2 ? 'knight' : 'wisp', features: withFeatures('bosses', 'bossOrder', 'bossMotion', 'bossMoves'), startWave: 3, firstBoss: 'toller' });
+      const frames = mulberryInputs(seed, 60 * 100);
+      let lastToll = -1;
+      for (let i = 0; sim.state.bossesDefeated === 0 && i < 60 * 100; i++) {
+        sim.state.alive = true;
+        sim.step(frames[i]!);
+        const s = sim.state;
+        for (const e of s.events) if (e.type === 'chain_bind' && e.kind === 'iron') expect(s.tick - 1 - s.hero.dashStart).toBeGreaterThanOrEqual(sim.params.dashCooldown);
+        if (!(s.chain?.bound && s.chain.kind === 'break')) continue;
+        for (const pr of s.projectiles) if (pr.boss > 0 && pr.boss !== s.chain.serial) expect(pr.parryable, `seed ${seed} ${pr.kind}`).toBe(true);
+        expect(s.beams.length).toBe(0);
+        expect(s.rings!.length).toBe(0);
+        for (const e of s.events)
+          if (e.type === 'boss_toll') {
+            if (lastToll >= 0) expect(s.tick - 1 - lastToll).toBeGreaterThanOrEqual(M.chains.boundRingBeats * BEAT);
+            lastToll = s.tick - 1;
+          }
+      }
+    }
+  });
+});
+
+describe('entity caps with every block on (U3b)', () => {
+  it('rings <= 1, chains <= 1, soulfire <= 12 orbs, grasp <= 3 hands x 6 blades', () => {
+    const f = withFeatures('bosses', 'bossOrder', 'bossMotion', 'bossMoves');
+    const caps = { rings: 0, chains: 0, soul: 0, hands: 0, blades: 0 };
+    for (const kind of ['toller', 'lich'] as const)
+      for (let seed = 1; seed <= 20; seed++) {
+        const sim = new Sim(seed, 'hard', { hero: seed % 2 ? 'knight' : 'wisp', features: f, startWave: 3, firstBoss: kind });
+        const pat = new Map<number, BossPattern>();
+        const frames = mulberryInputs(seed, 60 * 100);
+        for (let i = 0; sim.state.bossesDefeated === 0 && i < 60 * 100; i++) {
+          sim.state.alive = true;
+          sim.step(frames[i]!);
+          const s = sim.state;
+          for (const e of s.events) if (e.type === 'boss_attack') pat.set(s.boss!.serial, e.pattern);
+          caps.rings = Math.max(caps.rings, s.rings?.length ?? 0);
+          caps.chains = Math.max(caps.chains, s.chain ? 1 : 0);
+          const per = new Map<number, number>();
+          for (const pr of s.projectiles) if (pr.boss > 0) per.set(pr.boss, (per.get(pr.boss) ?? 0) + 1);
+          for (const [serial, n] of per) {
+            if (pat.get(serial) === 'soulfire') caps.soul = Math.max(caps.soul, n);
+            if (pat.get(serial) === 'grasp') caps.blades = Math.max(caps.blades, n);
+          }
+          const b = s.boss;
+          if (b) caps.hands = Math.max(caps.hands, (b.attack?.pattern === 'grasp' ? b.attack.points.length : 0) + (b.pending ?? []).filter((e) => e.op === 'grasp').length);
+        }
+      }
+    expect(caps.rings).toBe(1);
+    expect(caps.chains).toBe(1);
+    expect(caps.soul).toBeLessThanOrEqual(12);
+    expect(caps.hands).toBeLessThanOrEqual(3);
+    expect(caps.blades).toBeLessThanOrEqual(3 * 6);
+    console.log(`U3b entity caps: ${JSON.stringify(caps)}`);
   });
 });

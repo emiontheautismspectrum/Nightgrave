@@ -7,7 +7,8 @@
  * THE RING is a full red circle: lethal where the hero's circle overlaps its band outside every gap; the dash
  * i-frames pass. Walking cannot pass it: the answers are the PARRY (a pulse covering the ring's point nearest the hero
  * cuts a gap there; the first cut of a ring pays one parry) and the DASH. While a ring will reach the hero within
- * `ring.holdSeconds`, or passed him less than `ring.passedSeconds` ago, no other attack of the boss launches.
+ * `ring.holdSeconds`, or passed him less than `ring.passedSeconds` ago, no other attack of the boss launches or
+ * starts its wind-up (boss.ts).
  *
  * THE CHAIN binds a hero who stays on its spot at the landing (no damage): IRON (the dash breaks it) or BREAK (fire
  * `breakParries` pulses; no dash meanwhile; the boss then launches only allowed, parryable patterns).
@@ -250,6 +251,8 @@ export function ringBlocks(s: SimState, p: SimParams): boolean {
     if (t - ring.near < ticks(m.passedSeconds)) return true;
     const d = dist(h.x, h.y, ring.x, ring.y);
     const reach = ring.halfWidth + p.heroRadius;
+    // an echo out beyond the hero (past him outward, holding, or on its way back to him) keeps the field to itself
+    if (ring.echo && rows(p).echo.ownsReturn && (ring.phase === 'grow' ? ring.r - reach > d : ring.r + reach >= d)) return true;
     let until: number;
     if (ring.phase === 'grow') {
       if (ring.r + reach < d) until = (d - reach - ring.r) / ring.speed;

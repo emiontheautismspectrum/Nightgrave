@@ -5,12 +5,13 @@
 import { describe, expect, it } from 'vitest';
 import { FEATURES, withFeatures, type Features } from '../src/data/features';
 import { TUNING } from '../src/data/tuning';
-import { earliestBossDefeat } from '../src/shared/maxScore';
+import { earliestBossDefeat, maxPossibleScore } from '../src/shared/maxScore';
 import { bossCycle, bossKindFor, randomBossKind } from '../src/sim/boss';
 import { makeParams } from '../src/sim/params';
 import { Sim } from '../src/sim/sim';
 import type { BossKind, SimState } from '../src/sim/state';
 import { mulberryInputs } from './scripted';
+import { SkilledBot } from './skilled';
 
 const N = TUNING.bosses.everyNthWave;
 const bossWave = (n: number): number => (n + 1) * N - 1;
@@ -279,4 +280,35 @@ describe('bossMotion: the bodies move, and hold still whenever an attack is in p
       }
     void IDLE;
   });
+});
+
+// ------------------------------------------------------------------ block 5: the score bound
+
+
+describe('maxPossibleScore stays above every bot run of every U3b variant', () => {
+  const VARIANTS2: [string, Features][] = [
+    ['bossOrder', withFeatures('bossOrder')],
+    ['bossMotion', withFeatures('bossMotion')],
+    ['bossMoves', withFeatures('bossMoves')],
+    ['all + bosses', withFeatures('bosses', 'bossOrder', 'bossMotion', 'bossMoves')],
+    ['bossMoves + toller', withFeatures('toller', 'bossMoves')],
+  ];
+  it('a dark build keeps its bound; every variant bound is >= the dark one (ring cuts, the hastened cadence)', () => {
+    for (const [, f] of VARIANTS2) for (const n of [60 * 30, 60 * 120, 60 * 600]) expect(maxPossibleScore(n, f)).toBeGreaterThanOrEqual(maxPossibleScore(n));
+    const tm = withFeatures('toller', 'bossMoves');
+    for (const k of [1, 2, 4]) expect(earliestBossDefeat(k, tm)).toBeLessThan(earliestBossDefeat(k, withFeatures('toller'))); // hastened
+  });
+  for (const [name, f] of VARIANTS2)
+    it(`${name}: the immortal skilled bot through the boss fights never scores more than the bound`, () => {
+      for (const seed of [3, 8]) {
+        const sim = new Sim(seed, 'hard', { hero: seed % 2 ? 'knight' : 'wisp', features: f, startWave: 3 });
+        const bot = new SkilledBot(seed);
+        for (let i = 0; i < 60 * 150; i++) {
+          sim.state.alive = true;
+          sim.step(bot.input(sim));
+          if (i % 600 === 0) expect(sim.score).toBeLessThanOrEqual(maxPossibleScore(sim.state.tick, f));
+        }
+        expect(sim.score).toBeLessThanOrEqual(maxPossibleScore(sim.state.tick, f));
+      }
+    });
 });
