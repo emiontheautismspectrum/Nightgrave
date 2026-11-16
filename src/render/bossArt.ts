@@ -15,7 +15,7 @@ import { TICK_RATE } from '../data/tuning';
 import { unknownBoss } from '../sim/boss';
 import { ticks } from '../sim/params';
 import type { SimParams } from '../sim/params';
-import type { Boss, BossKind, Ring, SimEvent, SimState } from '../sim/state';
+import type { Boss, BossKind, BossPattern, Ring, SimEvent, SimState } from '../sim/state';
 
 /** Is the new boss art drawn? Any new boss row, the boss motion or the boss moves (all dark until 0.11.0). */
 export function useNewBossArt(p: Pick<SimParams, 'thorn' | 'toller' | 'motion' | 'moves'>): boolean {
@@ -48,11 +48,11 @@ export function bossLook(kind: BossKind, newArt = false): BossLook {
       // the new Lich King (40 x 64) is anchored as the old lich is: its crown tip 36 px above the sim position and
       // the cloak's hem (row 40) 4 px below it, exactly where the old robe's top and hem are; the smoke tail trails
       // below the hem, so the body still sorts by the hem (a hero in front of the tail is drawn over it)
-      if (newArt) return { name: 'lich_king', banner: 'boss.lich', originX: 20.5 / 40, originY: 36 / 64, dy: 0, box: [-17, -36, 18, 28], base: 4, hovers: false };
+      if (newArt) return { name: 'lich_king', banner: 'boss.lich', originX: 0.5, originY: 36 / 64, dy: 0, box: [-17, -36, 18, 28], base: 4, hovers: false };
       return { name: 'lich_mage', banner: 'boss.lich', originX: 0.5, originY: 1, dy: 4, box: [-12, -36, 12, 4], hovers: false };
     case 'thorn':
       // her chest core (row 22 of 64, where the shots leave) at the sim position; the gown widens to the ground below
-      return { name: 'thorn_mother', banner: 'boss.thorn', originX: 0.5, originY: 22.5 / 64, dy: 0, box: [-24, -22, 24, 42], hovers: false };
+      return { name: 'thorn_mother', banner: 'boss.thorn', originX: 0.5, originY: 22 / 64, dy: 0, box: [-24, -22, 24, 42], hovers: false };
     case 'toller':
       // the bell's lip (where the rings leave) at the sim position; the robe hangs below it
       return { name: 'toller', banner: 'boss.toller', originX: 0.5, originY: 18 / 56, dy: 0, box: [-20, -18, 20, 38], hovers: false };
@@ -131,9 +131,21 @@ export interface BossSprite {
   x: number;
   y: number;
   alpha: number;
-  /** The y it sorts by among the world's actors, or 'over' (above the world, under the fog), or 'ground'. */
+  /** The y it sorts by among the world's actors, or 'over' (above the world's actors and props, under the fog). */
   base: number | 'over';
+  /** Sprite origin (default: its centre). */
+  ox?: number;
+  oy?: number;
 }
+
+/**
+ * The wind-up row of an attack pattern (default: `cast`, the row with the violet glow). A RED (unparryable) attack
+ * never winds up on the violet row: the hedge, the lash, the grasp and the Toller's red moves have rows without
+ * violet (their red cue is drawn in code); the chains have the throw row. (The Eye keeps its one charge row.)
+ */
+export const CAST_ROW: Partial<Record<BossPattern, string>> = {
+  hedge: 'hedge', lash: 'lash', grasp: 'grasp', chains: 'throw', pendulum: 'strike', knell: 'strike', peal: 'strike', echo: 'strike',
+};
 
 export interface BossPose {
   /** Sprite key (`<family>_<row>`) and frame of the body. */
@@ -239,7 +251,8 @@ export function bossPose(st: SimState, p: SimParams, memo: BossMemo, motion = tr
   else if (a && b.kind === 'thorn' && a.tpIn > a.tpOut && t < a.windStart) {
     // FEATURES.bossMotion: roots pull her down [tpOut, tpIn): six frames, then she is under the ground (not drawn)
     // until she emerges at the new spot [tpIn, windStart)
-    if (t < a.tpIn) {
+    // (the sim moves her while it processes tick tpIn, so the state drawn AT tpIn still holds the old spot: sunk)
+    if (t <= a.tpIn) {
       const slot = Math.floor(((t - a.tpOut) / Math.max(1, a.tpIn - a.tpOut)) * SINK_SLOTS);
       if (slot >= 6) out.visible = false;
       set('sink', Math.max(0, Math.min(5, slot)));
@@ -248,10 +261,7 @@ export function bossPose(st: SimState, p: SimParams, memo: BossMemo, motion = tr
   else if (a && b.kind === 'lich' && t < a.windStart) set('teleport_in', prog(a.tpIn, a.windStart, 4));
   else if (a && t >= a.windStart) {
     if (b.kind === 'eye') set('charge', prog(a.windStart, a.fire, 3));
-    else {
-      const row = b.kind === 'thorn' && a.pattern === 'hedge' ? 'hedge' : b.kind === 'lich' && a.pattern === 'grasp' ? 'grasp' : b.kind === 'toller' && a.pattern === 'chains' ? 'throw' : 'cast';
-      set(row, prog(a.windStart, a.fire, 4));
-    }
+    else set(CAST_ROW[a.pattern] ?? 'cast', prog(a.windStart, a.fire, 4));
   } else if (b.kind === 'toller' && p.toller) {
     // the bell swings on its beat (centre, right, centre, left over two beats): an extreme on every beat
     const beat = Math.max(1, Math.round(p.toller.beatTicks));
@@ -291,17 +301,20 @@ export function bossFx(st: SimState, p: SimParams, memo: BossMemo): BossSprite[]
   const a = b.attack;
   if (b.kind === 'toller' && b.deathTick < 0 && t >= memo.tpTick && t - memo.tpTick < TOLLER_TP_TICKS) {
     const L = bossLook('toller', true);
-    out.push({ key: 'toller_tp_out', frame: clampProg(t, memo.tpTick, memo.tpTick + TOLLER_TP_TICKS, 4), x: memo.tpX, y: memo.tpY, alpha: 1, base: memo.tpY + L.box[3] });
+    out.push({ key: 'toller_tp_out', frame: clampProg(t, memo.tpTick, memo.tpTick + TOLLER_TP_TICKS, 4), x: memo.tpX, y: memo.tpY, alpha: 1, base: memo.tpY + L.box[3], ox: L.originX, oy: L.originY });
   }
   const hand = (x: number, y: number, k: number): void => {
     const f = Math.max(0, Math.min(3, Math.floor(k * 4)));
-    out.push({ key: 'grasp_crack', frame: f, x: Math.round(x), y: Math.round(y), alpha: 1, base: y - 8 });
-    out.push({ key: 'bone_hand', frame: f, x: Math.round(x), y: Math.round(y) - 5, alpha: 1, base: y + 2 });
+    // a telegraph of an unparryable burst: above every prop (a tree or the gallows must never hide it), as the
+    // code-drawn cue it replaces was
+    out.push({ key: 'grasp_crack', frame: f, x: Math.round(x), y: Math.round(y), alpha: 1, base: 'over' });
+    out.push({ key: 'bone_hand', frame: f, x: Math.round(x), y: Math.round(y) - 5, alpha: 1, base: 'over' });
   };
-  if (a && t >= a.windStart && t < a.fire && b.deathTick < 0) {
+  // (the launch runs while the sim processes tick `fire`: the state drawn AT `fire` is still winding up)
+  if (a && t >= a.windStart && t <= a.fire && b.deathTick < 0) {
     const k = (t - a.windStart) / Math.max(1, a.fire - a.windStart);
     if (a.pattern === 'grasp') for (const [x, y] of a.points) hand(x, y, k);
-    if (a.pattern === 'soulfire') out.push({ key: 'lich_king_soulfire', frame: Math.max(0, Math.min(5, Math.floor(k * 6))), x: Math.round(b.x), y: Math.round(b.y) - 15, alpha: 1, base: 'over' });
+    if (a.pattern === 'soulfire') out.push({ key: 'lich_king_soulfire', frame: Math.max(0, Math.min(5, Math.floor(k * 6))), x: b.x, y: b.y - 15, alpha: 1, base: 'over' });
   }
   for (const e of b.pending ?? []) if (e.op === 'grasp') hand(e.x, e.y, 1);
   const c = st.chain;
@@ -334,8 +347,9 @@ const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 /**
  * The Toller's ring (peal / echo) as pixel-exact horizontal runs inside `clip` ([x0, y0, x1, y1), whole px): a band
  * as thick as the lethal one (2 x halfWidth): a blood_dark outer edge (1 px), a blood core, a checker-dithered
- * blood_dark inner edge (1 px). A cut gap is empty; next to it the band is torn (an ordered dither thinning to
- * nothing over RING_TEAR_PX of arc). Runs come row by row, left to right; nothing is rotated or blended.
+ * blood_dark inner edge (1 px). A cut gap is empty; next to it the band's EDGES are torn (an ordered dither thinning
+ * to nothing over RING_TEAR_PX of arc) while its core stays solid up to the cut, so the opening never looks wider
+ * than it is. Runs come row by row, left to right; nothing is rotated or blended.
  */
 export function ringRuns(ring: Ring, clip: readonly [number, number, number, number], emit: (x: number, y: number, w: number, tone: RingTone) => void): void {
   const hw = Math.max(1.5, ring.halfWidth);
@@ -357,9 +371,11 @@ export function ringRuns(ring: Ring, clip: readonly [number, number, number, num
     const xi = Math.abs(dy) < ri ? Math.sqrt(ri * ri - dy * dy) : 0;
     // the row crosses the band in one span (near the top / bottom) or two (left and right)
     const spans: [number, number][] = xi > 0 ? [[ring.x - xo, ring.x - xi], [ring.x + xi, ring.x + xo]] : [[ring.x - xo, ring.x + xo]];
+    let done = cx0; // (two spans of one row never share a pixel column)
     for (const [sa, sb] of spans) {
-      const xa = Math.max(cx0, Math.floor(sa));
+      const xa = Math.max(done, Math.floor(sa));
       const xb = Math.min(cx1, Math.ceil(sb));
+      done = Math.max(done, xb);
       let runX = 0;
       let runW = 0;
       let runTone: RingTone | null = null;
@@ -379,12 +395,14 @@ export function ringRuns(ring: Ring, clip: readonly [number, number, number, num
         }
         if (tone && gaps.length && d > 1e-6) {
           const [ux, uy] = [dx / d, dy / d];
+          const core = tone === 'blood';
           for (const g of gaps) {
             const c = ux * g.x + uy * g.y;
             if (c >= g.cos) {
               tone = null; // inside the cut
               break;
             }
+            if (core) continue; // the core stays solid right up to the cut: only the edges tear
             const beyond = Math.acos(Math.max(-1, Math.min(1, c))) - g.half; // rad past the gap's edge
             if (beyond < g.tear && BAYER4[((y & 3) << 2) | (x & 3)]! >= (beyond / g.tear) * 16) {
               tone = null; // the torn end

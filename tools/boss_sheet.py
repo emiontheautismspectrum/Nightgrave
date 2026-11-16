@@ -43,11 +43,11 @@ for _m in ("bosses", "bosses2", "thorn_queen", "lich_king", "toller_fx"):
         pass
 
 BOSSES = {
-    "thorn_mother": {"ref": "thorn_mother.png", "rows": ["idle", "cast", "hedge", "hit", "death", "sink", "emerge"],
+    "thorn_mother": {"ref": "thorn_mother.png", "rows": ["idle", "cast", "lash", "hedge", "hit", "death", "sink", "emerge"],
                      "anim": ["idle", "cast", "hedge", "hit", "sink", "emerge", "death"]},
     "lich_king": {"ref": "lich.png", "rows": ["idle", "cast", "grasp", "hit", "death", "teleport_out", "teleport_in"],
                   "anim": ["idle", "cast", "grasp", "hit", "teleport_out", "teleport_in", "death"]},
-    "toller": {"ref": None, "rows": ["idle", "cast", "throw", "hit", "death", "tp_out", "tp_in"],
+    "toller": {"ref": None, "rows": ["idle", "cast", "strike", "throw", "hit", "death", "tp_out", "tp_in"],
                "anim": ["idle", "cast", "throw", "hit", "tp_out", "tp_in", "death"]},
 }
 EFFECTS = ["lich_king_soulfire", "bone_hand", "grasp_crack", "chain_iron", "chain_violet", "chain_wrap_iron",

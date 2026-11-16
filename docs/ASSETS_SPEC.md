@@ -59,9 +59,9 @@ Bosses
 - boss_bar 384x10 frame (9-slice style; segments drawn in code, max 15)
 - The new bosses (dark until their rows of FEATURES.bosses are enabled; tools/nglib/bosses2.py; body rule as above:
   dark stone, forest, moss, bone, violet_dark; bright violet only in the cast frames' glow):
-  - thorn_mother 48x64 (redrawn in the boss art stage, below): idle 6f, cast 4f, hedge 4f, hit 2f, death 6f, sink 6f,
-    emerge 6f. Her chest core (row 22) is at the sim position; she rises out of the ground at the intro (the emerge row).
-  - toller 40x56: idle 4f, cast 4f, hit 2f, death 6f, and (boss art stage) tp_out 4f, tp_in 4f, throw 4f. A tall robed figure with a bell for a head and hanging chains;
+  - thorn_mother 48x64 (redrawn in the boss art stage, below): idle 6f, cast 4f, lash 4f, hedge 4f, hit 2f, death 6f,
+    sink 6f, emerge 6f. Her chest core (row 22) is at the sim position; she rises out of the ground at the intro (the emerge row).
+  - toller 40x56: idle 4f, cast 4f, hit 2f, death 6f, and (boss art stage) tp_out 4f, tp_in 4f, throw 4f, strike 4f. A tall robed figure with a bell for a head and hanging chains;
     the idle frames are the bell's swing (centre, right, centre, left), chosen from the fight's 30-tick beat so an
     extreme falls on every beat; the clapper strikes on the cast frames. The bell's lip is at the sim position.
   - root_bloom 16x16 4f (violet): a ground bloom opening over the wind-up (it bursts into violet shards); fully lit
@@ -104,9 +104,15 @@ Bosses
     seen edge-on; laid alternately along the chain, never rotated; IRON = stone with bone glints, PARRY-BREAK =
     violet), chain_wrap_iron / chain_wrap_violet 16x16 2f (two coils round the bound hero).
   - The Toller's RING (peal / echo) is rasterised at runtime, pixel-exact, like the shell's stick parts (its radius
-    changes every tick): a 3 px band, blood_dark outer edge, blood core, a checker-dithered blood_dark inner edge; at a
-    cut gap the band breaks into torn ends (an ordered dither thinning over 8 px of arc), the gap itself is empty. Its
+    changes every tick): a band as thick as the lethal one (2 x halfWidth = 4 px): a blood_dark outer edge, a 2 px
+    blood core, a checker-dithered blood_dark inner edge; at a cut gap the band's edges tear (an ordered dither thinning
+    over 8 px of arc) while the core stays solid up to the cut, and the gap itself is empty (it never looks wider than
+    it is). Its
     wind-up stays the red ticks round the bell; an echo beyond the arena keeps the bone ticks on the border.
+  - Colour language of the wind-up rows (`CAST_ROW` in src/render/bossArt.ts): a violet glow only announces a
+    parryable attack. The red attacks wind up on rows without violet: the Thorn Mother's `hedge` and `lash`, the Lich
+    King's `grasp`, the Toller's `strike` (pendulum, knell, peal, echo); the chains use `throw`. Their red cue is the
+    code-drawn telegraph. The bone hands and their crack rings are drawn above every prop (a tree never hides them).
   - Still drawn in code (telegraphs): the pendulum's and the lash's start lines, the knell's shrinking ring, the
     hedge's red roots at her feet, the chain spot's circle, the spawn-point circles.
   - Render motion (render-only, whole pixels, never a rotation or a scale; off with EFFECTS LOW): the Eye leans 1-2 px

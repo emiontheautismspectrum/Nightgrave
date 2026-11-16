@@ -2,6 +2,7 @@
 
 - toller_tp_out / toller_tp_in (40x56, 4f each): the bell tolls and the figure fades to bone motes, and back (the
   peal's teleport).
+- toller_strike (40x56, 4f): the wind-up row of its red moves (no violet).
 - toller_throw (40x56, 4f): the right arm leaves the robe, rises with a chain and throws it into the ground (the cast
   row of the `chains` attack).
 - chain_iron / chain_violet (8x8, 2 variants each): chain links laid along the chain from the raised hand to its spot,
@@ -40,6 +41,12 @@ def toller_tp_in():
         a = _toller((0, -1, 1, 0)[k], strike=k >= 2, show=(k + 1) / 4, i=k)
         out.append(_motes(a, k, False, 14 - k * 4) if k < 3 else a)
     return out
+
+
+def toller_strike():
+    """The cast row of the Toller's RED moves (pendulum, knell, peal, echo): the clapper strikes and the bell swings
+    hard, with no violet anywhere (the old cast row glows violet: it stays the row of the violet toll)."""
+    return [_toller(0, i=0), _toller(0, strike=True, i=1), _toller(1, strike=True, i=2), _toller(-1, strike=True, i=3)]
 
 
 def toller_throw():
@@ -105,6 +112,7 @@ SPRITES = {
     "toller_tp_out": toller_tp_out,
     "toller_tp_in": toller_tp_in,
     "toller_throw": toller_throw,
+    "toller_strike": toller_strike,
     "chain_iron": chain_iron,
     "chain_violet": chain_violet,
     "chain_wrap_iron": chain_wrap_iron,

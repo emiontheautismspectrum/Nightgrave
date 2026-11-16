@@ -319,6 +319,19 @@ def thorn_mother_cast():
     return out
 
 
+def thorn_mother_lash():
+    """The lash cast (red, unparryable blades): her arms and the root-vines rise as on the cast row, but nothing
+    glows violet (violet = parryable); the red start line is drawn in code."""
+    out = []
+    for k, (pose, vines) in enumerate((("lift1", 8), ("lift2", 16), ("lift3", 24), ("lift3", 27))):
+        r = build(pose, vines=vines)
+        a = r.compose(rows={"hair": L.sway(H, 18, 40, 1.0, 26, k * 1.2), "gown": L.sway(H, 46, 63, 1.0, 30, k * 1.2)})
+        if k >= 2:  # the core burns brighter (amber round the gold)
+            a[21, 23:25] = C.ci("amber")
+        out.append(_finish(a))
+    return out
+
+
 def thorn_mother_hedge():
     """The hedge cast: her arms go down to the ground and roots spread at her feet (no violet: the hedge is red, and
     its red cue is drawn in code at her feet)."""
@@ -389,6 +402,7 @@ SPRITES = {
     "thorn_mother_idle": thorn_mother_idle,
     "thorn_mother_cast": thorn_mother_cast,
     "thorn_mother_hedge": thorn_mother_hedge,
+    "thorn_mother_lash": thorn_mother_lash,
     "thorn_mother_hit": thorn_mother_hit,
     "thorn_mother_death": thorn_mother_death,
     "thorn_mother_sink": thorn_mother_sink,

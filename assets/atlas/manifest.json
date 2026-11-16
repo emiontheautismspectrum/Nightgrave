@@ -1356,6 +1356,12 @@
    "h": 64,
    "w": 48
   },
+  "thorn_mother_lash": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 64,
+   "w": 48
+  },
   "thorn_mother_sink": {
    "frames": 6,
    "group": "gameplay",
@@ -1381,6 +1387,12 @@
    "w": 40
   },
   "toller_idle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 56,
+   "w": 40
+  },
+  "toller_strike": {
    "frames": 4,
    "group": "gameplay",
    "h": 56,

@@ -42,7 +42,7 @@ def read_title():
 
 # Atlas frames stored trimmed to their opaque box (tools/nglib/pack.py): the big, mostly empty frames of the DARK
 # boss art only (never a production sprite, a tile or a shell part), so the atlas stays 512 x 1024.
-ATLAS_TRIM = ("thorn_mother_", "lich_king_", "toller_tp_", "toller_throw")
+ATLAS_TRIM = ("thorn_mother_", "lich_king_", "toller_tp_", "toller_throw", "toller_strike")
 ATLAS_WIDTH = 512
 
 
@@ -129,11 +129,11 @@ def boss_board(art, game):
     rows = [["eye_sentinel_idle", "eye_sentinel_charge", "eye_sentinel_hit"], ["eye_sentinel_death"],
             ["lich_mage_idle", "lich_mage_cast", "lich_mage_hit"], ["lich_mage_teleport_out", "lich_mage_teleport_in"],
             ["lich_mage_death"], ["eye_beam", "pickup_slow_time", "pickup_double_score", "pickup_glow"],
-            ["thorn_mother_idle", "thorn_mother_cast"], ["thorn_mother_hedge", "thorn_mother_hit", "thorn_mother_death"],
+            ["thorn_mother_idle", "thorn_mother_cast"], ["thorn_mother_hedge", "thorn_mother_lash", "thorn_mother_hit"], ["thorn_mother_death"],
             ["thorn_mother_sink", "thorn_mother_emerge"],
             ["lich_king_idle", "lich_king_cast", "lich_king_hit"], ["lich_king_grasp", "lich_king_teleport_out", "lich_king_teleport_in"],
             ["lich_king_death", "lich_king_soulfire"],
-            ["toller_idle", "toller_cast", "toller_hit"], ["toller_death", "toller_throw"], ["toller_tp_out", "toller_tp_in"],
+            ["toller_idle", "toller_cast", "toller_hit"], ["toller_death", "toller_throw"], ["toller_tp_out", "toller_tp_in", "toller_strike"],
             ["root_bloom", "bell_ring", "briar_tile", "briar_post", "bone_hand", "grasp_crack", "chain_iron", "chain_violet",
              "chain_wrap_iron", "chain_wrap_violet"]]
     W_, pad = 640, 4

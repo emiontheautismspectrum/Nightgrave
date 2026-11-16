@@ -10,7 +10,8 @@ import atlas from '../assets/atlas/nightgrave.json';
 import manifest from '../assets/atlas/manifest.json';
 import { FEATURES, withFeatures, type Features } from '../src/data/features';
 import { TICK_RATE } from '../src/data/tuning';
-import { BossMemo, bossFx, bossLook, bossPose, eyeLean, ringRuns, useNewBossArt, type BossPose } from '../src/render/bossArt';
+import { BossMemo, bossFx, bossLook, bossPose, CAST_ROW, eyeLean, ringRuns, useNewBossArt, type BossPose } from '../src/render/bossArt';
+import { edgeMarkers } from '../src/render/edgeMarkers';
 import { makeParams, ticks, type SimParams } from '../src/sim/params';
 import { Sim } from '../src/sim/sim';
 import { inRingGap, ringGap } from '../src/sim/tollerMoves';
@@ -192,7 +193,9 @@ describe('boss art: a flagged run draws the new families', () => {
   it('the Thorn Mother: idle 6f, cast, hedge, sink and emerge; under the ground she is not drawn', () => {
     const body = new Set<string>();
     let hidden = 0;
-    let idleFrames = new Set<number>();
+    let moved = 0;
+    let sunkAt: [number, number] | null = null;
+    const idleFrames = new Set<number>();
     for (const seed of [41, 42, 43]) {
       const seen = watch(ALL, 'thorn', seed, 70, (sim, pose) => {
         const b = sim.state.boss;
@@ -202,14 +205,17 @@ describe('boss art: a flagged run draws the new families', () => {
         if (pose.key === 'thorn_mother_idle') idleFrames.add(pose.frame);
         const busy = b.deathTick >= 0 || t < b.introEnd || (b.hitTick >= 0 && t - b.hitTick < 8);
         if (a && a.tpIn > a.tpOut && t < a.windStart && !busy) {
-          // the sim's phases drive it: [tpOut, tpIn) the sink row, its last slot under the ground; [tpIn, windStart) the emerge row
-          if (t < a.tpIn) {
+          // the sim's phases drive it: [tpOut, tpIn] the sink row, its last slot under the ground (the state drawn AT
+          // tpIn still holds the old spot: she must not show there); (tpIn, windStart) the emerge row at the new spot
+          if (t <= a.tpIn) {
             expect(pose.key).toBe('thorn_mother_sink');
-            if (t === a.tpIn - 1) expect(pose.visible).toBe(false);
+            if (t >= a.tpIn - 1) expect(pose.visible).toBe(false);
             if (t === a.tpOut) expect([pose.visible, pose.frame]).toEqual([true, 0]);
+            sunkAt = [b.x, b.y];
           } else {
             expect(pose.key).toBe('thorn_mother_emerge');
             expect(pose.visible).toBe(true);
+            if (t === a.tpIn + 1 && sunkAt) moved += Math.hypot(b.x - sunkAt[0], b.y - sunkAt[1]) > 1 ? 1 : 0;
           }
         } else expect(pose.visible).toBe(true);
         if (!pose.visible) hidden++;
@@ -217,8 +223,9 @@ describe('boss art: a flagged run draws the new families', () => {
       });
       for (const k of seen.body) body.add(k);
     }
-    for (const k of ['thorn_mother_idle', 'thorn_mother_cast', 'thorn_mother_hedge', 'thorn_mother_sink', 'thorn_mother_emerge', 'thorn_mother_hit']) expect(body, k).toContain(k);
+    for (const k of ['thorn_mother_idle', 'thorn_mother_cast', 'thorn_mother_lash', 'thorn_mother_hedge', 'thorn_mother_sink', 'thorn_mother_emerge', 'thorn_mother_hit']) expect(body, k).toContain(k);
     expect(hidden).toBeGreaterThan(0);
+    expect(moved).toBeGreaterThan(0); // she is first seen again at the NEW spot
     expect([...idleFrames].sort()).toEqual([0, 1, 2, 3, 4, 5]);
   });
 
@@ -236,10 +243,38 @@ describe('boss art: a flagged run draws the new families', () => {
       for (const k of seen.body) body.add(k);
       for (const k of seen.fx) fx.add(k);
     }
-    for (const k of ['toller_idle', 'toller_cast', 'toller_throw', 'toller_tp_in', 'toller_hit']) expect(body, k).toContain(k);
+    for (const k of ['toller_idle', 'toller_cast', 'toller_strike', 'toller_throw', 'toller_tp_in', 'toller_hit']) expect(body, k).toContain(k);
     expect(fx).toContain('toller_tp_out');
     expect([...fx].some((k) => k === 'chain_iron' || k === 'chain_violet')).toBe(true);
     expect([...fx].some((k) => k === 'chain_wrap_iron' || k === 'chain_wrap_violet')).toBe(true);
+  });
+
+  it('colour language: a red (unparryable) attack never winds up on the violet cast row; the hands show to the launch tick, over the props', () => {
+    // the patterns the edge markers call red are exactly the ones with a row of their own (the Eye keeps its charge row)
+    const red = ['pendulum', 'knell', 'lash', 'hedge', 'peal', 'echo', 'grasp'] as const;
+    for (const k of red) expect(CAST_ROW[k], k).toBeDefined();
+    expect(Object.keys(CAST_ROW).sort()).toEqual([...red, 'chains'].sort());
+    let redWinds = 0;
+    let fireTicks = 0;
+    for (const [kind, seed] of [['thorn', 44], ['toller', 57], ['lich', 24]] as const)
+      watch(ALL, kind, seed, 60, (sim, pose, memo) => {
+        const b = sim.state.boss;
+        const a = b?.attack;
+        if (!b || !a || !pose || b.kind === 'eye') return;
+        const t = sim.state.tick;
+        const m = edgeMarkers(sim.state, sim.params, { x0: b.x + 200, y0: 0, x1: b.x + 300, y1: 270 }, 90).find((x) => x.key === 'b');
+        if (/_(cast)$/.test(pose.key)) expect(m?.color, `${a.pattern} on ${pose.key}`).not.toBe('red');
+        if (m?.color === 'red' && /_(lash|hedge|grasp|strike)$/.test(pose.key)) redWinds++;
+        if (a.pattern === 'grasp' && t >= a.windStart && t <= a.fire && b.deathTick < 0) {
+          const fx = bossFx(sim.state, sim.params, memo);
+          expect(fx.filter((s) => s.key === 'bone_hand').length).toBeGreaterThanOrEqual(a.points.length);
+          expect(fx.filter((s) => s.key === 'grasp_crack').length).toBeGreaterThanOrEqual(a.points.length);
+          for (const s of fx) if (s.key === 'bone_hand' || s.key === 'grasp_crack') expect(s.base).toBe('over');
+          if (t === a.fire) fireTicks++;
+        }
+      });
+    expect(redWinds).toBeGreaterThan(0);
+    expect(fireTicks).toBeGreaterThan(0);
   });
 
   it('the Eye keeps its art; with the motion it leans 1-2 whole px against its velocity, never without it', () => {
@@ -298,13 +333,13 @@ describe('boss art: a flagged run draws the new families', () => {
 
 describe('boss art: atlas', () => {
   const NEW: Record<string, [number, number, number]> = {
-    thorn_mother_idle: [48, 64, 6], thorn_mother_cast: [48, 64, 4], thorn_mother_hedge: [48, 64, 4], thorn_mother_hit: [48, 64, 2],
+    thorn_mother_idle: [48, 64, 6], thorn_mother_cast: [48, 64, 4], thorn_mother_lash: [48, 64, 4], thorn_mother_hedge: [48, 64, 4], thorn_mother_hit: [48, 64, 2],
     thorn_mother_death: [48, 64, 6], thorn_mother_sink: [48, 64, 6], thorn_mother_emerge: [48, 64, 6],
     lich_king_idle: [40, 64, 6], lich_king_cast: [40, 64, 4], lich_king_grasp: [40, 64, 4], lich_king_hit: [40, 64, 2], lich_king_death: [40, 64, 6],
     lich_king_teleport_out: [40, 64, 4], lich_king_teleport_in: [40, 64, 4], lich_king_soulfire: [40, 40, 6],
     bone_hand: [16, 16, 4], grasp_crack: [24, 24, 4],
     toller_idle: [40, 56, 4], toller_cast: [40, 56, 4], toller_hit: [40, 56, 2], toller_death: [40, 56, 6],
-    toller_tp_out: [40, 56, 4], toller_tp_in: [40, 56, 4], toller_throw: [40, 56, 4],
+    toller_tp_out: [40, 56, 4], toller_tp_in: [40, 56, 4], toller_throw: [40, 56, 4], toller_strike: [40, 56, 4],
     chain_iron: [8, 8, 2], chain_violet: [8, 8, 2], chain_wrap_iron: [16, 16, 2], chain_wrap_violet: [16, 16, 2],
   };
 
@@ -322,7 +357,7 @@ describe('boss art: atlas', () => {
   });
 
   it('only the dark boss frames are stored trimmed; every other frame is whole', () => {
-    const trim = /^(thorn_mother_|lich_king_|toller_tp_|toller_throw)/;
+    const trim = /^(thorn_mother_|lich_king_|toller_tp_|toller_throw|toller_strike)/;
     let trimmed = 0;
     for (const [n, f] of Object.entries(FRAMES)) {
       if (f.trimmed) {
@@ -335,8 +370,8 @@ describe('boss art: atlas', () => {
 });
 
 describe('boss art: the ring raster', () => {
-  const ring = (r: number, gaps: Ring['gaps'] = []): Ring =>
-    ({ id: 1, serial: 1, echo: false, x: 240, y: 135, r, startR: 8, maxR: 0, speed: 1, back: 0, halfWidth: 2, phase: 'grow', holdStart: -1, holdUntil: -1, gaps, paid: false, near: -1 });
+  const ring = (r: number, gaps: Ring['gaps'] = [], x = 240, y = 135): Ring =>
+    ({ id: 1, serial: 1, echo: false, x, y, r, startR: 8, maxR: 0, speed: 1, back: 0, halfWidth: 2, phase: 'grow', holdStart: -1, holdUntil: -1, gaps, paid: false, near: -1 });
   const pixels = (rg: Ring, clip: [number, number, number, number] = [0, 0, 480, 270]): Map<string, string> => {
     const px = new Map<string, string>();
     let runs = 0;
@@ -373,23 +408,40 @@ describe('boss art: the ring raster', () => {
     expect(inner.length).toBeLessThan(2 * Math.PI * 58.5 * 0.8);
   });
 
-  it('a cut gap is empty where the sim says so, and the band is torn (thinner) next to it', () => {
-    const rg = ring(80, [ringGap(1, 0, 0.45)]);
-    const px = pixels(rg);
-    let near = 0;
-    let far = 0;
-    for (const k of px.keys()) {
-      const [x, y] = k.split(',').map(Number) as [number, number];
-      const [dx, dy] = [x + 0.5 - rg.x, y + 0.5 - rg.y];
-      const d = Math.hypot(dx, dy);
-      expect(inRingGap(rg, dx / d, dy / d, d, 0)).toBe(false);
-      const ang = Math.abs(Math.atan2(dy, dx));
-      if (ang < 0.45 + 8 / 80) near++;
-      else if (ang > Math.PI - 0.1) far++;
+  it('a cut gap is empty where the sim says so; next to it the edges are torn but the core is solid up to the cut', () => {
+    // (a fractional centre, as the Toller's spots are)
+    for (const rg of [ring(80, [ringGap(1, 0, 0.45)]), ring(80.4, [ringGap(1, 0, 0.45)], 95.5, 69.5), ring(120, [ringGap(0.6, 0.8, 0.45), ringGap(-1, 0, 0.3)], 240.3, 100.7)]) {
+      const px = pixels(rg);
+      let near = 0;
+      let far = 0;
+      for (const k of px.keys()) {
+        const [x, y] = k.split(',').map(Number) as [number, number];
+        const [dx, dy] = [x + 0.5 - rg.x, y + 0.5 - rg.y];
+        const d = Math.hypot(dx, dy);
+        expect(inRingGap(rg, dx / d, dy / d, d, 0)).toBe(false); // nothing is drawn inside a cut
+      }
+      // every pixel of the core outside the cuts is drawn (the lethal band is never under-drawn at a torn end)
+      for (let y = 0; y < 270; y++)
+        for (let x = 0; x < 480; x++) {
+          const [dx, dy] = [x + 0.5 - rg.x, y + 0.5 - rg.y];
+          const d = Math.hypot(dx, dy);
+          if (d > rg.r + 1 || d < rg.r - 1) continue;
+          if (inRingGap(rg, dx / d, dy / d, d, 0)) expect(px.has(`${x},${y}`)).toBe(false);
+          else expect(px.get(`${x},${y}`), `${x},${y}`).toBe('blood');
+        }
+      // the edges: within the tear (8 px of arc past the first cut) they hold fewer pixels than far from any cut
+      const g = rg.gaps[0]!;
+      const half = Math.atan2(g.sin, g.cos);
+      for (const [k, tone] of px) {
+        if (tone !== 'bloodDark') continue;
+        const [x, y] = k.split(',').map(Number) as [number, number];
+        const [dx, dy] = [x + 0.5 - rg.x, y + 0.5 - rg.y];
+        const ang = Math.acos(Math.max(-1, Math.min(1, (dx * g.x + dy * g.y) / Math.hypot(dx, dy))));
+        if (ang < half + 8 / rg.r) near++;
+        else if (ang > Math.PI - 8 / rg.r) far++;
+      }
+      if (rg.gaps.length === 1) expect(near).toBeLessThan(far);
     }
-    // the same arc length (16 px of arc each): the torn ends hold clearly fewer pixels than the whole band
-    expect(near).toBeGreaterThan(0);
-    expect(near).toBeLessThan(far * 0.8);
   });
 
   it('an echo far beyond the arena costs a bounded number of runs, all inside the clip', () => {

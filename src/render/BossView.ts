@@ -157,7 +157,7 @@ export class BossView {
     const fx = bossFx(st, p, this.memo);
     fx.forEach((e, i) => {
       const sp = this.fxPool[i] ?? (this.fxPool[i] = this.scene.add.sprite(0, 0, ATLAS, frame(e.key as SpriteName)));
-      sp.setVisible(true).setFrame(frame(e.key as SpriteName, e.frame)).setPosition(e.x, e.y).setAlpha(e.alpha);
+      sp.setVisible(true).setFrame(frame(e.key as SpriteName, e.frame)).setOrigin(e.ox ?? 0.5, e.oy ?? 0.5).setPosition(e.x, e.y).setAlpha(e.alpha);
       sp.setDepth(e.base === 'over' ? this.depth.fog - 1 : this.depth.ysort + e.base);
     });
     for (let i = fx.length; i < this.fxPool.length; i++) this.fxPool[i]!.setVisible(false);

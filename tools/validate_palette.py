@@ -63,7 +63,9 @@ EXCEPTION_ALLOWED = {"violet", "violet_dark"}
 # small accents (fern leaves on the Thorn Mother, the mist lining of the Lich King's cloak), like props: <= 10%.
 BOSS_ACCENT_PREFIXES = ("thorn_mother_", "lich_king_")
 # Colour language of a boss family, per row (the row = the sprite name after the family):
-#   bright violet only on the rows that announce a violet attack; red only on the row of a red attack's ground cracks;
+#   bright violet only on the cast rows (the render sends every RED attack of the new art to a row without violet:
+#   CAST_ROW in src/render/bossArt.ts; the Eye's one charge row is production art); red only on the row of a red
+#   attack's ground cracks;
 #   the NEW bodies (thorn_mother, lich_king) keep violet_dark to the same rows too; teal only on the Lich King;
 #   gold / amber only as a few pixels of the Thorn Mother (eyes, chest core, a crown glint).
 VIOLET_ROWS = ("_cast", "_charge", "_soulfire")
