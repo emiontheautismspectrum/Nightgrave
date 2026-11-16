@@ -1239,26 +1239,44 @@
   "thorn_mother_cast": {
    "frames": 4,
    "group": "gameplay",
-   "h": 48,
-   "w": 40
+   "h": 64,
+   "w": 48
   },
   "thorn_mother_death": {
    "frames": 6,
    "group": "gameplay",
-   "h": 48,
-   "w": 40
+   "h": 64,
+   "w": 48
+  },
+  "thorn_mother_emerge": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 64,
+   "w": 48
+  },
+  "thorn_mother_hedge": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 64,
+   "w": 48
   },
   "thorn_mother_hit": {
    "frames": 2,
    "group": "gameplay",
-   "h": 48,
-   "w": 40
+   "h": 64,
+   "w": 48
   },
   "thorn_mother_idle": {
-   "frames": 4,
+   "frames": 6,
    "group": "gameplay",
-   "h": 48,
-   "w": 40
+   "h": 64,
+   "w": 48
+  },
+  "thorn_mother_sink": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 64,
+   "w": 48
   },
   "toller_cast": {
    "frames": 4,

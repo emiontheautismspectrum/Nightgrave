@@ -68,7 +68,7 @@ BOSS_ACCENT_PREFIXES = ("thorn_mother_", "lich_king_")
 #   gold / amber only as a few pixels of the Thorn Mother (eyes, chest core, a crown glint).
 VIOLET_ROWS = ("_cast", "_charge", "_soulfire")
 RED_ROWS = ("lich_king_grasp",)
-NEW_BODIES = ("lich_king_",)
+NEW_BODIES = ("thorn_mother_", "lich_king_")
 WARM_MAX = 0.02
 
 

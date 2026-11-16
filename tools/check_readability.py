@@ -39,7 +39,7 @@ CALM_MAX = 1.6
 # Boss bodies (harmless, but they must read): the lit body (every opaque pixel except the dark outline tones) against
 # the floor round its silhouette, at every position in the arena, fog and vignette included. The limit is the weakest
 # body that existed before the boss art stage (the Toller, 2.02): no redrawn boss may read worse than that.
-BOSS_BODIES = ("eye_sentinel_idle", "lich_mage_idle", "lich_king_idle", "toller_idle")
+BOSS_BODIES = ("eye_sentinel_idle", "lich_mage_idle", "lich_king_idle", "thorn_mother_idle", "toller_idle")
 BOSS_MIN = 2.0
 
 

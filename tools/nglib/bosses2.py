@@ -4,10 +4,9 @@ Same body rule as the old bosses: dark stone, forest, moss, bone and violet_dark
 only where a frame is a telegraph (the cast frames' glow). The ROOT attacks of the Thorn Mother reuse the clearing's
 sinuous ground-root shapes, recoloured to the threat colour (blood = unparryable).
 
-- thorn_mother (40x48): a huge hunched matriarch grown from roots: a crown of thorns, a pale bone mask with two
-  hollow eyes, a cloak of twisted roots spreading into the ground (she never walks).
+- thorn_mother: redrawn in the boss art stage, see tools/nglib/thorn_queen.py (the keys stay `thorn_mother_*`).
 - toller (40x56): a tall bell-headed figure, robed, with hanging chains; the bell swings (the visual beat) and the
-  clapper strikes on the cast frames.
+  clapper strikes on the cast frames. Its teleport and chain-throw rows (boss art stage) are in toller_fx.py.
 - root_bloom (16x16, 4f): a ground bloom lighting up (violet: it bursts into violet shards).
 - bell_ring (32x32, 4f): the toll marker, a bone ring widening from the bell on every toll beat.
 """
@@ -35,87 +34,12 @@ def _root(a, x0, y0, ang, length, width, col, wiggle=1.6, phase=0.0, tip=None):
     return x, y
 
 
-# ---------------------------------------------------------------- the thorn mother 40x48
-
-def _thorn(i=0, cast=0, glow=None, flash=False, show=1.0, sink=0):
-    W, H = 40, 48
-    a = C.new(W, H)
-    xx, yy = C.grid(W, H)
-    sway = (0, 1, 0, -1)[i % 4]
-    cx = 20 + sway * 0.5
-    # cloak of roots: a wide hunched mound that spreads into the ground
-    mound = (((xx - cx) / 15.5) ** 2 + ((yy - 34) / 14) ** 2 <= 1) & (yy <= 46)
-    a[mound] = C.ci("forest")
-    a[mound & ((xx - cx) + (yy - 34) * 0.6 > 6)] = C.ci("bg1")  # lower-right shade
-    a[mound & ((xx - cx) + (yy - 30) < -14)] = C.ci("moss")  # top-left rim light
-    # root strands over the cloak and into the ground
-    for k, (sx, ang, ln) in enumerate(((cx - 12, 2.2, 9), (cx - 6, 1.9, 8), (cx + 5, 1.2, 8), (cx + 12, 0.9, 9))):
-        _root(a, sx, 40, ang, ln, 1.6, "stone_dark", phase=i * 0.6 + k)
-    for k in range(6):
-        x = int(cx - 13 + k * 5.2)
-        C.line(a, x, 26 + (k % 2) * 3, x + (1 if k % 2 else -1), 44, "stone_dark")
-    # the head: a bone mask in a hood of bark
-    hood = ((xx - cx) / 8) ** 2 + ((yy - 17) / 8.5) ** 2 <= 1
-    a[hood] = C.ci("stone_dark")
-    a[hood & ((xx - cx) > 3)] = C.ci("bg1")
-    mask = ((xx - cx) / 4.6) ** 2 + ((yy - 18.5) / 5.6) ** 2 <= 1
-    a[mask] = C.ci("bone")
-    a[mask & ((xx - cx) > 2.4)] = C.ci("stone")
-    for ex in (-2, 1):  # hollow eyes
-        C.put(a, int(cx) + ex, 17, glow or "bg0")
-        C.put(a, int(cx) + ex, 18, "bg0")
-    C.line(a, int(cx) - 1, 22, int(cx) + 1, 22, "stone")  # a thin mouth seam
-    # crown of thorns (violet_dark points, a bone tip each)
-    for k, dx in enumerate((-6, -3, 0, 3, 6)):
-        h = 5 + (k % 2) * 2 + (1 if k == 2 else 0)
-        C.line(a, int(cx) + dx, 10, int(cx) + dx + (dx // 3), 10 - h, "violet_dark")
-        C.put(a, int(cx) + dx + (dx // 3), 9 - h, "bone")
-    # arms: two long root-arms resting on the ground, raised when casting
-    lift = cast * 3
-    for side in (-1, 1):
-        sx = cx + side * 9
-        ex = cx + side * (17 - cast)
-        ey = 40 - lift - (2 if side > 0 else 0)
-        C.line(a, sx, 26, ex, ey, "stone_dark")
-        C.line(a, sx, 27, ex, ey + 1, "forest")
-        C.put(a, int(ex), int(ey) - 1, "bone")  # bone claw tips
-        C.put(a, int(ex) + side, int(ey), "bone")
-        if glow and cast >= 2:
-            C.disc(a, ex, ey - 2, 1.5, glow)
-    a = C.outline(a, color="bg0")
-    if glow and cast >= 2:
-        a = C.halo(a, glow, phase=i)
-    if flash:
-        a[(a != C.T) & (a != C.ci("bg0"))] = C.ci("bone")
-    if sink:
-        b = C.new(W, H)
-        b[sink:, :] = a[:H - sink, :]
-        a = b
-    if show < 1.0:
-        a = C.dither_out(a, show, ox=i, oy=i * 2)
-    return a
-
-
-def thorn_mother_idle():
-    return [_thorn(i) for i in range(4)]
-
-
-def thorn_mother_cast():
-    return [_thorn(k, cast=min(3, k + 1), glow="violet" if k >= 1 else None) for k in range(4)]
-
-
-def thorn_mother_hit():
-    return [_thorn(0, flash=True), _thorn(1, cast=1)]
-
-
-def thorn_mother_death():
-    return [_thorn(k % 4, show=1 - k / 6.5, sink=min(10, k * 2)) for k in range(6)]
-
-
 # ---------------------------------------------------------------- the toller 40x56
 
-def _toller(swing=0, strike=False, glow=None, flash=False, show=1.0, tilt=0, i=0):
-    """swing: -1 left, 0 centre, 1 right (the bell's beat)."""
+def _toller(swing=0, strike=False, glow=None, flash=False, show=1.0, tilt=0, i=0, arm=None):
+    """swing: -1 left, 0 centre, 1 right (the bell's beat). arm: (hand x, hand y, chain points) raises the right arm
+    out of the robe with a chain in its hand (the throw row, tools/nglib/toller_fx.py); None = both hands on the
+    hanging chains (every old frame: unchanged pixels)."""
     W, H = 40, 56
     a = C.new(W, H)
     xx, yy = C.grid(W, H)
@@ -159,7 +83,16 @@ def _toller(swing=0, strike=False, glow=None, flash=False, show=1.0, tilt=0, i=0
             C.put(a, x + off + (1 if k % 2 else 0) * side, y, "stone" if k % 2 else "bone")
     # hands holding the chains (violet_dark gloves)
     for side in (-1, 1):
+        if arm and side > 0:
+            continue
         C.disc(a, cx + side * 8, 30, 1.3, "violet_dark")
+    if arm:
+        hx, hy, links = arm
+        C.line(a, cx + 6, 24, hx, hy, "stone")
+        C.line(a, cx + 6, 25, hx, hy + 1, "stone_dark")
+        C.disc(a, hx + 0.5, hy + 0.5, 1.3, "violet_dark")
+        for k, (lx, ly) in enumerate(links):
+            C.put(a, lx, ly, "bone" if k % 2 == 0 else "stone")
     a = C.outline(a, color="bg0")
     if glow and strike:
         a = C.halo(a, glow, phase=i)
@@ -229,10 +162,6 @@ def bell_ring():
 
 
 SPRITES = {
-    "thorn_mother_idle": thorn_mother_idle,
-    "thorn_mother_cast": thorn_mother_cast,
-    "thorn_mother_hit": thorn_mother_hit,
-    "thorn_mother_death": thorn_mother_death,
     "toller_idle": toller_idle,
     "toller_cast": toller_cast,
     "toller_hit": toller_hit,
