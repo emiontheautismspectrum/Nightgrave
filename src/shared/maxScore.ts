@@ -52,7 +52,8 @@ export function maxSpawnsPerSecond(features: Features = FEATURES): number {
 /**
  * Earliest tick at which the k-th boss (1-based) could be defeated: every fight as fast as the FASTEST boss of the
  * cycle allows (intro + the shortest wind-up + (minSegments - 1) x the shortest cadence), over the old bosses and the
- * ENABLED new ones (a disabled row is not read). With no new boss this is exactly the old bound.
+ * ENABLED new ones (a disabled row is not read). With no new boss this is exactly the old bound. FEATURES.bossOrder
+ * draws among the same kinds, so the fastest fight is the same with or without it.
  */
 export function earliestBossDefeat(k: number, features: Features = FEATURES): number {
   const T = TUNING;

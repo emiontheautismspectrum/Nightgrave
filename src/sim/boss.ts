@@ -47,14 +47,35 @@ function mix32(x: number): number {
 export const orderHash = (seed: number, cycle: number, i: number): number =>
   mix32((seed >>> 0) ^ mix32(Math.imul(cycle + 1, 0x9e3779b1) ^ Math.imul(i + 1, 0x85ebca6b)));
 
+/** The `cycle` argument of orderHash reserved for the random order (the cycle permutation uses 0, 1, 2, ...). */
+const RANDOM_ORDER = -1;
+
 /**
- * Boss kind for a boss wave. With only the old bosses the n-th boss wave (0-based) alternates eye, lich, eye, ...
+ * FEATURES.bossOrder: the kind of the n-th boss wave (0-based), drawn among `kinds` by an integer hash of (seed, n),
+ * never the kind of boss wave n - 1. A pure function of (kinds, n, seed): the chain is walked from n = 0 (kind 0 is
+ * uniform; every later kind is uniform among the other kinds). With two kinds it alternates (the first one is drawn).
+ */
+export function randomBossKind(kinds: readonly BossKind[], n: number, seed: number): BossKind {
+  const L = kinds.length;
+  let k = orderHash(seed, RANDOM_ORDER, 0) % L;
+  for (let i = 1; i <= n && L > 1; i++) {
+    let j = orderHash(seed, RANDOM_ORDER, i) % (L - 1);
+    if (j >= k) j++;
+    k = j;
+  }
+  return kinds[k]!;
+}
+
+/**
+ * Boss kind for a boss wave. With FEATURES.bossOrder enabled: `randomBossKind` over every boss of the run. Otherwise,
+ * with only the old bosses the n-th boss wave (0-based) alternates eye, lich, eye, ...
  * exactly as before. With a new boss enabled, every cycle of k = |bossCycle| boss waves holds each enabled boss once,
  * in an order that is a permutation (Fisher-Yates) driven by an INTEGER HASH of (seed, cycle index): no PRNG draw.
  */
 export function bossKindFor(p: SimParams, wave: number, seed: number): BossKind {
   const n = Math.max(0, Math.floor((wave + 1) / p.bosses.everyNthWave) - 1);
   const kinds = bossCycle(p);
+  if (p.order) return randomBossKind(kinds, n, seed);
   if (kinds.length === 2) return n % 2 === 0 ? 'eye' : 'lich';
   const k = kinds.length;
   const cycle = Math.floor(n / k);

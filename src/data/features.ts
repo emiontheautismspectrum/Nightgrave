@@ -196,17 +196,28 @@ export interface NewBosses {
 export const NEW_BOSS_KINDS = ['thorn', 'toller'] as const;
 export type NewBossKind = (typeof NEW_BOSS_KINDS)[number];
 
+/**
+ * BOSS ORDER (package U3b): every boss wave draws its kind among ALL bosses of the run (the Eye, the Lich and every
+ * enabled new boss) instead of the fixed cycle, with no immediate repeat. The draw is an integer hash of (seed, n)
+ * (boss.ts `randomBossKind`): no PRNG draw, so nothing else shifts. With only the two old bosses it is an
+ * alternation whose first boss is drawn.
+ */
+export interface BossOrder {
+  readonly enabled: boolean;
+}
+
 export interface Features {
   readonly patternPack: PatternPack;
   readonly knot: HexKnot;
   readonly briar: BriarLine;
   /** A GROUP block: it has no flag of its own, each row (`thorn`, `toller`) has one. */
   readonly bosses: NewBosses;
+  readonly bossOrder: BossOrder;
 }
 export type FeatureKey = keyof Features;
 /** Every switch: the plain blocks and the rows of the `bosses` group. */
 export type FeatureFlag = Exclude<FeatureKey, 'bosses'> | NewBossKind;
-export const FEATURE_FLAGS: readonly FeatureFlag[] = ['patternPack', 'knot', 'briar', ...NEW_BOSS_KINDS];
+export const FEATURE_FLAGS: readonly FeatureFlag[] = ['patternPack', 'knot', 'briar', ...NEW_BOSS_KINDS, 'bossOrder'];
 /** Is this switch on (exactly true)? */
 export function flagOn(features: Features, flag: FeatureFlag): boolean {
   return flag === 'thorn' || flag === 'toller' ? features.bosses[flag].enabled === true : features[flag].enabled === true;
@@ -265,6 +276,7 @@ export const FEATURES: Features = deepFreeze({
       knell: { weight: 3.5, count: 15, maxCount: 18, gapRad: 0.6, gapAimRad: 0.6, speedFactor: 1.35 },
     },
   },
+  bossOrder: { enabled: false },
 });
 
 /**
