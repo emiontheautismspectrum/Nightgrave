@@ -60,7 +60,8 @@ export type BossPattern =
   | 'ring' | 'beam' | 'spawns' // eye
   | 'fan' | 'wraiths' | 'triple' // lich
   | 'hedge' | 'bloom' | 'lash' | 'spores' // thorn mother
-  | 'toll' | 'pendulum' | 'knell'; // the toller
+  | 'toll' | 'pendulum' | 'knell' // the toller
+  | 'peal' | 'echo' | 'chains'; // the toller's new moves (FEATURES.bossMoves only)
 
 /** A boss attack in progress: [windStart, fire) wind-up (telegraph), launched at `fire`. */
 export interface BossAttack {
@@ -77,6 +78,8 @@ export interface BossAttack {
   points: [number, number][];
   /** New bosses only (the key exists only there): a seeded angle offset per telegraphed point (a bloom's gap). */
   offs?: number[];
+  /** FEATURES.bossMoves only (the key exists only then): ticks the launch waited for a ring to pass (not cadence). */
+  defer?: number;
 }
 
 /**
@@ -137,6 +140,63 @@ export interface Boss {
    * of targets picked so far (the hash input of the next one).
    */
   drift?: { tx: number; ty: number; n: number };
+  /** FEATURES.bossMoves only (the key exists only after a peal): attacks still to come sooner (the hastened cadence). */
+  hasten?: number;
+  /** FEATURES.bossMoves only (the key exists only while it waits): a drawn new move waiting for a clear field. */
+  waitFor?: 'peal' | 'echo' | 'chains';
+}
+
+/** A gap of a ring: its unit direction from the centre and the cos / sin of its half-angle. */
+export interface RingGap {
+  x: number;
+  y: number;
+  cos: number;
+  sin: number;
+}
+
+/**
+ * A ring of the Toller (FEATURES.bossMoves): a FULL lethal circle (red, unparryable to touch; the dash i-frames pass)
+ * of radius `r` around (x, y), `halfWidth` thick, with the gaps cut into it. 'grow': expanding at `speed` px/tick;
+ * 'hold' (an echo, outside the arena) until `holdUntil`; 'back': contracting at `back` px/tick to `startR`. Slow Time
+ * slows it like a projectile. `near` = the last tick its band was at the hero's distance (the launch deferral).
+ */
+export interface Ring {
+  id: number;
+  serial: number;
+  echo: boolean;
+  x: number;
+  y: number;
+  r: number;
+  startR: number;
+  maxR: number;
+  speed: number;
+  back: number;
+  halfWidth: number;
+  phase: 'grow' | 'hold' | 'back';
+  holdStart: number;
+  holdUntil: number;
+  gaps: RingGap[];
+  /** Its first cut paid a parry. */
+  paid: boolean;
+  near: number;
+}
+
+/**
+ * The Toller's chain (FEATURES.bossMoves): [start, land) the spot (x, y, radius r) is marked; at `land` (the attack's
+ * launch) a hero inside is BOUND, else the chain is gone. 'iron': bound until `until`, the dash breaks it. 'break':
+ * bound until `left` more pulses were fired or `until`; no dash. Real ticks (Slow Time never slows a bind).
+ */
+export interface Chain {
+  serial: number;
+  kind: 'iron' | 'break';
+  x: number;
+  y: number;
+  r: number;
+  start: number;
+  land: number;
+  bound: boolean;
+  until: number;
+  left: number;
 }
 
 export type PickupKind = 'slow' | 'double';
@@ -345,6 +405,14 @@ export type SimEvent =
   | { type: 'boss_attack'; kind: BossKind; pattern: BossPattern; remaining: number }
   | { type: 'boss_segment'; remaining: number; reflected: boolean }
   | { type: 'boss_teleport'; x: number; y: number }
+  /** The Toller's rings and chains (FEATURES.bossMoves only). */
+  | { type: 'boss_ring'; id: number; echo: boolean }
+  | { type: 'ring_cut'; id: number; x: number; y: number; paid: boolean }
+  | { type: 'ring_end'; id: number }
+  | { type: 'boss_chain'; kind: 'iron' | 'break'; x: number; y: number }
+  | { type: 'chain_bind'; kind: 'iron' | 'break' }
+  | { type: 'chain_miss' }
+  | { type: 'chain_free'; how: 'dash' | 'parries' | 'time' | 'boss' }
   /** The Thorn Mother sinks into the ground to relocate (FEATURES.bossMotion only). */
   | { type: 'boss_sink'; x: number; y: number }
   /** A Thorn Mother bloom burst (FEATURES.bosses.thorn only). */
@@ -421,10 +489,13 @@ export interface SimState {
   /** Hex knots on the field. The field exists only while FEATURES.knot is enabled. */
   knots?: Knot[];
   /**
-   * parryStart of the pulse whose FIRST kill was a knot (FEATURES.knot only; set lazily): that pulse's first projectile
-   * kill still earns the Knight's guard charge, so the order of the kills never decides it.
+   * parryStart of the pulse whose FIRST kill was a knot or a ring cut (FEATURES.knot / bossMoves only; set lazily): that
+   * pulse's first projectile kill still earns the Knight's guard charge, so the order of the kills never decides it.
    */
   knotPulse?: number;
   /** Briar lines on the field. The field exists only while FEATURES.briar is enabled. */
   walls?: Wall[];
+  /** The Toller's rings (at most one) and chain. The fields exist only while FEATURES.bossMoves and the Toller are. */
+  rings?: Ring[];
+  chain?: Chain | null;
 }

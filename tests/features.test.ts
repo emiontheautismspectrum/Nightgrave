@@ -59,7 +59,7 @@ export function guarded(features: Features): Features {
 describe('feature flags: the production build is dark', () => {
   it('every block is disabled and the table is frozen', () => {
     expect(KEYS.length).toBeGreaterThan(0);
-    expect(FLAGS).toEqual(['patternPack', 'knot', 'briar', 'thorn', 'toller', 'bossOrder', 'bossMotion']);
+    expect(FLAGS).toEqual(['patternPack', 'knot', 'briar', 'thorn', 'toller', 'bossOrder', 'bossMotion', 'bossMoves']);
     for (const k of FLAGS) expect(flagOn(FEATURES, k), k).toBe(false);
     expect(Object.isFrozen(FEATURES)).toBe(true);
     for (const k of KEYS) expect(Object.isFrozen(FEATURES[k])).toBe(true);

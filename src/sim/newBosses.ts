@@ -11,7 +11,8 @@ import type { TheToller, ThornMother } from '../data/features';
 import { TICK_RATE } from '../data/tuning';
 import { dcos, dsin, PI, rotate } from './dmath';
 import { inGapCorridor, placeWall, planWall } from './hunts';
-import { ticks, type SimParams } from './params';
+import { ticks, tollerMoves, type SimParams } from './params';
+import { beginTollerMove, breakBound, landChain, launchRing, tollerMoveTable } from './tollerMoves';
 import { nextFloat, range } from './rng';
 import { reachableBeamSign, type Spawn } from './boss';
 import type { Beam, Boss, BossAttack, BossEmission, BossPattern, SimState } from './state';
@@ -135,7 +136,9 @@ export function newPatternTable(s: SimState, p: SimParams, kind: 'thorn' | 'toll
   const ringing = s.projectiles.some((pr) => pr.boss > 0 && pr.kind === 'orb_small') || !!b?.pending?.some((e) => e.op === 'toll');
   if (!swinging && !ringing) out.push(['pendulum', c.pendulum.weight]);
   if (!knellAlive(s)) out.push(['knell', c.knell.weight]); // never two knell rings at once
-  return out;
+  // FEATURES.bossMoves: the peal, the echo and the chains join the table (after the old patterns), and a parry-break
+  // bind narrows it to the allowed patterns
+  return tollerMoves(p) && b ? tollerMoveTable(s, p, b, out) : out;
 }
 
 /** A knell ring is still flying (the Toller's only blades). */
@@ -182,6 +185,7 @@ export function beginNewAttack(s: SimState, p: SimParams, b: Boss, pattern: Boss
   // the Toller: wind-ups are whole beats, so every launch lands on a beat tick
   const c = tollerRow(p);
   const beat = beatTicks(p);
+  if (pattern === 'peal' || pattern === 'echo' || pattern === 'chains') return beginTollerMove(s, p, b, pattern, beat); // FEATURES.bossMoves
   const wind = Math.max(15, Math.round(pattern === 'pendulum' ? c.pendulum.windupBeats : c.windupBeats) * beat);
   const a: BossAttack = { pattern, tpOut: t, tpIn: t, windStart: t, fire: t + wind, dirX: 0, dirY: 0, sign: 1, points: [] };
   if (pattern === 'pendulum') {
@@ -269,9 +273,12 @@ export function launchNew(s: SimState, p: SimParams, b: Boss, a: BossAttack, pat
       const pend = (b.pending ??= []);
       const rings = Math.max(1, Math.round(c.rings));
       const mid = rings > 1 ? 1 : 0;
+      // FEATURES.bossMoves: under a parry-break bind the rings come boundRingBeats apart (longer than the parry cooldown)
+      const tm = tollerMoves(p);
+      const apart = tm && breakBound(s) ? Math.max(1, Math.round(tm.chains.boundRingBeats)) : 1;
       for (let k = 0; k < rings; k++) {
         const [gx, gy] = rotate(bx, by, (k - mid) * a.sign * step);
-        const e: BossEmission = { op: 'toll', at: s.tick + k * beat, serial, k, gapX: gx, gapY: gy, tele: a.windStart };
+        const e: BossEmission = { op: 'toll', at: s.tick + k * beat * apart, serial, k, gapX: gx, gapY: gy, tele: a.windStart };
         if (k === 0) emit(s, p, b, e, spawn);
         else pend.push(e);
       }
@@ -300,6 +307,17 @@ export function launchNew(s: SimState, p: SimParams, b: Boss, a: BossAttack, pat
       }
       return;
     }
+    case 'peal':
+    case 'echo': {
+      // FEATURES.bossMoves: the ring leaves the bell; with the hero too close to the bell it is a toll instead (the
+      // launch event names the attack that really happened)
+      if (launchRing(s, p, b, pattern === 'echo', serial)) return;
+      for (const e of s.events) if (e.type === 'boss_attack' && e.pattern === pattern) e.pattern = 'toll';
+      return launchNew(s, p, b, a, 'toll', spawn);
+    }
+    case 'chains':
+      landChain(s, p); // FEATURES.bossMoves: the chain lands: the hero on its spot is bound
+      return;
     default:
       return unknownPattern(pattern);
   }

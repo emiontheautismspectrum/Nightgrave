@@ -5,10 +5,11 @@
  */
 import { HOLLOWS, PORTAL } from '../data/arena';
 import { dcos, dsin, rotate } from './dmath';
-import { ticks, type SimParams } from './params';
+import { ticks, tollerMoves, type SimParams } from './params';
 import { nextFloat, range } from './rng';
 import type { Beam, Boss, BossAttack, BossKind, BossPattern, SimState } from './state';
-import { beginNewAttack, launchNew, newBossClear, newPatternTable, onBeat, runPending } from './newBosses';
+import { beatTicks, beginNewAttack, launchNew, newBossClear, newPatternTable, onBeat, runPending } from './newBosses';
+import { breakBound, earlierHazardsAlive, isTollerMove, mustWait, ringBlocks } from './tollerMoves';
 import { emergeSpot, moveBoss, sinkDue } from './bossMotion';
 
 /** Spawner callback (waves.spawnProjectile), injected to avoid an import cycle. */
@@ -222,7 +223,15 @@ function pickPattern(s: SimState, p: SimParams, kind: BossKind): BossPattern {
 /** Begin the next attack sequence: pick the pattern; the lich teleports first; then a wind-up of >= 15 ticks. */
 function beginAttack(s: SimState, p: SimParams, b: Boss): void {
   const t = s.tick;
-  const pattern = pickPattern(s, p, b.kind);
+  // FEATURES.bossMoves: a hero bound by a parry-break chain answers one attack at a time: no draw, no start while an
+  // earlier hazard lives (the Toller waits on its beat)
+  if (s.chain && breakBound(s) && earlierHazardsAlive(s, b)) {
+    b.nextAt = onBeat(p, b, t + 1);
+    return;
+  }
+  // FEATURES.bossMoves: a new move the Toller drew earlier and is waiting to start (no new draw)
+  const pattern = b.waitFor ?? pickPattern(s, p, b.kind);
+  if (b.waitFor !== undefined) delete b.waitFor;
   const tpOut = t;
   let tpIn = t;
   let wind: number;
@@ -256,6 +265,11 @@ function beginAttack(s: SimState, p: SimParams, b: Boss): void {
       b.attack = beginNewAttack(s, p, b, pattern);
       return;
     case 'toller':
+      if (isTollerMove(pattern) && mustWait(s, p, b, pattern)) {
+        b.waitFor = pattern; // FEATURES.bossMoves: wait (on the beat) until the field is clear
+        b.nextAt = onBeat(p, b, t + 1);
+        return;
+      }
       b.attack = beginNewAttack(s, p, b, pattern);
       return;
     default:
@@ -461,11 +475,12 @@ export function rotateBeams(s: SimState): void {
 }
 
 /**
- * The final attack is over when none of its projectiles and no beam of it remain; for a new boss also nothing may
- * still be queued (a multi-beat attack) and no wall of hers may stand (FEATURES.bosses).
+ * The final attack is over when none of its projectiles and no beam of it remain, nothing is still queued (a
+ * multi-beat attack: the new bosses, the Lich's new moves), no wall of a boss stands (FEATURES.bosses) and no ring is
+ * alive (FEATURES.bossMoves). The old bosses without the new blocks have none of these keys.
  */
 function finalAttackGone(s: SimState, b: Boss): boolean {
-  return !s.projectiles.some((pr) => pr.boss === b.serial) && !s.beams.some((bm) => bm.serial === b.serial) && (b.kind === 'eye' || b.kind === 'lich' || newBossClear(s, b));
+  return !s.projectiles.some((pr) => pr.boss === b.serial) && !s.beams.some((bm) => bm.serial === b.serial) && newBossClear(s, b) && !(s.rings && s.rings.length);
 }
 
 /** Remove extra segments for a reflected boss projectile (reflectBonusSegments, default 0 = off). */
@@ -520,12 +535,30 @@ export function runBoss(s: SimState, p: SimParams, spawn: Spawn): void {
     }
     if (t === a.windStart) a = b.attack = { ...beginNewAttack(s, p, b, a.pattern), tpOut: a.tpOut, tpIn: a.tpIn };
   }
+  if (t === a.fire && s.rings && s.rings.length && ringBlocks(s, p)) {
+    // FEATURES.bossMoves: no launch while a ring is about to reach the hero or has just passed him; the launch waits
+    // for the first free tick (the Toller: its next beat). The wind-up's telegraph stays; the cadence is not shortened
+    const wait = b.kind === 'toller' ? beatTicks(p) : 1;
+    a.fire += wait;
+    a.defer = (a.defer ?? 0) + wait;
+    if (s.chain && s.chain.serial === b.serial + 1) s.chain.land = a.fire;
+  }
   if (t === a.fire) {
     launch(s, p, b, a, spawn);
     b.attack = null;
-    const cad = ticks(bossRow(p, b.kind).cadenceSeconds);
-    const pre = a.fire - a.tpOut;
-    b.nextAt = t + Math.max(1, cad - pre);
+    let cad = ticks(bossRow(p, b.kind).cadenceSeconds);
+    let hastened = false;
+    if (b.hasten) {
+      // FEATURES.bossMoves: after a peal, the next hastenCount attacks START hastenBeats beats sooner (start to start;
+      // never below 2 beats; on the beat). The next one may start on this very launch tick (after the peal's 2 beats)
+      const beat = beatTicks(p);
+      cad = Math.max(2 * beat, cad - Math.max(0, Math.round(tollerMoves(p)!.peal.hastenBeats)) * beat);
+      b.hasten--;
+      hastened = true;
+    }
+    const pre = a.fire - a.tpOut - (a.defer ?? 0);
+    b.nextAt = t + Math.max(hastened ? 0 : 1, cad - pre);
     if (b.kind === 'toller') b.nextAt = onBeat(p, b, b.nextAt); // the Toller starts every attack on its beat
+    if (hastened && b.nextAt <= t && b.remaining > 0) beginAttack(s, p, b);
   }
 }

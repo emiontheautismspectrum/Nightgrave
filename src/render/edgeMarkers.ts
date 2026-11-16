@@ -7,11 +7,13 @@
  *   blood sigils (outline and lethal fill), the boss (always, red while it winds up a red attack) and its attack
  *   points, and the new bosses' blooms still waiting to burst (FEATURES.bosses);
  * - the hunts (FEATURES.knot / briar only): every off-view hex knot for its whole fuse (violet), every off-view briar
- *   line for its whole life (red, at its point nearest the hero) and its gap (bone = safe passage, `edge_gap`).
+ *   line for its whole life (red, at its point nearest the hero) and its gap (bone = safe passage, `edge_gap`);
+ * - the Toller's rings (FEATURES.bossMoves only): at the point nearest the hero, red while coming, bone while an echo
+ *   is out beyond the hero (it returns).
  * Bigger = closer (projectiles: sooner).
  */
 import type { SimParams } from '../sim/params';
-import type { BossPattern, SimState } from '../sim/state';
+import type { BossPattern, Ring, SimState } from '../sim/state';
 import type { ViewRect } from './camera';
 
 export interface EdgeMarker {
@@ -32,7 +34,17 @@ export interface EdgeMarker {
 export const MARKER_INSET = 6;
 
 /** Wind-ups of red (unparryable) boss attacks: the boss marker turns red while one winds up. */
-const RED_WINDUPS: ReadonlySet<BossPattern> = new Set<BossPattern>(['beam', 'pendulum', 'knell', 'lash', 'hedge']);
+const RED_WINDUPS: ReadonlySet<BossPattern> = new Set<BossPattern>(['beam', 'pendulum', 'knell', 'lash', 'hedge', 'peal', 'echo']);
+
+/** The distance from a ring's centre to the farthest arena corner. */
+const farCorner = (p: SimParams, x: number, y: number): number =>
+  Math.max(Math.hypot(x - p.x0, y - p.y0), Math.hypot(x - p.x1, y - p.y0), Math.hypot(x - p.x0, y - p.y1), Math.hypot(x - p.x1, y - p.y1));
+
+/**
+ * FEATURES.bossMoves: an echo on its way back (its band wholly outside the arena, or holding there): the full view
+ * marks the arena border (bone) so the return is visible, from before the hold until it re-enters.
+ */
+export const ringReturning = (ring: Ring, p: SimParams): boolean => ring.echo && (ring.phase === 'hold' || ring.r - ring.halfWidth > farCorner(p, ring.x, ring.y));
 
 const inside = (v: ViewRect, x: number, y: number, pad = 0): boolean => x >= v.x0 - pad && x <= v.x1 + pad && y >= v.y0 - pad && y <= v.y1 + pad;
 
@@ -92,6 +104,18 @@ export function edgeMarkers(s: SimState, p: SimParams, v: ViewRect, horizonTicks
     for (const e of b.pending ?? []) if (e.op === 'bloom') add(`bq${e.serial}:${Math.round(e.x)},${Math.round(e.y)}`, e.x, e.y, 'violet', near(e.x, e.y));
   }
   for (const bm of s.beams) if (t >= bm.start && t < bm.end) add(`m${bm.serial}`, bm.x, bm.y, 'red', 3);
+  // FEATURES.bossMoves: a ring at its point nearest the hero: red while its band comes at the hero within the horizon,
+  // bone while an echo's band is beyond him (it will come back)
+  for (const ring of s.rings ?? []) {
+    const d = Math.hypot(h.x - ring.x, h.y - ring.y);
+    const [ux, uy] = d > 1e-6 ? [(h.x - ring.x) / d, (h.y - ring.y) / d] : [0, 1];
+    const [nx, ny] = [ring.x + ux * ring.r, ring.y + uy * ring.r];
+    const gap = Math.max(0, Math.abs(d - ring.r) - ring.halfWidth - p.heroRadius);
+    const coming = ring.phase === 'grow' ? ring.r < d : ring.phase === 'back' && ring.r > d;
+    const ticks = gap / ((ring.phase === 'back' ? ring.back : ring.speed) + p.heroSpeed);
+    if (coming && ticks <= horizonTicks) add(`r${ring.id}`, nx, ny, 'red', bySize(ticks, 30, 60));
+    else if (ring.echo && ring.r > d) add(`r${ring.id}`, nx, ny, 'bone', 2);
+  }
   for (const k of s.knots ?? []) add(`k${k.id}`, k.x, k.y, 'violet', near(k.x, k.y));
   for (const w of s.walls ?? []) {
     // the band's point nearest the hero (straight across), and the gap where it is now

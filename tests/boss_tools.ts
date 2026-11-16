@@ -56,3 +56,18 @@ export function attacks(count: number): SolveOptions {
     done: (s: SimState) => (s.boss?.serial ?? 0) >= count && bossClear(s),
   };
 }
+
+/** U3b (FEATURES.bossMoves): the Toller's new moves. */
+export const TOLLER_MOVES = ['peal', 'echo', 'chains'] as const;
+/**
+ * A variant (bosses + bossMoves, plus `extra` blocks) whose Toller picks only `pattern` (an old attack or a new move);
+ * every other attack of its table weighs 0.
+ */
+export function onlyTollerMove(pattern: BossPattern, extra: Features = withFeatures('toller', 'bossMoves')): Features {
+  const base = extra;
+  const row = { ...base.bosses.toller } as Record<string, unknown>;
+  for (const k of TOLLER_PATTERNS) row[k] = { ...(base.bosses.toller as unknown as Record<string, object>)[k], weight: k === pattern ? 1 : 0 };
+  const mv = { ...base.bossMoves.toller } as Record<string, unknown>;
+  for (const k of TOLLER_MOVES) mv[k] = { ...(base.bossMoves.toller as unknown as Record<string, object>)[k], weight: k === pattern ? 1 : 0 };
+  return { ...base, bosses: { ...base.bosses, toller: row as unknown as TheToller }, bossMoves: { ...base.bossMoves, toller: mv as unknown as Features['bossMoves']['toller'] } };
+}

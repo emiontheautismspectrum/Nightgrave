@@ -240,6 +240,75 @@ export interface BossMotion {
   readonly toller: { readonly speed: number };
 }
 
+/** A lethal ring of the Toller (FEATURES.bossMoves): a full red circle, not a ring of projectiles (state.ts `Ring`). */
+interface RingRow extends AttackRow {
+  /** Wind-up in beats (>= 2): the bell swings, the ring forms as ticks around the body. */
+  readonly windupBeats: number;
+  /** Expansion speed (px/s at difficulty speed 1; x the difficulty speed and the encounter bonus; Slow Time slows it). */
+  readonly speed: number;
+  readonly halfWidth: number;
+  readonly startRadius: number;
+  /** Not picked, and a toll at the launch instead, while the hero is within this distance of the bell. */
+  readonly minHeroDist: number;
+}
+
+/**
+ * THE TOLLER'S NEW MOVES (FEATURES.bossMoves.toller; read only while the Toller itself is enabled). The ring is
+ * answered by the PARRY (a pulse covering the ring's nearest point cuts a gap there) or the DASH (i-frames); walking
+ * cannot pass a full ring. The chains BIND the hero (no damage). See docs/FEATURES.md.
+ */
+export interface TollerMoves {
+  /** The ring rule of every Toller fight with this block: cuts, and the launch deferral around a ring. */
+  readonly ring: {
+    /** A cut opens a gap of this half-angle (rad) at the angle of the cut; at most `maxGaps` per ring. */
+    readonly cutHalfRad: number;
+    readonly maxGaps: number;
+    /** No other attack of the boss launches while a ring will reach the hero's distance within `holdSeconds`, or
+     * passed it less than `passedSeconds` ago (the launch waits for the first free beat). */
+    readonly holdSeconds: number;
+    readonly passedSeconds: number;
+  };
+  /**
+   * PEAL: a ring expands from the bell (at least fast enough to leave the arena in `maxLeaveSeconds`); then the Toller
+   * teleports to a hashed spot of its band (>= `teleportMinHeroDist` from the hero) and its next `hastenCount` attacks
+   * come `hastenBeats` beats sooner (never closer than 2 beats).
+   */
+  readonly peal: RingRow & { readonly maxLeaveSeconds: number; readonly teleportInset: number; readonly teleportYMax: number; readonly teleportMinHeroDist: number; readonly hastenCount: number; readonly hastenBeats: number };
+  /**
+   * ECHO: the ring expands to the farthest arena corner + `edgeMarginPx`, HOLDS there (outside the arena) for
+   * `holdSeconds`, then contracts back to the bell at `returnFactor` x its speed; the whole life <= `maxLifeSeconds`.
+   */
+  readonly echo: RingRow & { readonly edgeMarginPx: number; readonly holdSeconds: number; readonly returnFactor: number; readonly maxLifeSeconds: number };
+  /**
+   * CHAINS: a chain lands on the hero's position fixed at the wind-up start (wind-up >= `telegraphSeconds`, whole
+   * beats); a hero still within `spotRadius` at the landing is BOUND. IRON (weight `ironWeight`): bound `ironSeconds`,
+   * the dash breaks it (cast only while the dash is ready). BREAK (weight `breakWeight`): bound until `breakParries`
+   * pulses were fired or `maxSeconds` passed; no dash meanwhile; the boss launches only the `allow` patterns (a toll's
+   * rings then come `boundRingBeats` beats apart, longer than the parry cooldown).
+   */
+  readonly chains: AttackRow & {
+    readonly windupBeats: number;
+    readonly telegraphSeconds: number;
+    readonly spotRadius: number;
+    readonly ironWeight: number;
+    readonly breakWeight: number;
+    readonly ironSeconds: number;
+    readonly breakParries: number;
+    readonly maxSeconds: number;
+    readonly allow: readonly ('toll')[];
+    readonly boundRingBeats: number;
+  };
+}
+
+/**
+ * BOSS MOVES (package U3b): new attacks of the existing bosses. A row is read only for a boss that exists in the run
+ * (`toller` needs FEATURES.bosses.toller enabled too; else it is ignored).
+ */
+export interface BossMoves {
+  readonly enabled: boolean;
+  readonly toller: TollerMoves;
+}
+
 export interface Features {
   readonly patternPack: PatternPack;
   readonly knot: HexKnot;
@@ -248,11 +317,12 @@ export interface Features {
   readonly bosses: NewBosses;
   readonly bossOrder: BossOrder;
   readonly bossMotion: BossMotion;
+  readonly bossMoves: BossMoves;
 }
 export type FeatureKey = keyof Features;
 /** Every switch: the plain blocks and the rows of the `bosses` group. */
 export type FeatureFlag = Exclude<FeatureKey, 'bosses'> | NewBossKind;
-export const FEATURE_FLAGS: readonly FeatureFlag[] = ['patternPack', 'knot', 'briar', ...NEW_BOSS_KINDS, 'bossOrder', 'bossMotion'];
+export const FEATURE_FLAGS: readonly FeatureFlag[] = ['patternPack', 'knot', 'briar', ...NEW_BOSS_KINDS, 'bossOrder', 'bossMotion', 'bossMoves'];
 /** Is this switch on (exactly true)? */
 export function flagOn(features: Features, flag: FeatureFlag): boolean {
   return flag === 'thorn' || flag === 'toller' ? features.bosses[flag].enabled === true : features[flag].enabled === true;
@@ -321,6 +391,15 @@ export const FEATURES: Features = deepFreeze({
     lich: { speed: 12, bobPx: 2, bobSeconds: 1.6 },
     thorn: { relocateEvery: 3, sinkSeconds: 0.6, emergeSeconds: 0.6, emergeMinHeroDist: 90 },
     toller: { speed: 0 },
+  },
+  bossMoves: {
+    enabled: false,
+    toller: {
+      ring: { cutHalfRad: 0.45, maxGaps: 4, holdSeconds: 1.5, passedSeconds: 0.5 },
+      peal: { weight: 2, windupBeats: 2, speed: 90, halfWidth: 2, startRadius: 8, minHeroDist: 70, maxLeaveSeconds: 4.5, teleportInset: 30, teleportYMax: 120, teleportMinHeroDist: 90, hastenCount: 2, hastenBeats: 1 },
+      echo: { weight: 1.5, windupBeats: 2, speed: 100, halfWidth: 2, startRadius: 8, minHeroDist: 70, edgeMarginPx: 20, holdSeconds: 0.5, returnFactor: 0.7, maxLifeSeconds: 8 },
+      chains: { weight: 1.5, windupBeats: 2, telegraphSeconds: 0.75, spotRadius: 16, ironWeight: 1, breakWeight: 1, ironSeconds: 2.0, breakParries: 3, maxSeconds: 5.0, allow: ['toll'], boundRingBeats: 2 },
+    },
   },
 });
 

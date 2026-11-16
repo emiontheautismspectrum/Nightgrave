@@ -13,8 +13,11 @@ import { orderHash } from './boss';
 import type { SimParams } from './params';
 import type { Boss, SimState } from './state';
 
-/** The `cycle` arguments of orderHash used by motion (the boss order uses -1, the cycle permutation 0, 1, 2, ...). */
-export const HASH = { driftX: -2, driftY: -3, sinkX: -4, sinkY: -5, tollX: -6, tollY: -7 } as const;
+/**
+ * The `cycle` arguments of orderHash used by U3b (the boss order uses -1, the cycle permutation 0, 1, 2, ...): motion
+ * and the new moves (FEATURES.bossMoves) each have their own family.
+ */
+export const HASH = { driftX: -2, driftY: -3, sinkX: -4, sinkY: -5, tollX: -6, tollY: -7, chain: -8, tollGap: -9, tollSign: -10 } as const;
 
 /** A value in [0, 1) from the integer hash of (seed, boss start, salt, i). Integer math only until the division. */
 export function hashUnit(s: SimState, b: Boss, salt: number, i: number): number {

@@ -44,9 +44,18 @@ export function maxSpawnsPerSecond(features: Features = FEATURES): number {
   const th = features.bosses.thorn;
   const to = features.bosses.toller;
   const thorn = th.enabled === true ? Math.max(th.bloom.maxCount * th.bloom.maxShards, th.lash.maxCount, per(th.spores.count)) / th.cadenceSeconds : 0;
-  const toller = to.enabled === true ? Math.max(to.toll.rings * to.toll.maxCount, to.knell.maxCount) / to.cadenceSeconds : 0;
+  // FEATURES.bossMoves with the Toller: a ring is one more thing a pulse can score (its first cut), at the hastened cadence
+  const tm = features.bossMoves.enabled === true && to.enabled === true ? features.bossMoves.toller : null;
+  const tollerCad = tm ? hastenedCadence(to.cadenceSeconds, to.beatTicks, tm.peal.hastenBeats) : to.enabled === true ? to.cadenceSeconds : 1;
+  const toller = to.enabled === true ? (Math.max(to.toll.rings * to.toll.maxCount, to.knell.maxCount) + (tm ? 1 : 0)) / tollerCad : 0;
   const boss = Math.max(ring / Math.min(B.eye.cadenceSeconds, B.lich.cadenceSeconds), thorn, toller);
   return stream + sets + casters + boss;
+}
+
+/** The Toller's shortest cadence (s) after a peal (FEATURES.bossMoves): hastenBeats beats sooner, never below 2 beats. */
+function hastenedCadence(cadenceSeconds: number, beatTicks: number, hastenBeats: number): number {
+  const beat = Math.max(1, Math.round(beatTicks));
+  return Math.max(2 * beat, t(cadenceSeconds) - Math.max(0, Math.round(hastenBeats)) * beat) / TICK_RATE;
 }
 
 /**
@@ -66,6 +75,8 @@ export function earliestBossDefeat(k: number, features: Features = FEATURES): nu
   const to = features.bosses.toller;
   if (th.enabled === true) (winds.push(th.windupSeconds), cads.push(th.cadenceSeconds));
   if (to.enabled === true) (winds.push(to.windupSeconds, (to.windupBeats * to.beatTicks) / TICK_RATE), cads.push(to.cadenceSeconds));
+  // FEATURES.bossMoves with the Toller: after a peal its cadence is hastened (the bound assumes every attack is)
+  if (to.enabled === true && features.bossMoves.enabled === true) cads.push(hastenedCadence(to.cadenceSeconds, to.beatTicks, features.bossMoves.toller.peal.hastenBeats));
   const fight = t(B.introSeconds) + Math.max(15, t(Math.min(...winds))) + (minSeg - 1) * t(Math.min(...cads));
   const first = t(T.waves.graceSeconds) + (B.everyNthWave - 1) * wave + fight;
   const between = t(B.breakSeconds) + (B.everyNthWave - 1) * wave + fight;

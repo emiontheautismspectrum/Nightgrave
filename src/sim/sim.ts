@@ -1,7 +1,7 @@
 import { TICK_RATE, type Difficulty } from '../data/tuning';
 import { AXIS_MAX, BTN_DASH, BTN_PARRY, sanitizeInput, type InputFrame } from './input';
 import { beamHits, onBossParry } from './boss';
-import { makeParams, ticks, type SimParams } from './params';
+import { makeParams, ticks, tollerMoves, type SimParams } from './params';
 import { isDouble, isSlow, runPickups } from './pickups';
 import { toSeed } from './rng';
 import { NEVER, type Hero, type Knot, type Projectile, type SimState } from './state';
@@ -11,6 +11,8 @@ import { FEATURES, type Features } from '../data/features';
 import { isFading, moveProjectile, runDirector, sigilHits, spawnProjectile, splitBurst, type DirectorOptions } from './waves';
 import { runPatternPack } from './patternPack';
 import { moveWalls, runKnots, wallHits } from './hunts';
+import { breakBound, freeChain, inRingGap, moveRings, ringGap, ringHits, runChain } from './tollerMoves';
+import type { Ring } from './state';
 
 export { spawnProjectile } from './waves';
 
@@ -98,6 +100,7 @@ export function createState(seed: number, difficulty: Difficulty, hero: AnyHeroI
     ...(p.pack ? { packQueue: [] } : {}), // new state only while the block is enabled
     ...(p.knot ? { knots: [] } : {}),
     ...(p.briar ? { walls: [] } : {}),
+    ...(tollerMoves(p) ? { rings: [], chain: null } : {}), // FEATURES.bossMoves with the Toller only
   };
 }
 
@@ -198,6 +201,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   // 1. buffer presses
   if (input.buttons & BTN_PARRY) h.parryBufferedUntil = t + p.parryBuffer;
   if (input.buttons & BTN_DASH) h.dashBufferedUntil = t + p.dashBuffer;
+  if (s.chain) runChain(s); // FEATURES.bossMoves (the key exists only then): a bind ends at its time or with its boss
 
   // 2. movement intent (unit direction + how far the hero wants to go this tick)
   const { ix, iy, want } = moveIntent(h, input, p);
@@ -211,12 +215,16 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
     h.parryScored = false;
     h.parryBufferedUntil = -1;
     s.events.push({ type: 'parry_start' });
+    // FEATURES.bossMoves: every pulse (successful or not) counts towards breaking a parry-break chain
+    if (s.chain && breakBound(s) && --s.chain.left <= 0) freeChain(s, 'parries');
   }
-  if (h.dashBufferedUntil >= t && t - h.dashStart >= p.dashCooldown) {
+  // FEATURES.bossMoves: no dash while a parry-break chain binds the hero; a dash breaks an iron chain at once
+  if (h.dashBufferedUntil >= t && t - h.dashStart >= p.dashCooldown && !(s.chain && breakBound(s))) {
     h.dashStart = t;
     h.dashBufferedUntil = -1;
     [h.dashDirX, h.dashDirY] = dashDirection(h, input, p);
     s.events.push({ type: 'dash_start', dirX: h.dashDirX, dirY: h.dashDirY });
+    if (s.chain && s.chain.bound) freeChain(s, 'dash');
     if (p.ability.kind === 'trail') {
       s.trailKills = 0;
       s.events.push({ type: 'trail_start' });
@@ -232,8 +240,10 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
     mx = h.dashDirX * p.dashSpeed;
     my = h.dashDirY * p.dashSpeed;
   } else {
-    mx = ix * want;
-    my = iy * want;
+    // FEATURES.bossMoves: a bound hero cannot move (the aim still follows the input)
+    const bound = s.chain ? s.chain.bound : false;
+    mx = bound ? 0 : ix * want;
+    my = bound ? 0 : iy * want;
     if (want > 0) {
       h.dirX = ix;
       h.dirY = iy;
@@ -257,6 +267,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
   const f = isSlow(s) ? p.pickups.slowTime.factor : 1; // Slow Time: projectiles only (beams and timers unaffected)
   for (const pr of s.projectiles) moveProjectile(s, pr, f);
   if (s.walls) moveWalls(s, f); // FEATURES.briar: Slow Time slows the lines like projectiles
+  if (s.rings) moveRings(s, p, f); // FEATURES.bossMoves: and the Toller's rings
 
   // 6. multiplier decay, then parry (parry is resolved before hits, so it always wins vs parryables)
   if (s.lastParryTick >= 0 && t - s.lastParryTick >= p.multReset && s.multiplier !== p.multStart) {
@@ -344,6 +355,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       if (first && pr.boss > 0) onBossParry(s, p, pr.boss); // reflect bonus: once per successful pulse
     }
     if (hit.size) s.projectiles = s.projectiles.filter((pr) => !hit.has(pr.id));
+    if (s.rings && s.rings.length) cutRings(s, p); // FEATURES.bossMoves: the pulse cuts a gap into a ring
     // the last active tick of a parry that hit nothing: tell the renderer it was a whiff
     if (t - h.parryStart === parryActiveTicks(s, p) - 1 && !h.parryHit) s.events.push({ type: 'parry_whiff', x: h.x, y: h.y });
   }
@@ -378,6 +390,7 @@ export function step(s: SimState, rawInput: InputFrame, p: SimParams, opts: SimO
       s.events.push({ type: 'death', x: h.x, y: h.y, by: -1 });
     }
     if (s.alive && s.walls && wallHits(s, p)) die(s, -3); // FEATURES.briar: a thorn line (unparryable)
+    if (s.alive && s.rings && ringHits(s, p)) die(s, -4); // FEATURES.bossMoves: a ring (unparryable to touch)
   }
 
   // 8. remove faded and far-away projectiles
@@ -453,6 +466,53 @@ function parryKnot(s: SimState, p: SimParams, k: Knot): void {
   s.events.push({ type: 'knot_end', id: k.id, x: k.x, y: k.y, how: 'parry' });
 }
 
+/**
+ * FEATURES.bossMoves: a pulse covering a ring's point nearest the hero (THE parry zone, the band's half-width as the
+ * radius) cuts a gap of cutHalfRad there (not where a gap already is; at most maxGaps per ring; a gap lasts as long as
+ * the ring). The FIRST cut of a ring pays one parry: parryBase x the multiplier (doubled under Double Score), steps the
+ * multiplier if it is the pulse's first scoring kill, refreshes the reset timer; never PERFECT, no guard charge. Later
+ * cuts pay nothing (they still make the pulse a hit, not a whiff).
+ */
+function cutRings(s: SimState, p: SimParams): void {
+  const m = p.moves!.toller.ring;
+  const h = s.hero;
+  for (const ring of s.rings as Ring[]) {
+    const dx = h.x - ring.x;
+    const dy = h.y - ring.y;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d < 1e-6 || ring.gaps.length >= m.maxGaps) continue;
+    const ux = dx / d;
+    const uy = dy / d;
+    const px = ring.x + ux * ring.r;
+    const py = ring.y + uy * ring.r;
+    if (inParryZone(h.x, h.y, h.aimX, h.aimY, px, py, ring.halfWidth, p) < 0) continue;
+    if (inRingGap(ring, ux, uy, ring.r, 0)) continue; // already open here
+    ring.gaps.push(ringGap(ux, uy, m.cutHalfRad));
+    h.parryHit = true;
+    const paid = !ring.paid;
+    s.events.push({ type: 'ring_cut', id: ring.id, x: px, y: py, paid });
+    if (!paid) continue;
+    ring.paid = true;
+    const first = !h.parryScored;
+    const dbl = isDouble(s) ? p.pickups.doubleScore.factor : 1;
+    const points = p.parryBase * s.multiplier * dbl; // hundredths of a point
+    s.parryScoreHundredths += points;
+    const stepUp = first ? p.multStep : 0;
+    const after = Math.min(p.multCap, s.multiplier + stepUp);
+    s.events.push({ type: 'parry_hit', id: ring.id, x: px, y: py, points: points / 100, multiplier: s.multiplier / 100, perfect: false, multAfter: after / 100 });
+    if (first) {
+      s.parryCount++;
+      s.knotPulse = h.parryStart; // no guard charge from a cut; the pulse's first projectile kill still gives it
+    }
+    if (stepUp > 0) {
+      s.multiplier = after;
+      s.events.push({ type: 'mult_step', multiplier: after / 100, perfect: false, x: h.x, y: h.y });
+    }
+    s.lastParryTick = s.tick;
+    h.parryScored = true;
+  }
+}
+
 /** The Wisp's ember trail: expire old segments, burn parryable non-armored projectiles (no step, no timer, no parry). */
 function runTrail(s: SimState, p: SimParams): void {
   const A = p.ability;
@@ -516,6 +576,7 @@ function guardHits(s: SimState, p: SimParams): void {
   if (sigilHits(s, p)) return die(s, -2);
   if (beamHits(s, p)) return die(s, -1);
   if (s.walls && wallHits(s, p)) return die(s, -3);
+  if (s.rings && ringHits(s, p)) return die(s, -4);
   if (!parryHit) return;
   if (p.ability.kind === 'guard' && h.guardCharges >= p.ability.charges) {
     const pr = parryHit;
