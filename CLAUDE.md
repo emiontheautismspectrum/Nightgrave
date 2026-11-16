@@ -201,6 +201,13 @@ The title lives in ONE constant (`TITLE` in `src/config.ts`); it must be trivial
 - Attack cadence ~1 attack per 2 s (tunable), so a boss fight lasts roughly 20-30 s.
 - Bar empty = boss defeated: fixed 1000 score + a strong stacking drop (placeholder: "ember charge", longer parry window for the run).
 - No retreat timer: the fight ends only when the bar is empty or the player dies.
+- Boss art (stage ART-B, DARK until 0.11.0; docs/ASSETS_SPEC.md "Boss art"): the redrawn Thorn Mother (a forest
+  queen, keys `thorn_mother_*` replaced in place), the new Lich King (`lich_king_*`; the old `lich_mage_*` stays the
+  production art), the Toller's teleport / throw rows and the effect art of the boss moves are drawn only when a run
+  has a new boss row, `bossMotion` or `bossMoves` (`useNewBossArt`, `src/render/bossArt.ts`: pure looks, the
+  animation state machine from sim state only, the ring raster). A production run draws exactly the old sprites
+  (`tests/boss_art.test.ts`). The concepts in `docs/art_refs/` are reference only; `tools/boss_sheet.py` writes the
+  review sheets to `docs/screenshots/boss_art/`, `tools/check_repro.py` proves a re-run is byte-identical.
 
 ## Pickups on the map (MVP)
 - Slow Time (teal): projectiles at 50% speed for 6 s.
