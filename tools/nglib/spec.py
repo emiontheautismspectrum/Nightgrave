@@ -31,6 +31,11 @@ SPRITES = {
     "thorn_mother_emerge": (48, 64, 6),
     "toller_idle": (40, 56, 4), "toller_cast": (40, 56, 4), "toller_hit": (40, 56, 2), "toller_death": (40, 56, 6),
     "root_bloom": (16, 16, 4), "bell_ring": (32, 32, 4),
+    # boss art stage (dark: drawn only in flagged runs, src/render/bossArt.ts `useNewBossArt`)
+    "lich_king_idle": (40, 64, 6), "lich_king_cast": (40, 64, 4), "lich_king_grasp": (40, 64, 4),
+    "lich_king_hit": (40, 64, 2), "lich_king_death": (40, 64, 6), "lich_king_teleport_out": (40, 64, 4),
+    "lich_king_teleport_in": (40, 64, 4), "lich_king_soulfire": (40, 40, 6),
+    "bone_hand": (16, 16, 4), "grasp_crack": (24, 24, 4),
     # pickups
     "pickup_slow_time": (12, 12, 4), "pickup_double_score": (12, 12, 4), "pickup_glow": (16, 16, 4),
 }
