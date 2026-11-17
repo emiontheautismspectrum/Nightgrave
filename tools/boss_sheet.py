@@ -10,9 +10,9 @@ And sheet_effects.png (the effect sprites of the boss moves at 4x) and sheet_sil
 whole cast: flat silhouettes at 2x and 1x, then the idle sprites at 1x on the four floor tones).
 
 Usage: python3 tools/boss_sheet.py            (writes the files)
-       python3 tools/boss_sheet.py --digest   (prints {file: sha256} of what it WOULD write; tools/check_repro.py)
+       python3 tools/boss_sheet.py --digest   (prints the digests of what it WOULD write: encoded bytes and decoded
+                                               pixels, tools/nglib/repro.py; used by tools/check_repro.py)
 """
-import hashlib
 import io
 import json
 import os
@@ -26,6 +26,7 @@ import importlib  # noqa: E402
 
 from nglib import canvas as C  # noqa: E402
 from nglib import font  # noqa: E402
+from nglib import repro  # noqa: E402
 from nglib.palette import RGB  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -214,7 +215,7 @@ def files_on_disk():
 def main():
     files = build()
     if "--digest" in sys.argv:
-        print(json.dumps({n: hashlib.sha256(b).hexdigest() for n, b in sorted(files.items())}))
+        print(json.dumps(repro.digests(files), sort_keys=True))
         return 0
     os.makedirs(OUT, exist_ok=True)
     total = 0

@@ -452,10 +452,14 @@ describe('boss art: the ring raster', () => {
 });
 
 describe('boss art: reproducible', () => {
-  const py = spawnSync('python3', ['-c', 'import numpy, PIL'], { stdio: 'ignore' }).status === 0;
-  it.skipIf(!py)('the sprites, the atlas and the review sheets are byte-identical on a re-run (tools/check_repro.py)', () => {
+  // the art tools need python3 with Pillow and numpy; without them the check cannot run and the test is SKIPPED
+  const probe = spawnSync('python3', ['-c', 'import PIL, numpy'], { encoding: 'utf8' });
+  const missing = probe.error || probe.status === null ? 'python3 is not installed' : probe.status !== 0 ? 'python3 has no Pillow / numpy (pip install -r tools/requirements.txt)' : '';
+  it('two fresh builds are identical and the committed art holds the same pixels (tools/check_repro.py)', ({ skip }) => {
+    if (missing) skip(`SKIPPED, tools/check_repro.py did not run: ${missing}`);
     const out = spawnSync('python3', ['tools/check_repro.py'], { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
-    expect(out.stdout + out.stderr).toContain('OK: sprites, atlas and boss sheets are byte-identical');
+    // (decoded pixels for PNG / GIF, exact bytes for JSON: another Pillow / zlib writes the same pixels as other bytes)
+    expect(out.stdout + out.stderr).toContain('OK: two fresh builds are identical, and the files on disk hold the same pixels');
     expect(out.status).toBe(0);
   }, 240_000);
 });

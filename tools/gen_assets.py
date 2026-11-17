@@ -3,7 +3,6 @@
 
 Usage: python3 tools/gen_assets.py
 """
-import hashlib
 import io
 import json
 import os
@@ -113,13 +112,15 @@ def build_all():
 
 
 def digest():
-    """{path under assets/: sha256} of every sprite sheet and of the atlas, built in memory (tools/check_repro.py
-    compares two fresh processes with each other and with the files on disk)."""
+    """The digests (tools/nglib/repro.py: encoded bytes and decoded pixels) of every sprite sheet and of the atlas,
+    by path under assets/, built in memory. tools/check_repro.py compares two fresh processes with each other (bytes)
+    and with the files on disk (decoded pixels for the PNGs, exact bytes for the JSON)."""
+    from nglib import repro
     _, _, _, sprites, _, atlas, atlas_json = build_all()
-    out = {f"sprites/{n}.png": hashlib.sha256(png_bytes(C.strip(f))).hexdigest() for n, f in sprites.items()}
-    out["atlas/nightgrave.png"] = hashlib.sha256(png_bytes(atlas)).hexdigest()
-    out["atlas/nightgrave.json"] = hashlib.sha256(json_text(atlas_json).encode("utf-8")).hexdigest()
-    return out
+    files = {f"sprites/{n}.png": png_bytes(C.strip(f)) for n, f in sprites.items()}
+    files["atlas/nightgrave.png"] = png_bytes(atlas)
+    files["atlas/nightgrave.json"] = json_text(atlas_json).encode("utf-8")
+    return repro.digests(files)
 
 
 def boss_board(art, game):
