@@ -348,9 +348,15 @@ the skilled bot cuts a ring in front of it (keeping its parry for it) or dashes,
 a bound bot parries when parry-bound and dashes when iron-bound.
 
 **Enabling.** `bossOrder`, `bossMotion` and `bossMoves` are separate rules changes; each needs the cut-over of
-"Enabling a block". `bossMoves` without the Toller enabled adds only the Lich's moves. Render placeholders (palette
-colours only; `docs/ASSETS_SPEC.md`): the ring, the chain and its spot, the grasp hands, the soulfire sparks, the
-echo's border ticks.
+"Enabling a block". `bossMoves` without the Toller enabled adds only the Lich's moves.
+
+**Boss art (dark).** The redrawn bosses (`docs/ASSETS_SPEC.md` "Boss art") are drawn only when a run has ANY of the
+new boss rows, `bossMotion` or `bossMoves` (`useNewBossArt` in `src/render/bossArt.ts`): then the Lich is the new
+`lich_king_*` family, the Thorn Mother and the Toller use their new rows, and the placeholders of the boss moves are
+art (bone hands in red crack rings, chain links and coils, soulfire embers, the rasterised ring). A production run
+keeps the Eye and the old `lich_mage_*` sprites exactly (`tests/boss_art.test.ts`). Still drawn in code: the chain's
+spot circle, the echo's border ticks and the wind-up lines / rings. The art is render-only: it is not a rules change
+and not in the fingerprint; at the 0.11.0 cut-over the old `lich_mage_*` rows can be dropped.
 
 ### Dev preview (`npm run dev` only)
 

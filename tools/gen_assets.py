@@ -3,6 +3,7 @@
 
 Usage: python3 tools/gen_assets.py
 """
+import io
 import json
 import os
 import re
@@ -15,7 +16,7 @@ import gen_arena  # noqa: E402
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 from nglib import arena_previews as AP  # noqa: E402
-from nglib import board, bosses, bosses2, effects, heroes, shell, threats  # noqa: E402
+from nglib import board, bosses, bosses2, effects, heroes, lich_king, shell, thorn_queen, threats, toller_fx  # noqa: E402
 from nglib import canvas as C  # noqa: E402
 from nglib import spec  # noqa: E402
 from nglib.pack import pack  # noqa: E402
@@ -38,14 +39,32 @@ def read_title():
     return "Nightgrave"
 
 
+# Atlas frames stored trimmed to their opaque box (tools/nglib/pack.py): the big, mostly empty frames of the DARK
+# boss art only (never a production sprite, a tile or a shell part), so the atlas stays 512 x 1024.
+ATLAS_TRIM = ("thorn_mother_", "lich_king_", "toller_tp_", "toller_throw", "toller_strike")
+ATLAS_WIDTH = 512
+
+
+def png_bytes(a):
+    buf = io.BytesIO()
+    C.to_image(a).save(buf, format="PNG", optimize=False)
+    return buf.getvalue()
+
+
+def json_text(data):
+    return json.dumps(data, indent=1, sort_keys=True) + "\n"
+
+
 def save(a, path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    C.to_image(a).save(path, optimize=False)
+    with open(path, "wb") as fp:
+        fp.write(png_bytes(a))
 
 
 def gameplay_sprites():
     builders = {}
-    for mod in (heroes.SPRITES, threats.SPRITES, effects.SPRITES, bosses.SPRITES, bosses2.SPRITES):
+    for mod in (heroes.SPRITES, threats.SPRITES, effects.SPRITES, bosses.SPRITES, bosses2.SPRITES, thorn_queen.SPRITES,
+                lich_king.SPRITES, toller_fx.SPRITES):
         builders.update(mod)
     assert set(builders) == set(spec.SPRITES), set(builders) ^ set(spec.SPRITES)
     sprites = {}
@@ -76,8 +95,32 @@ def shell_sprites():
 def write_json(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as fp:
-        json.dump(data, fp, indent=1, sort_keys=True)
-        fp.write("\n")
+        fp.write(json_text(data))
+
+
+def build_all():
+    """Every sprite, its group and the packed atlas, in memory (nothing is written)."""
+    game = gameplay_sprites()
+    art = gen_arena.build()
+    shells = shell_sprites()
+    overlap = (set(game) & set(art["sprites"])) | (set(shells) & (set(game) | set(art["sprites"])))
+    assert not overlap, overlap
+    sprites = {**game, **art["sprites"], **shells}
+    groups = {**{n: "gameplay" for n in game}, **art["groups"], **{n: "shell" for n in shells}}
+    atlas, atlas_json = pack(sprites, width=ATLAS_WIDTH, trim=ATLAS_TRIM)
+    return game, art, shells, sprites, groups, atlas, atlas_json
+
+
+def digest():
+    """The digests (tools/nglib/repro.py: encoded bytes and decoded pixels) of every sprite sheet and of the atlas,
+    by path under assets/, built in memory. tools/check_repro.py compares two fresh processes with each other (bytes)
+    and with the files on disk (decoded pixels for the PNGs, exact bytes for the JSON)."""
+    from nglib import repro
+    _, _, _, sprites, _, atlas, atlas_json = build_all()
+    files = {f"sprites/{n}.png": png_bytes(C.strip(f)) for n, f in sprites.items()}
+    files["atlas/nightgrave.png"] = png_bytes(atlas)
+    files["atlas/nightgrave.json"] = json_text(atlas_json).encode("utf-8")
+    return repro.digests(files)
 
 
 def boss_board(art, game):
@@ -87,11 +130,19 @@ def boss_board(art, game):
     rows = [["eye_sentinel_idle", "eye_sentinel_charge", "eye_sentinel_hit"], ["eye_sentinel_death"],
             ["lich_mage_idle", "lich_mage_cast", "lich_mage_hit"], ["lich_mage_teleport_out", "lich_mage_teleport_in"],
             ["lich_mage_death"], ["eye_beam", "pickup_slow_time", "pickup_double_score", "pickup_glow"],
-            ["thorn_mother_idle", "thorn_mother_cast", "thorn_mother_hit"], ["thorn_mother_death"],
-            ["toller_idle", "toller_cast", "toller_hit"], ["toller_death"], ["root_bloom", "bell_ring", "briar_tile", "briar_post"]]
-    W_, pad = 560, 4
+            ["thorn_mother_idle", "thorn_mother_cast"], ["thorn_mother_hedge", "thorn_mother_lash", "thorn_mother_hit"], ["thorn_mother_death"],
+            ["thorn_mother_sink", "thorn_mother_emerge"],
+            ["lich_king_idle", "lich_king_cast", "lich_king_hit"], ["lich_king_grasp", "lich_king_teleport_out", "lich_king_teleport_in"],
+            ["lich_king_death", "lich_king_soulfire"],
+            ["toller_idle", "toller_cast", "toller_hit"], ["toller_death", "toller_throw"], ["toller_tp_out", "toller_tp_in", "toller_strike"],
+            ["root_bloom", "bell_ring", "briar_tile", "briar_post", "bone_hand", "grasp_crack", "chain_iron", "chain_violet",
+             "chain_wrap_iron", "chain_wrap_violet"]]
+    W_, pad = 640, 4
     blocks = []
     for row in rows:
+        row = [n for n in row if n in game]
+        if not row:
+            continue
         h = max(game[n][0].shape[0] for n in row) + pad
         line = np.full((h, W_), C.ci("fog"), dtype=np.int16)
         x = pad
@@ -244,6 +295,9 @@ def heroes_compare(game):
 
 
 def main():
+    if "--digest" in sys.argv:
+        print(json.dumps(digest(), sort_keys=True))
+        return
     # gameplay/menu screenshots are captured from the running game (tests-e2e/smoke.cjs), not generated: keep them
     pdir = os.path.join(ASSETS, "preview")
     keep = {n: open(os.path.join(pdir, n), "rb").read() for n in (os.listdir(pdir) if os.path.isdir(pdir) else [])
@@ -255,13 +309,7 @@ def main():
         with open(os.path.join(pdir, n), "wb") as fp:
             fp.write(b)
 
-    game = gameplay_sprites()
-    art = gen_arena.build()
-    shells = shell_sprites()
-    overlap = (set(game) & set(art["sprites"])) | (set(shells) & (set(game) | set(art["sprites"])))
-    assert not overlap, overlap
-    sprites = {**game, **art["sprites"], **shells}
-    groups = {**{n: "gameplay" for n in game}, **art["groups"], **{n: "shell" for n in shells}}
+    game, art, shells, sprites, groups, atlas, atlas_json = build_all()
     for name, frames in sprites.items():
         save(C.strip(frames), os.path.join(ASSETS, "sprites", f"{name}.png"))
 
@@ -271,7 +319,6 @@ def main():
         assert backgrounds[name].shape == (h, w), f"{name}: {backgrounds[name].shape}"
         save(backgrounds[name], os.path.join(ASSETS, "backgrounds", f"{name}.png"))
 
-    atlas, atlas_json = pack(sprites, width=512)
     save(atlas, os.path.join(ASSETS, "atlas", "nightgrave.png"))
     write_json(os.path.join(ASSETS, "atlas", "nightgrave.json"), atlas_json)
     manifest = {

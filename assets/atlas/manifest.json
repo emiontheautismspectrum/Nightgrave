@@ -360,6 +360,12 @@
    "h": 32,
    "w": 32
   },
+  "bone_hand": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
   "bone_pile_0": {
    "frames": 2,
    "group": "arena",
@@ -443,6 +449,30 @@
    "group": "arena",
    "h": 4,
    "w": 4
+  },
+  "chain_iron": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 8,
+   "w": 8
+  },
+  "chain_violet": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 8,
+   "w": 8
+  },
+  "chain_wrap_iron": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
+  },
+  "chain_wrap_violet": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 16,
+   "w": 16
   },
   "crate_0": {
    "frames": 2,
@@ -611,6 +641,12 @@
    "group": "arena",
    "h": 5,
    "w": 7
+  },
+  "grasp_crack": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 24,
+   "w": 24
   },
   "grass_0": {
    "frames": 2,
@@ -839,6 +875,54 @@
    "group": "arena",
    "h": 6,
    "w": 8
+  },
+  "lich_king_cast": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 64,
+   "w": 40
+  },
+  "lich_king_death": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 64,
+   "w": 40
+  },
+  "lich_king_grasp": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 64,
+   "w": 40
+  },
+  "lich_king_hit": {
+   "frames": 2,
+   "group": "gameplay",
+   "h": 64,
+   "w": 40
+  },
+  "lich_king_idle": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 64,
+   "w": 40
+  },
+  "lich_king_soulfire": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 40,
+   "w": 40
+  },
+  "lich_king_teleport_in": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 64,
+   "w": 40
+  },
+  "lich_king_teleport_out": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 64,
+   "w": 40
   },
   "lich_mage_cast": {
    "frames": 4,
@@ -1239,26 +1323,50 @@
   "thorn_mother_cast": {
    "frames": 4,
    "group": "gameplay",
-   "h": 48,
-   "w": 40
+   "h": 64,
+   "w": 48
   },
   "thorn_mother_death": {
    "frames": 6,
    "group": "gameplay",
-   "h": 48,
-   "w": 40
+   "h": 64,
+   "w": 48
+  },
+  "thorn_mother_emerge": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 64,
+   "w": 48
+  },
+  "thorn_mother_hedge": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 64,
+   "w": 48
   },
   "thorn_mother_hit": {
    "frames": 2,
    "group": "gameplay",
-   "h": 48,
-   "w": 40
+   "h": 64,
+   "w": 48
   },
   "thorn_mother_idle": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 64,
+   "w": 48
+  },
+  "thorn_mother_lash": {
    "frames": 4,
    "group": "gameplay",
-   "h": 48,
-   "w": 40
+   "h": 64,
+   "w": 48
+  },
+  "thorn_mother_sink": {
+   "frames": 6,
+   "group": "gameplay",
+   "h": 64,
+   "w": 48
   },
   "toller_cast": {
    "frames": 4,
@@ -1279,6 +1387,30 @@
    "w": 40
   },
   "toller_idle": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 56,
+   "w": 40
+  },
+  "toller_strike": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 56,
+   "w": 40
+  },
+  "toller_throw": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 56,
+   "w": 40
+  },
+  "toller_tp_in": {
+   "frames": 4,
+   "group": "gameplay",
+   "h": 56,
+   "w": 40
+  },
+  "toller_tp_out": {
    "frames": 4,
    "group": "gameplay",
    "h": 56,

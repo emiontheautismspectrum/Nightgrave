@@ -1107,7 +1107,7 @@ export class GameScene extends Phaser.Scene {
     this.drawCasters();
     this.drawSigils();
     this.drawHunts();
-    this.bossView.draw(st, p);
+    this.bossView.draw(st, p, !(this.lowFx() || this.reducedFx()));
     this.drawChevron();
     this.drawKnightArc();
     if (st.alive) {
@@ -1190,6 +1190,10 @@ export class GameScene extends Phaser.Scene {
       stick: this.input2.touch.opts.stick && this.input2.touch.stickLayout ? { ...this.input2.touch.stickLayout } : null,
       mult: st.multiplier, guard: st.hero.guardCharges, aim: [st.hero.aimX, st.hero.aimY], trail: st.trail.length, dbl: st.tick < st.doubleUntil, pickup: st.pickup ? { x: st.pickup.x, y: st.pickup.y, kind: st.pickup.kind } : null,
       proj: st.projectiles.map((pr) => [pr.x, pr.y, pr.vx, pr.vy, pr.radius, pr.parryable ? 1 : 0]),
+      // the boss's phases (tests-e2e/boss_art_shots.cjs picks its moments from them)
+      boss: st.boss ? { kind: st.boss.kind, x: st.boss.x, y: st.boss.y, introEnd: st.boss.introEnd, dead: st.boss.deathTick >= 0, pattern: st.boss.attack?.pattern ?? null,
+        phase: st.boss.attack ? [st.boss.attack.tpOut, st.boss.attack.tpIn, st.boss.attack.windStart, st.boss.attack.fire] : null,
+        pending: st.boss.pending?.length ?? 0, rings: st.rings?.length ?? 0, chain: st.chain ? (st.chain.bound ? 'bound' : 'thrown') : null } : null,
     };
   }
 
@@ -1539,7 +1543,7 @@ export class GameScene extends Phaser.Scene {
     for (const k of st.knots ?? []) boxes.push([k.x - 6, k.y - 6, k.x + 6, k.y + 6, k.y + 6]);
     for (const w of st.walls ?? [])
       if (st.tick >= w.move) boxes.push(w.axis === 'x' ? [w.pos - 6, ARENA_RECT[1], w.pos + 6, ARENA_RECT[3], ARENA_RECT[3]] : [ARENA_RECT[0], w.pos - 6, ARENA_RECT[2], w.pos + 6, w.pos + 6]);
-    const bb = this.bossView.box(st);
+    const bb = this.bossView.box(st, this.sim.params);
     if (bb) boxes.push(bb);
     if (st.pickup) boxes.push([st.pickup.x - 7, st.pickup.y - 7, st.pickup.x + 7, st.pickup.y + 7, st.pickup.y + 6]);
     const dt = this.game.loop.delta;

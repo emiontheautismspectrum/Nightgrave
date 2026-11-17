@@ -25,10 +25,19 @@ SPRITES = {
     "lich_mage_idle": (32, 40, 4), "lich_mage_cast": (32, 40, 4), "lich_mage_teleport_out": (32, 40, 4),
     "lich_mage_teleport_in": (32, 40, 4), "lich_mage_hit": (32, 40, 2), "lich_mage_death": (32, 40, 6),
     # the new bosses (FEATURES.bosses; dark until enabled)
-    "thorn_mother_idle": (40, 48, 4), "thorn_mother_cast": (40, 48, 4), "thorn_mother_hit": (40, 48, 2),
-    "thorn_mother_death": (40, 48, 6),
+    # (the Thorn Mother was redrawn in the boss art stage, tools/nglib/thorn_queen.py: the keys stay)
+    "thorn_mother_idle": (48, 64, 6), "thorn_mother_cast": (48, 64, 4), "thorn_mother_hedge": (48, 64, 4), "thorn_mother_lash": (48, 64, 4),
+    "thorn_mother_hit": (48, 64, 2), "thorn_mother_death": (48, 64, 6), "thorn_mother_sink": (48, 64, 6),
+    "thorn_mother_emerge": (48, 64, 6),
     "toller_idle": (40, 56, 4), "toller_cast": (40, 56, 4), "toller_hit": (40, 56, 2), "toller_death": (40, 56, 6),
     "root_bloom": (16, 16, 4), "bell_ring": (32, 32, 4),
+    # boss art stage (dark: drawn only in flagged runs, src/render/bossArt.ts `useNewBossArt`)
+    "lich_king_idle": (40, 64, 6), "lich_king_cast": (40, 64, 4), "lich_king_grasp": (40, 64, 4),
+    "lich_king_hit": (40, 64, 2), "lich_king_death": (40, 64, 6), "lich_king_teleport_out": (40, 64, 4),
+    "lich_king_teleport_in": (40, 64, 4), "lich_king_soulfire": (40, 40, 6),
+    "bone_hand": (16, 16, 4), "grasp_crack": (24, 24, 4),
+    "toller_tp_out": (40, 56, 4), "toller_tp_in": (40, 56, 4), "toller_throw": (40, 56, 4), "toller_strike": (40, 56, 4),
+    "chain_iron": (8, 8, 2), "chain_violet": (8, 8, 2), "chain_wrap_iron": (16, 16, 2), "chain_wrap_violet": (16, 16, 2),
     # pickups
     "pickup_slow_time": (12, 12, 4), "pickup_double_score": (12, 12, 4), "pickup_glow": (16, 16, 4),
 }
@@ -47,3 +56,10 @@ SHELL = {
     "shell_pause": (19, 11, 1), "shell_plate_end": (4, 9, 2), "shell_plate_mid": (1, 9, 1),
     "shell_cap_l": (11, 12, 2), "shell_cap_s": (9, 10, 2), "shell_lamp": (11, 11, 10), "shell_glyph": (3, 5, 37),
 }
+
+# Boss families (stage ART-B). `validate_palette.py` checks their colour language per row: a boss BODY never uses
+# blood or bright violet; violet / violet_dark only as the glow of a violet attack's cast row, blood only on the row of
+# a red attack's ground cracks. `check_readability.py` reports their body contrast against the floor.
+BOSS_FAMILIES = ("eye_sentinel", "lich_mage", "lich_king", "thorn_mother", "toller")
+# Readability class of the new effect sprites (check_readability.py sweeps them like projectiles).
+READABILITY = {"lich_king_soulfire": "violet", "chain_violet": "violet", "chain_wrap_violet": "violet", "grasp_crack": "blood"}

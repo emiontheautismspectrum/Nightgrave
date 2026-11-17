@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import arena_layout as L  # noqa: E402
 from nglib import canvas as C  # noqa: E402
+from nglib import spec  # noqa: E402
 from nglib.palette import IDX, RGB  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -33,7 +34,13 @@ TARGET = {"violet": 3.0, "blood": 2.5}
 PROJECTILES = {"orb_small": "violet", "orb_large": "violet", "rune_shard": "violet", "wraith": "violet", "blade": "blood",
                "orb_armored": "violet", "orb_split": "violet", "blood_sigil": "blood",
                "hex_knot": "violet", "briar_tile": "blood", "briar_post": "blood"}
+PROJECTILES.update(spec.READABILITY)  # the effect sprites of the boss moves (stage ART-B)
 CALM_MAX = 1.6
+# Boss bodies (harmless, but they must read): the lit body (every opaque pixel except the dark outline tones) against
+# the floor round its silhouette, at every position in the arena, fog and vignette included. The limit is the weakest
+# body that existed before the boss art stage (the Toller, 2.02): no redrawn boss may read worse than that.
+BOSS_BODIES = ("eye_sentinel_idle", "lich_mage_idle", "lich_king_idle", "thorn_mother_idle", "toller_idle")
+BOSS_MIN = 2.0
 
 
 def lum_table():
@@ -80,6 +87,8 @@ def sweep(lum, fog_mask, fog_rgb, alpha, frames, hue):
         fh, fw = f.shape
         sil = f != -1
         body = f == IDX[hue]
+        if not body.any():
+            continue  # a frame without the hue (a dim first telegraph frame) has nothing to measure
         pad = 3
         silp = np.zeros((fh + 2 * pad, fw + 2 * pad), dtype=bool)
         silp[pad:pad + fh, pad:pad + fw] = sil
@@ -161,6 +170,8 @@ def main():
     failed = False
     print(f"projectile contrast vs surroundings (every position in the arena; fog at alpha {fa} on top):")
     for name, hue in PROJECTILES.items():
+        if not os.path.exists(os.path.join(ASSETS, "sprites", f"{name}.png")):
+            continue
         sheet = load_idx(os.path.join(ASSETS, "sprites", f"{name}.png"))
         w = json.load(open(os.path.join(ASSETS, "atlas", "manifest.json")))["sprites"][name]["w"]  # frames need not be square
         frames = [sheet[:, i * w:(i + 1) * w] for i in range(sheet.shape[1] // w)]
@@ -201,6 +212,35 @@ def main():
         ok = hr.min() >= HERO_MIN
         failed |= not ok
         print(f"  hero {name:11s} body vs ground: min {hr.min():.2f} median {np.median(hr):.2f} (>= {HERO_MIN}) "
+              f"{'OK' if ok else 'FAIL'}")
+    man = json.load(open(os.path.join(ASSETS, "atlas", "manifest.json")))["sprites"]
+    for name in BOSS_BODIES:
+        if name not in man:
+            continue
+        sheet = load_idx(os.path.join(ASSETS, "sprites", f"{name}.png"))
+        f = sheet[:, :man[name]["w"]]
+        body = (f != -1) & (f != IDX["bg0"]) & (f != IDX["bg1"])
+        cols = np.array([RGB[i] for i in f[body]], dtype=np.float64)
+        l_body = float(lum_rgb(cols).mean())
+        l_body_fog = float(lum_rgb(cols * (1 - fa) + fog_rgb * fa).mean())
+        x0, y0, x1, y1 = L.ARENA
+        fh, fw = f.shape
+        pad = 3
+        silp = np.zeros((fh + 2 * pad, fw + 2 * pad), dtype=bool)
+        silp[pad:pad + fh, pad:pad + fw] = f != -1
+        ring = np.zeros_like(silp)
+        for dy in range(-pad, pad + 1):
+            for dx in range(-pad, pad + 1):
+                ring |= np.roll(np.roll(silp, dy, 0), dx, 1)
+        ring &= ~silp
+        ys, xs = np.arange(y0, y1 - fh), np.arange(x0, x1 - fw)
+        fogged = shifted_sum(fog_mask.astype(float), body, ys, xs) / body.sum()
+        bl = fogged * l_body_fog + (1 - fogged) * l_body
+        rl = shifted_sum(lum_g, ring, ys - pad, xs - pad) / ring.sum()
+        br = (np.maximum(bl, rl) + 0.05) / (np.minimum(bl, rl) + 0.05)
+        ok = br.min() >= BOSS_MIN
+        failed |= not ok
+        print(f"  boss {name:18s} body vs ground: min {br.min():.2f} median {np.median(br):.2f} (>= {BOSS_MIN}) "
               f"{'OK' if ok else 'FAIL'}")
     g = load_idx(os.path.join(bgd, "arena_ground.png"))
     cx0, cy0, cx1, cy1 = L.CALM_ZONE
